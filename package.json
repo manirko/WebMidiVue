@@ -9,7 +9,8 @@
     "test:midi-lifecycle": "node scripts/test-midi-lifecycle.js",
     "test:pwa": "node scripts/test-pwa-build.js",
     "test:firmware": "node scripts/test-firmware-update.js",
-    "test:pwa:browser": "node scripts/test-pwa-browser.js"
+    "test:pwa:browser": "node scripts/test-pwa-browser.js",
+    "sandbox:serve": "node scripts/serve-sandbox.js --open"
   },
   "dependencies": {
     "@floating-ui/vue": "^1.1.6",
