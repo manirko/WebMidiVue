@@ -98,19 +98,32 @@ export class SysExCommand {
 
 }
 
-export function bootDevice(device) {
-    console.log(device)
-    if (!device) return;
-    device.send([240, 11, 127, 247])
-    sleep(100)
-    device.send([240, 11, 20, 13, 127, 247])
+export const BIOTRON_BOOT_MESSAGE = [0xF0, 0x0B, 0x14, 0x0D, 0x7F, 0xF7]
+
+const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+
+// Legacy synchronous helper used by existing device-setting pages. Keep its
+// behavior unchanged here; the updater itself uses the non-blocking delay.
+export function sleep(milliseconds) {
+    const deadline = Date.now() + milliseconds
+    while (Date.now() < deadline) { /* preserve existing command pacing */ }
 }
 
+export async function bootDevice(device, {timeoutMs = 5000, pollMs = 50} = {}) {
+    if (!device) throw new Error('Connect Biotron before entering update mode.')
+    if (device.state === 'disconnected') {
+        throw new Error('Biotron is disconnected. Reconnect it and try again.')
+    }
 
-export function sleep(milliseconds) {
-    const date = Date.now();
-    let currentDate = null;
-    do {
-        currentDate = Date.now();
-    } while (currentDate - date < milliseconds);
+    await device.open()
+    device.send(BIOTRON_BOOT_MESSAGE)
+
+    // Web MIDI send() queues data. Keep the port open until USB disconnects;
+    // closing it immediately can discard the SysEx on some host backends.
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+        if (device.state === 'disconnected') return
+        await delay(pollMs)
+    }
+    throw new Error('Biotron did not enter update mode. Keep it connected and retry once.')
 }

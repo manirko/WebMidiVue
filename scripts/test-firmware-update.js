@@ -3,60 +3,100 @@ const babel = require('@babel/core')
 const fs = require('fs')
 const vm = require('vm')
 
-const source = fs.readFileSync('src/assets/js/LoadFirmware.js', 'utf8')
-const compiled = babel.transformSync(source, {
-  filename: 'src/assets/js/LoadFirmware.js',
-  plugins: ['@babel/plugin-transform-modules-commonjs']
-}).code
-
-async function run({ online, response }) {
-  const events = []
+function loadModule(path, contextValues = {}) {
+  const source = fs.readFileSync(path, 'utf8')
+  const compiled = babel.transformSync(source, {
+    filename: path,
+    plugins: ['@babel/plugin-transform-modules-commonjs']
+  }).code
   const context = {
     exports: {},
-    module: { exports: {} },
-    navigator: { onLine: online },
-    fetch: async () => response,
-    window: { location: { assign: url => events.push(['download', url]) } },
-    require: name => {
-      assert.strictEqual(name, '@/assets/js/SysExCommand')
-      return { bootDevice: device => events.push(['boot', device]) }
-    }
+    module: {exports: {}},
+    console,
+    Date,
+    Promise,
+    setTimeout,
+    require,
+    ...contextValues
   }
   context.exports = context.module.exports
   vm.runInNewContext(compiled, context)
-  let error
+  return context.module.exports
+}
+
+const validAsset = {
+  state: 'uploaded',
+  size: 99840,
+  name: 'biotron-firmware_1.8.2.uf2',
+  browser_download_url: 'https://github.com/Playtronica/biotron-firmware/releases/download/1.8.2/biotron-firmware_1.8.2.uf2',
+  digest: `sha256:${'a'.repeat(64)}`
+}
+
+async function resolveWith({online = true, response}) {
+  const firmware = loadModule('src/assets/js/LoadFirmware.js', {
+    navigator: {onLine: online},
+    fetch: async () => response
+  })
   try {
-    await context.module.exports.LoadFirmware('Playtronica/biotron-firmware', 'device')
-  } catch (caught) {
-    error = caught
+    return {value: await firmware.resolveFirmware('Playtronica/biotron-firmware')}
+  } catch (error) {
+    return {error}
   }
-  return { events, error }
 }
 
 ;(async () => {
-  let result = await run({ online: false })
+  let result = await resolveWith({online: false})
   assert.match(result.error.message, /internet connection/)
-  assert.deepStrictEqual(result.events, [])
 
-  result = await run({ online: true, response: { ok: false, status: 503 } })
+  result = await resolveWith({response: {ok: false, status: 503}})
   assert.match(result.error.message, /503/)
-  assert.deepStrictEqual(result.events, [])
 
-  result = await run({ online: true, response: { ok: true, json: async () => ({ assets: [] }) } })
-  assert.match(result.error.message, /does not contain/)
-  assert.deepStrictEqual(result.events, [])
+  result = await resolveWith({
+    response: {ok: true, json: async () => ({assets: [{...validAsset, digest: null}]})}
+  })
+  assert.match(result.error.message, /SHA-256/)
 
-  result = await run({
-    online: true,
-    response: { ok: true, json: async () => ({ assets: [{ browser_download_url: 'https://example.test/firmware.uf2' }] }) }
+  result = await resolveWith({
+    response: {ok: true, json: async () => ({assets: [validAsset, {...validAsset, name: 'second.uf2'}]})}
+  })
+  assert.match(result.error.message, /exactly one/)
+
+  result = await resolveWith({
+    response: {ok: true, json: async () => ({tag_name: '1.8.2', assets: [validAsset]})}
   })
   assert.ifError(result.error)
-  assert.deepStrictEqual(result.events, [
-    ['boot', 'device'],
-    ['download', 'https://example.test/firmware.uf2']
-  ])
+  assert.strictEqual(result.value.name, validAsset.name)
+  assert.strictEqual(result.value.sha256, 'a'.repeat(64))
+  assert.strictEqual(result.value.version, '1.8.2')
 
-  console.log('Firmware update verified: 3 failure paths stay out of BOOT; success boots before download.')
+  const sysEx = loadModule('src/assets/js/SysExCommand.js')
+  const events = []
+  const device = {
+    state: 'connected',
+    open: async () => events.push('open'),
+    send: message => {
+      events.push(['send', Array.from(message)])
+      setTimeout(() => { device.state = 'disconnected' }, 0)
+    }
+  }
+  await sysEx.bootDevice(device, {timeoutMs: 100, pollMs: 1})
+  assert.deepStrictEqual(events, [
+    'open',
+    ['send', [240, 11, 20, 13, 127, 247]]
+  ])
+  assert.strictEqual('close' in device, false)
+
+  const stuckDevice = {
+    state: 'connected',
+    open: async () => {},
+    send: () => {}
+  }
+  await assert.rejects(
+    sysEx.bootDevice(stuckDevice, {timeoutMs: 2, pollMs: 1}),
+    /did not enter update mode/
+  )
+
+  console.log('Firmware update verified: metadata fails closed; one exact SysEx stays open until USB disconnect.')
 })().catch(error => {
   console.error(error)
   process.exitCode = 1

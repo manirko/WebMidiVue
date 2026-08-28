@@ -1,11 +1,18 @@
 <script>
-import {LoadFirmware} from "@/assets/js/LoadFirmware";
+import {resolveFirmware} from "@/assets/js/LoadFirmware";
+import {bootDevice} from "@/assets/js/SysExCommand";
 
 export default {
   data() {
     return {
       isOnline: navigator.onLine,
-      updateError: ''
+      updateError: '',
+      updateStatus: '',
+      firmware: null,
+      downloadStarted: false,
+      downloadConfirmed: false,
+      preparing: false,
+      enteringBoot: false
     }
   },
   mounted() {
@@ -21,12 +28,37 @@ export default {
       this.isOnline = navigator.onLine
       if (this.isOnline) this.updateError = ''
     },
-    async updateFirmware() {
+    async prepareFirmware() {
       this.updateError = ''
+      this.updateStatus = ''
+      this.firmware = null
+      this.downloadStarted = false
+      this.downloadConfirmed = false
+      this.preparing = true
       try {
-        await LoadFirmware(this.repo, this.device)
+        this.firmware = await resolveFirmware(this.repo)
+        this.updateStatus = `Firmware ${this.firmware.version} verified by GitHub SHA-256 metadata.`
       } catch (error) {
         this.updateError = error.message
+      } finally {
+        this.preparing = false
+      }
+    },
+    markDownloadStarted() {
+      this.downloadStarted = true
+      this.downloadConfirmed = false
+      this.updateStatus = 'Download started. Wait until the .uf2 file finishes downloading.'
+    },
+    async enterUpdateMode() {
+      this.updateError = ''
+      this.enteringBoot = true
+      try {
+        await bootDevice(this.device)
+        this.updateStatus = 'Biotron entered update mode. Copy the downloaded .uf2 file to RPI-RP2.'
+      } catch (error) {
+        this.updateError = error.message
+      } finally {
+        this.enteringBoot = false
       }
     }
   },
@@ -55,23 +87,45 @@ export default {
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <p>
-            After clicking on "Update", you will get a file with the .uf2 extension and the device will switch to boot mode.
-            The device will be displayed as removable media (like a USB flash drive).
-            You should transfer the resulting .uf2 file to the removable media that appeared.
-          </p>
-          <h6 style="color: red">ATTENTION</h6>
-          <p>The device won't work until you move the file.</p>
+          <ol class="text-start">
+            <li>Prepare and download the checked <code>.uf2</code> file.</li>
+            <li>Enter update mode. No BOOT contacts are needed.</li>
+            <li>Copy the file to the new <strong>RPI-RP2</strong> drive.</li>
+          </ol>
           <p v-if="!isOnline" class="alert alert-warning mb-0" role="status">
             Firmware updates require an internet connection. Device settings remain available offline.
           </p>
+          <p v-if="updateStatus" class="alert alert-info mb-2" role="status">{{ updateStatus }}</p>
           <p v-if="updateError" class="alert alert-danger mb-0" role="alert">{{ updateError }}</p>
+          <div v-if="firmware" class="text-start mt-3">
+            <p class="small text-muted mb-2">
+              {{ firmware.name }} · SHA-256 {{ firmware.sha256 }}
+            </p>
+            <a class="btn btn-outline-primary w-100" :href="firmware.url"
+               :download="firmware.name" target="_blank" rel="noopener"
+               @click="markDownloadStarted">
+              1. Download firmware
+            </a>
+            <div v-if="downloadStarted" class="form-check mt-3">
+              <input id="firmware-download-confirmed" v-model="downloadConfirmed"
+                     class="form-check-input" type="checkbox">
+              <label class="form-check-label" for="firmware-download-confirmed">
+                The <code>.uf2</code> file has finished downloading
+              </label>
+            </div>
+            <button type="button" class="btn btn-primary w-100 mt-2"
+                    :disabled="!downloadConfirmed || enteringBoot"
+                    @click="enterUpdateMode">
+              {{ enteringBoot ? 'Entering update mode…' : '2. Enter update mode' }}
+            </button>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          <button type="button" class="btn btn-primary" :disabled="!isOnline"
-                  @click="updateFirmware">
-            Update</button>
+          <button v-if="!firmware" type="button" class="btn btn-primary"
+                  :disabled="!isOnline || preparing" @click="prepareFirmware">
+            {{ preparing ? 'Checking…' : 'Prepare update' }}
+          </button>
         </div>
       </div>
     </div>

@@ -167,8 +167,8 @@ async function controllerVersion(page) {
 
   await page.getByRole('button', { name: /Update Firmware/i }).click()
   await page.getByText(/Firmware updates require an internet connection/i).waitFor({state: 'visible', timeout: 5000})
-  const update = page.locator('.modal.show').getByRole('button', { name: 'Update', exact: true })
-  assert(await update.isDisabled(), 'firmware Update remains enabled offline')
+  const update = page.locator('.modal.show').getByRole('button', { name: 'Prepare update', exact: true })
+  assert(await update.isDisabled(), 'firmware preparation remains enabled offline')
   console.log('4/5 offline firmware guard verified')
 
   await context.setOffline(false)
