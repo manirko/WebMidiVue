@@ -76,15 +76,33 @@ async function resolveWith({online = true, response}) {
     open: async () => events.push('open'),
     send: message => {
       events.push(['send', Array.from(message)])
-      setTimeout(() => { device.state = 'disconnected' }, 0)
+      if (message.length === 6) {
+        setTimeout(() => { device.state = 'disconnected' }, 0)
+      }
     }
   }
-  await sysEx.bootDevice(device, {timeoutMs: 100, pollMs: 1})
+  await sysEx.bootDevice(device, {timeoutMs: 100, pollMs: 1, legacyWaitMs: 1})
   assert.deepStrictEqual(events, [
     'open',
+    ['send', [240, 11, 127, 247]],
     ['send', [240, 11, 20, 13, 127, 247]]
   ])
   assert.strictEqual('close' in device, false)
+
+  const legacyEvents = []
+  const legacyDevice = {
+    state: 'connected',
+    open: async () => legacyEvents.push('open'),
+    send: message => {
+      legacyEvents.push(['send', Array.from(message)])
+      legacyDevice.state = 'disconnected'
+    }
+  }
+  await sysEx.bootDevice(legacyDevice, {timeoutMs: 100, pollMs: 1, legacyWaitMs: 2})
+  assert.deepStrictEqual(legacyEvents, [
+    'open',
+    ['send', [240, 11, 127, 247]]
+  ])
 
   const stuckDevice = {
     state: 'connected',
@@ -92,11 +110,11 @@ async function resolveWith({online = true, response}) {
     send: () => {}
   }
   await assert.rejects(
-    sysEx.bootDevice(stuckDevice, {timeoutMs: 2, pollMs: 1}),
+    sysEx.bootDevice(stuckDevice, {timeoutMs: 4, pollMs: 1, legacyWaitMs: 1}),
     /did not enter update mode/
   )
 
-  console.log('Firmware update verified: metadata fails closed; one exact SysEx stays open until USB disconnect.')
+  console.log('Firmware update verified: metadata fails closed; legacy/current SysEx stays open until USB disconnect.')
 })().catch(error => {
   console.error(error)
   process.exitCode = 1

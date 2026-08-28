@@ -92,6 +92,10 @@ export default {
             <li>Enter update mode. No BOOT contacts are needed.</li>
             <li>Copy the file to the new <strong>RPI-RP2</strong> drive.</li>
           </ol>
+          <p class="alert alert-warning" role="note">
+            Firmware v1.5.0–v1.8.2 resets saved settings when it enters update mode.
+            Note your current settings before continuing.
+          </p>
           <p v-if="!isOnline" class="alert alert-warning mb-0" role="status">
             Firmware updates require an internet connection. Device settings remain available offline.
           </p>
