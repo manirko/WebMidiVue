@@ -9,7 +9,11 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8')
 for (const file of ['index.html', 'manifest.json', 'service-worker.js', '_headers', '_worker.js', 'telemetry.html']) {
   assert(fs.existsSync(path.join(root, file)), `${file} is missing from the production build`)
 }
-assert(!fs.existsSync(path.join(root, 'firmware')), 'general beta must not ship the firmware test artifact')
+const firmwareMode = process.argv.includes('--firmware')
+if (firmwareMode) {
+  assert(fs.existsSync(path.join(root, 'firmware/biotron-1.10.9-clean.uf2')), 'firmware candidate is missing its pinned artifact')
+  assert(!read('service-worker.js').includes('/firmware/'), 'firmware must not enter the offline precache')
+} else assert(!fs.existsSync(path.join(root, 'firmware')), 'general beta must not ship the firmware test artifact')
 
 const manifest = JSON.parse(read('manifest.json'))
 assert.strictEqual(manifest.name, 'Biotron Settings Offline Beta')
@@ -32,6 +36,7 @@ assert(!serviceWorker.includes('_worker.js'), 'telemetry worker must not enter t
 assert(serviceWorker.includes('precacheAndRoute'), 'Workbox precache is not enabled')
 assert(serviceWorker.includes('index.html'), 'app shell is not precached')
 assert(serviceWorker.includes('revision'), 'precache entries are not revisioned')
+assert(serviceWorker.includes('SKIP_WAITING'), 'the explicit app-update activation handler is missing')
 for (const icon of ['img/icons/icon-192x192.png', 'img/icons/icon-512x512.png']) {
   assert(serviceWorker.includes(icon), `${icon} is not in the precache manifest`)
 }
@@ -54,6 +59,7 @@ const biotronBundle = allJavascriptFiles.find(file => read(path.join('js', file)
 const soundBundle = allJavascriptFiles.find(file => read(path.join('js', file)).includes('Play your device'))
 assert(javascript.includes('Offline mode is ready'), 'the production UI has no truthful offline-readiness status')
 assert(javascript.includes('Install app'), 'the production UI has no explicit PWA install action')
+assert(javascript.includes('Update app'), 'the production UI has no explicit waiting-update action')
 assert(javascript.includes('Biotron beta'), 'the beta UI has no visible version identity')
 assert(biotronBundle, 'the beta build does not include the Biotron DAW handoff')
 assert(allJavascript.includes('Release device for DAW'), 'the Biotron lifecycle was not emitted into any route chunk')
@@ -62,11 +68,13 @@ assert(!read(path.join('js', biotronBundle)).includes('Update to 1.9.8'),
 assert(serviceWorker.includes(`js/${biotronBundle}`), 'the lazy Biotron settings chunk is not available offline')
 assert(soundBundle, 'the beta build does not include the lazy sound lab')
 assert(read(path.join('js', soundBundle)).includes('Round Bright'), 'the sound lab does not include the seven sounds')
-assert(read(path.join('js', soundBundle)).includes('Meet Biotron'), 'the beta build has no Biotron first-play reveal')
+assert(read(path.join('js', soundBundle)).includes('Plant music'), 'the beta build has no Biotron first-play reveal')
 assert(serviceWorker.includes(`js/${soundBundle}`), 'the sound lab chunk is not available offline')
 for (const unrelated of ['touchme', 'playtron', 'scales', 'scala', 'circle']) {
   assert(!serviceWorker.includes(`js/${unrelated}.`), `${unrelated} route leaked into the Biotron offline cache`)
 }
+assert(serviceWorker.includes('/garden/scene.html'), 'Garden frame must be precached')
+assert(serviceWorker.includes('js/garden-visual.'), 'lazy Garden components must be precached')
 const soundGzipBytes = zlib.gzipSync(fs.readFileSync(path.join(root, 'js', soundBundle))).length
 assert(soundGzipBytes <= 25 * 1024, `sound lab exceeds its 25 KiB gzip budget: ${soundGzipBytes} bytes`)
 

@@ -25,6 +25,11 @@ process.env.VUE_APP_VERSION_LABEL = new Intl.DateTimeFormat('en-GB', {
 
 module.exports = {
   publicPath: '/',
+  configureWebpack: {
+    optimization: {splitChunks: {cacheGroups: {
+      soundSession: {test: /[\\/]src[\\/]audio[\\/]soundSessionEffects\.mjs$/, name: 'sound-session', chunks: 'all', enforce: true}
+    }}}
+  },
   chainWebpack: config => {
     config.resolve.alias.set(
       '@pwa-entry',

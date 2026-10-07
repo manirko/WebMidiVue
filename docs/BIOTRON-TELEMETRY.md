@@ -1,8 +1,10 @@
 # Biotron beta technical events
 
-Status: implementation for the next exact candidate, 5 October 2026. The earlier
-`728f69ab9017` archive stays immutable and has no automatic telemetry. No preview
-upload is authorized yet.
+Status: temporary owner phone transport active, 7 October 2026, after Andrey's
+explicit publication approval. Physical iPhone acceptance remains NOT RUN.
+Andrey requested the exact test link before the Sergey handoff. The earlier
+`728f69ab9017` archive stays immutable and has no automatic telemetry. This
+internal request does not authorize customer exposure or a production release.
 
 ## Scope
 
@@ -33,7 +35,10 @@ from the existing `puntus-core` database. Schema:
 `beta-assets/telemetry-schema.sql`. The only configured Pages binding is
 `env.preview.SESSION_EVENTS`; `wrangler.toml` is copied to each candidate as a
 hashed sidecar. The production Pages environment has no D1 binding in that
-file. Real user events have not been sent yet.
+file. A read-only aggregate check on 7 October 2026 found 488 stored events and
+zero rows older than 90 days. That count does not establish customer provenance;
+no individual event payloads were read. The temporary owner phone transport
+described below cannot write to this database.
 
 Stored fields: random event/session IDs, receive and event times, exact build,
 fixed event/result/error codes, broad browser and OS families, mobile/Web MIDI
@@ -50,10 +55,52 @@ shell. Before sending this candidate to real users, the owner must review that
 notice, applicable legal basis, Cloudflare terms and data-subject handling.
 The intended individual-event lifetime is 90 days. The handler deletes rows
 older than 90 days before each successful insert. If the beta has no traffic,
-that alone does not enforce a deadline: an operator must run the SQL in
-`beta-assets/telemetry-prune.sql` on the remote DB at least once every 90 days
-and after closing the beta, or put an approved retention schedule in place.
-This operational gate is still open. It must be closed before preview upload.
+that alone does not enforce a deadline. An approved independent retention
+schedule and operational checks are needed before making the lifetime promise
+to users. Running the 90-day manual SQL only every 90 days does not enforce a
+90-day maximum lifetime during idle periods.
+The dedicated `telemetry-retention-worker.mjs` and its Wrangler config implement
+an independent daily prune at 03:17 UTC, without an HTTP route, against only this
+beta database. Its 89-day cutoff leaves a one-day scheduling margin for the
+90-day lifetime. Real SQLite checks retain boundary/fresh rows and remove only
+older rows without browser traffic. Before a telemetry-enabled customer preview
+the operator must obtain approval, deploy that worker and verify the configured
+trigger; deployment/configuration
+does not prove future scheduled executions. Check failures and perform the
+manual prune if needed. Customer notice/legal-basis review remains separate.
+
+Current operational state (2026-10-07): retention code passed the SQLite and
+Wrangler dry-run checks but was **not deployed**. Automatic approval review
+rejected the permanent deletion schedule without explicit human approval of
+its scope. No remote rows were deleted. Andrey subsequently explicitly approved
+the temporary static phone publication; this does not authorize the permanent
+deletion schedule. The temporary transport deliberately has no database writes.
+Do not treat it as a customer preview or proof of live telemetry delivery.
+
+Scheduler contract: [Cloudflare Cron Triggers](https://developers.cloudflare.com/workers/configuration/cron-triggers/),
+checked 2026-10-07. This is application infrastructure, not a Codex reminder.
+
+## Temporary owner iPhone transport
+
+Temporary URL (7 October 2026):
+<https://calm-payroll-homeland-conditions.trycloudflare.com/#/biotron>.
+This requires the owner's Mac, static server and Cloudflare tunnel to remain
+running. It is not the immutable Pages candidate for Sergey or customers.
+
+The fixed 71-file payload is the existing D build, source
+`30d978514f675d94950ae4a2af998a68e3a1e56e`, served from
+`/private/tmp/biotron-pwa-proof-20261007/d`. The server permits only listed build
+files, disables directory listing, and has no D1 binding. Both GET and POST
+`/api/telemetry` return 503; the unchanged client drops failures. The page's
+generic online telemetry banner is not proof of persistence on this transport.
+
+HTTPS readback verified matching original index and Garden scene bytes, app
+frame denial, same-origin Garden framing, and 404 for an unknown path. The index
+SHA256 is `1545a542c66ce018596e0b2f1f02eca7c611248b7a2b8867a40ced4a96dd1337`.
+The agent browser loaded Settings and displayed the device selector. This is
+transport/UI evidence only; phone MIDI, audible sound, settings readback,
+background recovery and touch/fullscreen checks await Andrey's physical run.
+No firmware write is part of this first phone step.
 
 ## Queries and operation
 
@@ -91,6 +138,7 @@ shared Playtronica direction, but the current intake deliberately accepts only
 - `npm run candidate:biotron` can only package a clean exact commit. The archive
   includes `_worker.js` and the notice; its hashed `wrangler.toml` sidecar binds
   only preview. The preview guard checks remote `/api/telemetry` readiness.
-- A local Wrangler Pages runtime accepted a test POST into **local** D1; the
-  remote D1 event count was still zero on 5 October 2026. No physical Biotron,
-  phone or DAW test has been claimed by this work.
+- A local Wrangler Pages runtime accepted a test POST into **local** D1. Remote
+  D1 was zero on 5 October 2026; the later 7 October aggregate readback above
+  supersedes that operational count. No phone or DAW pass is established by
+  these logger checks.

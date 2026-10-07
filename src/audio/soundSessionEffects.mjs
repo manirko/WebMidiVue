@@ -55,44 +55,32 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
           this.revealWatchdog = window.setTimeout(() => {
             if (!this.explicitCalibration || this.revealCalibrationNonce !== nonce) return
             this.resetCalibration()
-            Object.assign(this, {revealStage: 'intro', status: 'Calibration did not finish. Check both plant clips, then try Hear Biotron again.',
+            Object.assign(this, {revealStage: 'intro', status: 'Calibration did not finish. Check both plant clips, then try Start listening again.',
               revealIssue: {title: 'Calibration did not finish', body: 'Copy diagnostics before retrying if this happens again.'}, firstSoundOutcome: 'not_yet'})
           }, 25000)
         }
         updateSoundSession({calibrating: active})
-        if (active) Object.assign(this, {revealStage: 'calibrating', status: this.revealProfile.calibratingStatus})
+        if (active) Object.assign(this, {revealStage: calibration.state === 'waiting' ? 'settling' : 'calibrating', status: calibration.state === 'waiting' ? 'Connected — waiting for calibration to begin' : this.revealProfile.calibratingStatus})
         else this.finishCalibration()
         return
       }
       if (this.revealStage === 'ready' && message?.type === 'note-on') {
         this.revealStage = 'revealed'
-        this.status = 'Biotron is sending notes — can you hear them?'
+        this.status = 'If it is silent, check your volume and audio output.'
         this.firstSoundOutcome = 'awaiting_answer'
         return
       }
       if (this.explicitCalibration || !['settling', 'calibrating'].includes(this.revealStage)) return
 
-      const nonce = this.revealCalibrationNonce
+      // Legacy note sequences are hints, never confirmation of readiness.
       const state = this.calibrationTracker.observe(message, performance.now())
-      if (state === 'candidate') {
-        window.clearTimeout(this.calibrationCandidateTimer)
-        this.calibrationCandidateTimer = window.setTimeout(
-          () => { if (!this.explicitCalibration && this.revealCalibrationNonce === nonce) this.finishCalibration() },
-          BIOTRON_CALIBRATION.quietCompletionMs
-        )
-      }
-      else if (state === 'calibrating') {
-        window.clearTimeout(this.calibrationCandidateTimer)
-        window.clearTimeout(this.calibrationFinishTimer)
-        this.calibrationCandidateTimer = null
+      if (state === 'calibrating') {
         this.revealStage = 'calibrating'
-        this.status = this.revealProfile.calibratingStatus
-        this.calibrationFinishTimer = window.setTimeout(
-          () => { if (!this.explicitCalibration && this.revealCalibrationNonce === nonce) this.finishCalibration() },
-          BIOTRON_CALIBRATION.quietCompletionMs
-        )
+        this.status = 'Waiting for calibration confirmation from the device'
+      } else if (state === 'activity') {
+        this.status = 'Notes received; waiting for the device to confirm readiness'
       }
-      else if (state === 'activity') this.finishCalibration()
+
     },
   }
 }

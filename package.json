@@ -38,7 +38,7 @@
     "test:scales-variants": "node scripts/test-scales-variants.js",
     "test:touchme-variants": "node scripts/test-touchme-variants.js",
     "test:presets": "node scripts/test-presets-idb.js",
-    "test:service-worker-ready": "node scripts/test-service-worker-ready.js",
+    "test:service-worker-ready": "node scripts/test-service-worker-ready.js && node scripts/test-app-update.js",
     "test:midi-permission-cancel": "node scripts/test-midi-permission-cancel.js",
     "test:sound:soak:smoke": "node scripts/test-sound-browser.js --soak-seconds=60",
     "test:sound:soak": "node scripts/test-sound-browser.js --soak-seconds=600",
@@ -46,7 +46,9 @@
     "test:beta-build": "npm run build:biotron-beta && npm run test:device-scope && npm run test:midi-lifecycle && npm run test:pwa && npm run test:firmware",
     "test:firmware:browser": "npm run build:biotron-firmware-beta && node scripts/test-firmware-modal-browser.js",
     "test:browser": "npm run test:sound:browser && npm run test:pwa:browser && npm run test:quality:browser && npm run test:playtron-variants:browser && npm run test:scales-variants:browser && npm run test:touchme-variants:browser",
-    "test:biotron": "npm run test:quick && npm run test:production-isolation && npm run test:firmware:browser && npm run test:beta-build && npm run test:browser"
+    "test:biotron": "npm run test:quick && npm run test:production-isolation && npm run test:firmware:browser && npm run test:beta-build && npm run test:browser",
+    "test:garden": "node scripts/test-garden-fullscreen.cjs",
+    "test:audio-qa": "node scripts/audio-qa/test-analyze.mjs"
   },
   "dependencies": {
     "@elemaudio/core": "^4.0.1",

@@ -77,13 +77,14 @@ assert(sound.includes("{{ revealExpanded ? 'Hide sounds' : 'Choose a sound' }}")
   'sound choice action must use the same plain-language noun as the task')
 assert(sound.includes('>Settings</router-link>'),
   'first play must offer the same Settings label as the task navigation')
-assert(sound.includes('Did you hear Biotron play from the plant?') &&
+assert(sound.includes('CONTACT PINS') && sound.includes('two separate points on the same plant'), 'connection steps must retain correct contact placement')
+assert(sound.includes('Can you hear the notes?') &&
   sound.includes("firstSoundFeedbackUrl('helped')") &&
   sound.includes("firstSoundFeedbackUrl('not_yet')"),
   'first play must ask one binary outcome question after the task')
 assert(compatibility.includes('https://wa.me/351937910673') &&
   compatibility.includes('Reached: ${reached}') &&
-  sound.includes('Press Send to share.'),
+  sound.includes('Send it to share.'),
   'task feedback must open the direct channel with stage and build context without sending automatically')
 assert(sound.includes("if (this.firstSoundOutcome !== 'helped') this.firstSoundOutcome = 'not_yet'") &&
   compatibility.includes("'Biotron disconnected': 'Biotron disconnected before first sound'") &&

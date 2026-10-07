@@ -152,13 +152,15 @@ async function controllerVersion(page) {
   }))
 }
 
-;(async () => {
+(async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   origin = `http://127.0.0.1:${server.address().port}`
 
   let page = await openProfile(true, true)
   await page.goto(`${origin}/biotron`, { waitUntil: 'load' })
   await page.getByText(/Offline mode is ready/i).waitFor({state: 'visible', timeout: 15000})
+  assert.strictEqual(await page.getByRole('button', {name: 'Update app', exact: true}).count(), 0,
+    'first online installation should not offer an update of itself')
   const versionStamp = await page.locator('.beta-build').first().innerText()
   assert.match(versionStamp, /Biotron beta · \d{1,2} [A-Za-z]+ 20\d{2}/,
     'the visible beta version must use a calendar date')
@@ -206,11 +208,11 @@ async function controllerVersion(page) {
   page = await openProfile(false)
   await page.goto(`${origin}/biotron/play`, { waitUntil: 'load' })
   await waitFor(() => page.url().includes('/#/biotron/play'), 'first-play route was not normalized to the cached hash route')
-  await page.getByRole('heading', {name: 'Meet Biotron'}).waitFor({state: 'visible', timeout: 10000})
+  await page.getByRole('heading', {name: 'Plant music', exact: true}).waitFor({state: 'visible', timeout: 10000})
   assert.strictEqual(await page.locator('.offline-status').count(), 0, 'first-play was crowded by the global offline banner')
   assert.strictEqual(await controllerVersion(page), 1)
   assert.strictEqual(await page.evaluate(() => window.__midiRequestCount), 0, 'first-play requested MIDI before a user gesture')
-  await page.getByRole('button', {name: 'Hear Biotron'}).click()
+  await page.getByRole('button', {name: 'Start listening', exact: true}).click()
   await page.locator('.sound-lab[data-reveal-stage="settling"][data-audio-state="running"]').waitFor()
   assert.strictEqual(await page.evaluate(() => window.__midiRequestCount), 1, 'first-play did not use exactly one MIDI permission request')
   assert.strictEqual(await page.evaluate(() => window.__midiRequestOptions[0].sysex), true,
@@ -220,7 +222,14 @@ async function controllerVersion(page) {
     await page.evaluate(value => window.__emitFirstPlayMidi([0x81, value, 0]), note)
     await page.waitForTimeout(70)
   }
+  assert.strictEqual(await page.locator('.sound-lab[data-reveal-stage="ready"]').count(), 0,
+    'Legacy cue notes falsely confirmed readiness')
+  const firstNonce = await page.evaluate(() => window.__midiSent.filter(message =>
+    message[0] === 0xf0 && message[3] === 125 && message.length === 6).at(-1)?.[4])
+  assert(Number.isInteger(firstNonce), 'First Play did not request a nonce-bound calibration')
+  await page.evaluate(nonce => window.__emitFirstPlayMidi([0xf0, 0x0b, 125, nonce, 2, 0xf7]), firstNonce)
   await page.locator('.sound-lab[data-reveal-stage="calibrating"]').waitFor()
+  await page.evaluate(nonce => window.__emitFirstPlayMidi([0xf0, 0x0b, 125, nonce, 3, 0xf7]), firstNonce)
   await page.locator('.sound-lab[data-reveal-stage="ready"]').waitFor({timeout: 2000})
   await page.evaluate(() => window.__emitFirstPlayMidi([0x91, 64, 100]))
   await page.locator('.sound-lab[data-reveal-stage="revealed"]').waitFor()
@@ -343,7 +352,7 @@ async function controllerVersion(page) {
   await page.locator('#patch-selector').selectOption({label: 'Fast role'})
   await page.getByText('Preset loaded in browser. Apply preset to Biotron to hear and save it.').waitFor({state: 'visible'})
   await page.locator('#patch-selector').press('Enter')
-  assert.strictEqual(await page.evaluate(before => window.__midiSent.length, presetSentBefore), presetSentBefore,
+  assert.strictEqual(await page.evaluate(() => window.__midiSent.length), presetSentBefore,
     'selecting a browser preset or pressing Enter unexpectedly wrote to Biotron')
   const applyPreset = page.getByRole('button', {name: 'Apply preset to Biotron'})
   await applyPreset.click()
@@ -375,17 +384,35 @@ async function controllerVersion(page) {
   )
   assert.strictEqual(await controllerVersion(page), 1, 'updated worker replaced the active session')
 
+  const spectator = await context.newPage()
+  await spectator.goto(`${origin}/#/biotron/play`, {waitUntil: 'load'})
+  await spectator.evaluate(() => { window.__pwaSpectator = 'still-open' })
+  await page.getByRole('button', {name: 'Update app', exact: true}).click()
+  await waitFor(async () => await controllerVersion(page) === 2, 'explicit update did not activate the new worker')
+  await page.getByText(/Offline mode is ready/i).waitFor({state: 'visible'})
+  await spectator.getByRole('button', {name: 'Update app', exact: true}).waitFor()
+  assert.strictEqual(await spectator.evaluate(() => window.__pwaSpectator), 'still-open',
+    'an update accepted in another tab reloaded the spectator')
+  await spectator.getByLabel('Biotron tasks').getByRole('link', {name: 'Settings', exact: true}).click()
+  assert(spectator.url().endsWith('/#/biotron/play'), 'Old tab navigated toward a removed route chunk')
+  assert.strictEqual(await spectator.evaluate(() => document.activeElement?.textContent.trim()), 'Update app',
+    'Blocked route did not focus the explicit update action')
+  await spectator.getByRole('button', {name: 'Update app', exact: true}).click()
+  await spectator.getByRole('heading', {name: 'Plant music', exact: true}).waitFor()
+  assert.strictEqual(await spectator.evaluate(() => window.__pwaSpectator), undefined,
+    'spectator explicit update did not reload its page')
+
   await closeProfile()
   page = await openProfile(false)
   await page.goto(`${origin}/biotron`, {waitUntil: 'load'})
   await page.getByText(/Offline mode — Settings are working without internet/i).waitFor({state: 'visible', timeout: 10000})
-  assert.strictEqual(await controllerVersion(page), 2, 'waiting update did not activate after the browser process closed')
+  assert.strictEqual(await controllerVersion(page), 2, 'accepted update did not persist for the offline restart')
   assert.strictEqual(
     await page.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration()).waiting)),
     false,
     'old waiting worker remains after deliberate restart'
   )
-  console.log('5/7 A→B update stayed non-disruptive, activated after restart and launched offline')
+  console.log('5/7 A→B update required a click, left another tab open, and persisted for an offline restart')
 
   await context.addInitScript(() => {
     const getRegistration = navigator.serviceWorker.getRegistration.bind(navigator.serviceWorker)

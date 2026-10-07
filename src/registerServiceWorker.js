@@ -1,4 +1,5 @@
 export const OFFLINE_STATUS_EVENT = 'playtronica-offline-status'
+export const APP_UPDATE_EVENT = 'playtronica-app-update'
 
 const SETUP_DEADLINE_MS = 10000
 const PRECACHE_PREFIX = 'web-midi-playtronica-precache-'
@@ -9,8 +10,96 @@ let offlineStatus = {
 }
 let setupPromise = null
 let setupGeneration = 0
+let updateStatus = {available: false, updating: false, reloadRequired: false, error: ''}
+let updateRegistration = null
+let updatePromise = null
+let watchingController = false
+let knownController = null
+const observedRegistrations = new WeakSet()
 
 export const getOfflineStatus = () => ({...offlineStatus})
+export const getAppUpdateStatus = () => ({...updateStatus})
+const publishUpdateStatus = patch => {
+  updateStatus = {...updateStatus, ...patch}
+  window.dispatchEvent(new CustomEvent(APP_UPDATE_EVENT, {detail: getAppUpdateStatus()}))
+}
+
+const observeUpdates = registration => {
+  if (!registration) return
+  updateRegistration = registration
+  const checkWaiting = () => {
+    if (navigator.serviceWorker.controller && registration.waiting && registration.waiting.state !== 'redundant') {
+      publishUpdateStatus({available: true})
+    }
+  }
+  checkWaiting()
+  if (!observedRegistrations.has(registration)) {
+    observedRegistrations.add(registration)
+    const trackInstalling = () => {
+      const installing = registration.installing
+      if (!installing?.addEventListener) return
+      const changed = () => {
+        checkWaiting()
+        if (['installed', 'redundant'].includes(installing.state)) {
+          installing.removeEventListener('statechange', changed)
+        }
+      }
+      installing.addEventListener('statechange', changed)
+      changed()
+    }
+    registration.addEventListener?.('updatefound', trackInstalling)
+    trackInstalling()
+  }
+  if (!watchingController) {
+    watchingController = true
+    knownController = navigator.serviceWorker.controller
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      const current = navigator.serviceWorker.controller
+      // Another tab may accept the update. This tab only offers a reload:
+      // its audio and any firmware operation continue until its own click.
+      if (current && knownController && current !== knownController) {
+        publishUpdateStatus({available: true, reloadRequired: true})
+        publishOfflineStatus('update-pending', false, 'SW_APP_UPDATE_PENDING')
+      }
+      if (current) knownController = current
+    })
+  }
+}
+
+// GenerateSW(skipWaiting: false) provides the SKIP_WAITING message handler.
+// Only this explicit action may activate a waiting worker and reload this tab.
+export const requestAppUpdate = (canReload = () => true) => {
+  if (updatePromise) return updatePromise
+  if (!canReload()) {
+    publishUpdateStatus({updating: false, error: 'SW_UPDATE_BLOCKED'})
+    return Promise.resolve(getAppUpdateStatus())
+  }
+  if (!updateStatus.available || !updateRegistration) return Promise.resolve(getAppUpdateStatus())
+  publishUpdateStatus({updating: true, error: ''})
+  const waiting = updateRegistration.waiting
+  if (!waiting) {
+    // The worker was already activated by another tab.
+    window.location.reload()
+    return Promise.resolve(getAppUpdateStatus())
+  }
+  updatePromise = (async () => {
+    try {
+      await withDeadline(signal => {
+        const controlled = waitForController(signal, navigator.serviceWorker.controller)
+        controlled.catch(() => {}) // postMessage can throw before this promise is returned.
+        waiting.postMessage({type: 'SKIP_WAITING'})
+        return controlled
+      })
+      if (!canReload()) throw swError('Firmware is busy.', 'SW_UPDATE_BLOCKED')
+      window.location.reload()
+    } catch (error) {
+      publishUpdateStatus({updating: false,
+        error: error.code === 'SW_SETUP_TIMEOUT' ? 'SW_UPDATE_TIMEOUT' : error.code || 'SW_UPDATE_FAILED'})
+    }
+    return getAppUpdateStatus()
+  })().finally(() => { updatePromise = null })
+  return updatePromise
+}
 
 const swError = (message, code) => Object.assign(new Error(message), {code})
 const assertCurrent = signal => {
@@ -22,15 +111,29 @@ const publishOfflineStatus = (state, ready = false, code = '') => {
   window.dispatchEvent(new CustomEvent(OFFLINE_STATUS_EVENT, {detail: getOfflineStatus()}))
 }
 
-const waitForController = signal => new Promise((resolve, reject) => {
+const withDeadline = async operation => {
+  const controller = new AbortController()
+  let timeout
+  const deadline = new Promise((_, reject) => {
+    timeout = window.setTimeout(() => {
+      controller.abort()
+      reject(swError('Offline setup timed out.', 'SW_SETUP_TIMEOUT'))
+    }, SETUP_DEADLINE_MS)
+  })
+  try { return await Promise.race([operation(controller.signal), deadline]) }
+  finally { window.clearTimeout(timeout); controller.abort() }
+}
+
+const waitForController = (signal, previous = null) => new Promise((resolve, reject) => {
   assertCurrent(signal)
-  if (navigator.serviceWorker.controller) { resolve(); return }
+  const controlled = () => navigator.serviceWorker.controller && navigator.serviceWorker.controller !== previous
+  if (controlled()) { resolve(); return }
   const cleanup = () => {
     navigator.serviceWorker.removeEventListener('controllerchange', changed)
     signal.removeEventListener('abort', cancelled)
   }
   const changed = () => {
-    if (!navigator.serviceWorker.controller) return
+    if (!controlled()) return
     cleanup()
     resolve()
   }
@@ -78,12 +181,14 @@ const prepare = async signal => {
   const worker = navigator.serviceWorker
   const existingRegistration = await worker.getRegistration()
   assertCurrent(signal)
+  observeUpdates(existingRegistration)
   if (!existingRegistration && !navigator.onLine) {
     throw swError('First offline installation needs internet.', 'SW_FIRST_INSTALL_OFFLINE')
   }
   if (!existingRegistration || navigator.onLine) {
-    await worker.register(`${process.env.BASE_URL}service-worker.js`)
+    const registration = await worker.register(`${process.env.BASE_URL}service-worker.js`)
     assertCurrent(signal)
+    observeUpdates(registration)
   }
   await worker.ready
   assertCurrent(signal)
@@ -102,26 +207,16 @@ export const prepareOfflineAccess = () => {
   }
 
   const generation = ++setupGeneration
-  const controller = new AbortController()
   setupPromise = (async () => {
     publishOfflineStatus('installing', false, 'SW_PREPARING')
-    let timeout
-    const deadline = new Promise((_, reject) => {
-      timeout = window.setTimeout(() => {
-        controller.abort()
-        reject(swError('Offline setup timed out.', 'SW_SETUP_TIMEOUT'))
-      }, SETUP_DEADLINE_MS)
-    })
     try {
-      await Promise.race([prepare(controller.signal), deadline])
+      await withDeadline(prepare)
       if (generation === setupGeneration) publishOfflineStatus('ready', true, 'SW_READY')
     } catch (error) {
       if (generation === setupGeneration) {
         console.error('Could not prepare Settings for offline use:', error)
         publishOfflineStatus('error', false, error.code || 'SW_SETUP_FAILED')
       }
-    } finally {
-      window.clearTimeout(timeout)
     }
     return getOfflineStatus()
   })().finally(() => {

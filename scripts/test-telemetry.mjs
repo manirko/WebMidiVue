@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import {setTimeout as wait} from 'node:timers/promises'
+import {spawnSync} from 'node:child_process'
 import worker, {validEvent} from '../beta-assets/telemetry-worker.mjs'
+import retention from '../beta-assets/telemetry-retention-worker.mjs'
 
 process.env.VUE_APP_BIOTRON_PWA_BETA = 'true'
 process.env.VUE_APP_BUILD_ID = '0123456789ab'
@@ -66,7 +68,36 @@ try {
   assert.equal((await worker.fetch(makePost(event), {ASSETS: env.ASSETS})).status, 503)
   assert.deepEqual(await (await worker.fetch(new Request(origin + '/api/telemetry'), env)).json(), {status: 'ready'})
   assert.equal(await (await worker.fetch(new Request(origin + '/'), env)).text(), 'asset')
-  console.log('Telemetry contract verified: allowlist, no raw device data, offline isolation, receiver validation and D1 write.')
+  const framedEnv = {ASSETS: {fetch: async () => new Response('scene', {headers: {
+    'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'self'; frame-ancestors 'none'"
+  }})}}
+  const scene = await worker.fetch(new Request(origin + '/garden/scene.html'), framedEnv)
+  assert.equal(scene.headers.get('X-Frame-Options'), 'SAMEORIGIN')
+  assert.equal(scene.headers.get('Content-Security-Policy'), "default-src 'self'; frame-ancestors 'self'")
+  const app = await worker.fetch(new Request(origin + '/'), framedEnv)
+  assert.equal(app.headers.get('X-Frame-Options'), 'DENY')
+  assert.match(app.headers.get('Content-Security-Policy'), /frame-ancestors 'none'/)
+  let retentionQuery
+  assert.deepEqual(await retention.scheduled({}, {SESSION_EVENTS: {prepare(sql) {
+    retentionQuery = sql
+    return {run: async () => ({success: true, meta: {changes: 1}})}
+  }}}), {deleted: 1})
+  // Run the actual query in SQLite: retain fresh and boundary rows, delete old
+  // rows even when there are no incoming browser events.
+  const sqlite = spawnSync('python3', ['-c', `
+import sqlite3, sys
+db=sqlite3.connect(':memory:')
+db.execute('CREATE TABLE session_events (event_id TEXT, received_at TEXT)')
+db.execute("INSERT INTO session_events VALUES ('old', datetime('now', '-90 days')), ('boundary', datetime('now', '-89 days')), ('fresh', datetime('now'))")
+db.execute(sys.argv[1])
+assert db.execute('SELECT event_id FROM session_events ORDER BY event_id').fetchall() == [('boundary',), ('fresh',)]
+`, retentionQuery], {encoding: 'utf8'})
+  assert.equal(sqlite.status, 0, sqlite.stderr)
+  await assert.rejects(retention.scheduled({}, {}), /binding missing/)
+  await assert.rejects(retention.scheduled({}, {SESSION_EVENTS: {prepare() {
+    return {run: async () => ({success: false})}
+  }}}), /Retention query failed/)
+  console.log('Telemetry contract verified: allowlist, no raw device data, offline isolation, receiver validation, D1 write and independent idle retention with SQLite boundary checks.')
 } finally {
   if (previousNavigator) Object.defineProperty(globalThis, 'navigator', previousNavigator)
   else delete globalThis.navigator
