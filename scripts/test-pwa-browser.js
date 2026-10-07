@@ -208,11 +208,11 @@ async function controllerVersion(page) {
   page = await openProfile(false)
   await page.goto(`${origin}/biotron/play`, { waitUntil: 'load' })
   await waitFor(() => page.url().includes('/#/biotron/play'), 'first-play route was not normalized to the cached hash route')
-  await page.getByRole('heading', {name: 'Meet Biotron'}).waitFor({state: 'visible', timeout: 10000})
+  await page.getByRole('heading', {name: 'Plant music', exact: true}).waitFor({state: 'visible', timeout: 10000})
   assert.strictEqual(await page.locator('.offline-status').count(), 0, 'first-play was crowded by the global offline banner')
   assert.strictEqual(await controllerVersion(page), 1)
   assert.strictEqual(await page.evaluate(() => window.__midiRequestCount), 0, 'first-play requested MIDI before a user gesture')
-  await page.getByRole('button', {name: 'Hear Biotron'}).click()
+  await page.getByRole('button', {name: 'Start listening', exact: true}).click()
   await page.locator('.sound-lab[data-reveal-stage="settling"][data-audio-state="running"]').waitFor()
   assert.strictEqual(await page.evaluate(() => window.__midiRequestCount), 1, 'first-play did not use exactly one MIDI permission request')
   assert.strictEqual(await page.evaluate(() => window.__midiRequestOptions[0].sysex), true,
@@ -222,7 +222,14 @@ async function controllerVersion(page) {
     await page.evaluate(value => window.__emitFirstPlayMidi([0x81, value, 0]), note)
     await page.waitForTimeout(70)
   }
+  assert.strictEqual(await page.locator('.sound-lab[data-reveal-stage="ready"]').count(), 0,
+    'Legacy cue notes falsely confirmed readiness')
+  const firstNonce = await page.evaluate(() => window.__midiSent.filter(message =>
+    message[0] === 0xf0 && message[3] === 125 && message.length === 6).at(-1)?.[4])
+  assert(Number.isInteger(firstNonce), 'First Play did not request a nonce-bound calibration')
+  await page.evaluate(nonce => window.__emitFirstPlayMidi([0xf0, 0x0b, 125, nonce, 2, 0xf7]), firstNonce)
   await page.locator('.sound-lab[data-reveal-stage="calibrating"]').waitFor()
+  await page.evaluate(nonce => window.__emitFirstPlayMidi([0xf0, 0x0b, 125, nonce, 3, 0xf7]), firstNonce)
   await page.locator('.sound-lab[data-reveal-stage="ready"]').waitFor({timeout: 2000})
   await page.evaluate(() => window.__emitFirstPlayMidi([0x91, 64, 100]))
   await page.locator('.sound-lab[data-reveal-stage="revealed"]').waitFor()
@@ -386,8 +393,12 @@ async function controllerVersion(page) {
   await spectator.getByRole('button', {name: 'Update app', exact: true}).waitFor()
   assert.strictEqual(await spectator.evaluate(() => window.__pwaSpectator), 'still-open',
     'an update accepted in another tab reloaded the spectator')
+  await spectator.getByLabel('Biotron tasks').getByRole('link', {name: 'Settings', exact: true}).click()
+  assert(spectator.url().endsWith('/#/biotron/play'), 'Old tab navigated toward a removed route chunk')
+  assert.strictEqual(await spectator.evaluate(() => document.activeElement?.textContent.trim()), 'Update app',
+    'Blocked route did not focus the explicit update action')
   await spectator.getByRole('button', {name: 'Update app', exact: true}).click()
-  await spectator.getByRole('heading', {name: 'Meet Biotron'}).waitFor()
+  await spectator.getByRole('heading', {name: 'Plant music', exact: true}).waitFor()
   assert.strictEqual(await spectator.evaluate(() => window.__pwaSpectator), undefined,
     'spectator explicit update did not reload its page')
 

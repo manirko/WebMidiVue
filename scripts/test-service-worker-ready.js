@@ -178,6 +178,7 @@ function environment({ready = Promise.resolve({}), cached = true, controller = {
     module = await loadModule()
     await module.prepareOfflineAccess()
     assert.equal(module.getAppUpdateStatus().available, true)
+    assert.equal(module.getAppUpdateStatus().reloadRequired, false, 'A merely waiting worker blocked navigation')
     assert.equal(messages.length, 0)
     assert.equal(env.reloads(), 0)
     await module.requestAppUpdate(() => false)
@@ -217,6 +218,7 @@ function environment({ready = Promise.resolve({}), cached = true, controller = {
     assert.equal(env.reloads(), 0)
     assert.equal(module.getOfflineStatus().code, 'SW_APP_UPDATE_PENDING',
       'An old tab claimed its removed shell assets were still ready offline')
+    assert.equal(module.getAppUpdateStatus().reloadRequired, true)
     await module.requestAppUpdate(() => false)
     assert.equal(env.reloads(), 0)
     await module.requestAppUpdate()

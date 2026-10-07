@@ -19,7 +19,8 @@ async function main() {
     plugins: ['@babel/plugin-transform-modules-commonjs']}).code
   let stop = async () => true
   let stops = 0, requests = 0
-  const context = {module: {exports: {}}, exports: {}, require: name => {
+  const context = {window: {addEventListener() {}, removeEventListener() {}}, document: {},
+    module: {exports: {}}, exports: {}, require: name => {
     if (name === '@/appUpdateSafety.mjs') return safety
     if (name === '@/audio/sessionState.mjs') return {stopPersistentSound: () => { stops++; return stop() }}
     if (name === '@pwa-entry') return {requestAppUpdate: async canReload => {
@@ -70,6 +71,17 @@ async function main() {
   finishStop(true)
   await first
   assert.equal(requests, 2)
+  let navigationGuard, focuses = 0, removed = 0
+  const routeApp = {betaBuild: true, appUpdate: {reloadRequired: false},
+    $refs: {appUpdateAction: {focus: () => { focuses++ }}},
+    $router: {beforeEach(guard) { navigationGuard = guard; return () => { removed++ } }}}
+  definition.mounted.call(routeApp)
+  assert.equal(navigationGuard(), true, 'Waiting update blocked a route before activation')
+  routeApp.appUpdate.reloadRequired = true
+  assert.equal(navigationGuard(), false, 'Old tab requested a deleted route chunk')
+  assert.equal(focuses, 1, 'Old tab navigation did not direct the user to Update app')
+  definition.beforeUnmount.call(routeApp)
+  assert.equal(removed, 1, 'App router guard was not removed on unmount')
   console.log('App update safety passed: multiple firmware owners, no audio interruption during flash, failed stop, explicit release, double click')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

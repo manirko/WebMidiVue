@@ -26,6 +26,8 @@ Discovery never reloads a page. The explicit action stops the persistent sound
 session before reloading, and stays blocked while a firmware operation is in
 progress, including a closed modal or an in-flight write after navigation.
 An update accepted in another tab offers a reload here without interrupting it.
+Until this tab accepts the new version, switching views focuses that action
+instead of requesting an old lazy chunk that the new worker has removed.
 The activation deadline is bounded and retryable. Regression checks:
 `npm run test:service-worker-ready` and `npm run test:firmware`.
 The lifecycle follows the [Workbox update flow](https://developer.chrome.com/docs/workbox/handling-service-worker-updates)

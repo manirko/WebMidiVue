@@ -63,7 +63,7 @@
   <div v-if="betaBuild && appUpdate.available" class="offline-status-slot app-update-slot">
     <div class="offline-status mx-auto px-3 py-2" role="status" aria-live="polite">
       <span>{{ appUpdateMessage }}</span>
-      <button type="button" class="btn btn-outline-secondary offline-action" @click="updateApp"
+      <button ref="appUpdateAction" type="button" class="btn btn-outline-secondary offline-action" @click="updateApp"
               :disabled="appUpdate.updating || appUpdating">
         {{ appUpdate.updating || appUpdating ? 'Updating…' : 'Update app' }}
       </button>
@@ -153,6 +153,7 @@ export default {
       if (this.appUpdate.error === 'SW_UPDATE_BLOCKED') return 'Finish the firmware update before reloading the app.'
       if (this.appUpdate.error === 'AUDIO_RELEASE_FAILED') return 'Sound could not stop. Press Stop & release, then retry the app update.'
       if (this.appUpdate.error) return 'The app update did not finish. Check the connection, then try again.'
+      if (this.appUpdate.reloadRequired) return 'A new version is active. Update this tab before switching views. Updating stops sound.'
       return 'A new app version is ready. Updating stops sound and reloads this page.'
     },
     firstPlay() {
@@ -203,8 +204,14 @@ export default {
     window.addEventListener("offline", this.handleConnectionChange)
     window.addEventListener(INSTALL_PROMPT_AVAILABLE_EVENT, this.handleInstallPrompt)
     window.addEventListener("appinstalled", this.handleInstalled)
+    if (this.betaBuild) this.removeUpdateGuard = this.$router.beforeEach(() => {
+      if (!this.appUpdate.reloadRequired) return true
+      this.$refs.appUpdateAction?.focus()
+      return false
+    })
   },
   beforeUnmount() {
+    this.removeUpdateGuard?.()
     window.removeEventListener(OFFLINE_STATUS_EVENT, this.handleOfflineStatus)
     window.removeEventListener(APP_UPDATE_EVENT, this.handleAppUpdate)
     window.removeEventListener("online", this.handleConnectionChange)

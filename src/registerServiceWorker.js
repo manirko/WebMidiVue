@@ -10,7 +10,7 @@ let offlineStatus = {
 }
 let setupPromise = null
 let setupGeneration = 0
-let updateStatus = {available: false, updating: false, error: ''}
+let updateStatus = {available: false, updating: false, reloadRequired: false, error: ''}
 let updateRegistration = null
 let updatePromise = null
 let watchingController = false
@@ -58,7 +58,7 @@ const observeUpdates = registration => {
       // Another tab may accept the update. This tab only offers a reload:
       // its audio and any firmware operation continue until its own click.
       if (current && knownController && current !== knownController) {
-        publishUpdateStatus({available: true})
+        publishUpdateStatus({available: true, reloadRequired: true})
         publishOfflineStatus('update-pending', false, 'SW_APP_UPDATE_PENDING')
       }
       if (current) knownController = current
