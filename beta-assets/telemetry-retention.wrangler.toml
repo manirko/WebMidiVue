@@ -1,0 +1,15 @@
+name = "biotron-telemetry-retention"
+account_id = "e5e3da2238cbacdb5f8fd1cceefa99fc"
+main = "telemetry-retention-worker.mjs"
+compatibility_date = "2026-08-26"
+workers_dev = false
+preview_urls = false
+routes = []
+
+[triggers]
+crons = ["17 3 * * *"]
+
+[[d1_databases]]
+binding = "SESSION_EVENTS"
+database_name = "playtronica-session-events"
+database_id = "0d385f91-f646-4f8c-b508-344b4b2f8a6e"
