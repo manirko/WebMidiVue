@@ -11,3 +11,9 @@ The UI exports a local 32-bit float WAV and JSON, and provides playback controls
 Current lanes: offline DSP (existing), real-time engine capture (new), deterministic analyzer mutations (new), WAV listening (human playback available). System loopback, physical speaker acceptance, real-time production UI tap, automated perceptual judgement, full score across real-time presets and physical end-to-end latency are NOT IMPLEMENTED. They cannot be marked PASS from these results. No loopback driver is installed by this task.
 
 Store downloaded evidence under ProjectData, with the generated source-manifest.json. No recordings belong in Git. Primary research and remaining implementation sequence: docs/BIOTRON-AUDIO-QA-DESIGN.md.
+
+## Animation and audio contention
+
+Run animation + audio load ladder loads the current tracked Garden scene, waits for its renderer handshake, drives its ready/note animation and runs the same audio score at synthetic busy-loop budgets of 0, 4 and 10 ms per 16 ms timer interval. These are requested contention budgets, NOT measured CPU utilization or hardware throttle factors. The test records audio failure/continuity, host requestAnimationFrame p95/max and optional JS heap samples. Frame measurements describe the host page, not GPU render timing. Heap snapshots do not prove absence of leaks. Animation readability, low-end hardware acceptance and long soak remain NOT RUN.
+
+Stop load test aborts capture, sends animation waiting/paused, clears all load/scene timers and frame measurement, and releases its audio context. Cancelled run reports INTERRUPTED, not PASS. The audio fault oracles remain the acceptance gate; visual responsiveness metrics are observations until calibrated criteria exist. Garden requires its external Three CDN resources and WebGPU support: a missing renderer handshake fails after a bounded wait rather than silently testing an empty frame.

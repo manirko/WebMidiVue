@@ -1,8 +1,8 @@
 import {analyze,wav,SCORE} from './analyze.mjs'
-export async function captureScore(Engine,mode='normal'){
+export async function captureScore(Engine,mode='normal',signal){
  const context=new AudioContext({sampleRate:48000}),events=[],blocks=[];let engine,tap,drain,url
  const worklet=`class Capture extends AudioWorkletProcessor{constructor(){super();this.n=0;this.limit=sampleRate*8}process(inputs){const a=inputs[0]?.[0];if(a&&this.n<this.limit){this.port.postMessage({frame:currentFrame,pcm:a.slice()});this.n+=a.length}return true}}registerProcessor('qa-capture',Capture)`
- const wait=ms=>new Promise(r=>setTimeout(r,ms));let start=0
+ const wait=ms=>new Promise((resolve,reject)=>{if(signal?.aborted)return reject(new DOMException('Stopped','AbortError'));const abort=()=>{clearTimeout(timer);reject(new DOMException('Stopped','AbortError'))};const timer=setTimeout(()=>{signal?.removeEventListener('abort',abort);resolve()},ms);signal?.addEventListener('abort',abort,{once:true})});let start=0
  try{
   await context.resume();engine=new Engine(context,{volume:70});await engine.ensureReady()
   url=URL.createObjectURL(new Blob([worklet],{type:'text/javascript'}));await context.audioWorklet.addModule(url)
