@@ -68,7 +68,7 @@ Legacy UX fixed: firmware 1.x below 1.9 no longer retries unsupported settings
 readback; it instructs update. The locked-page message also reports the error
 instead of perpetually saying Reading. A regression test forbids that legacy query.
 
-1.10.8 has a verified device backup but no established source/change history.
+1.10.8 source/artifact was subsequently recovered: beta21 on the composition branch. All 262 artifact blocks match the installed program backup. It is superseded by clean 1.10.9 (source 303aafc), which removes the abandoned composition experiment.
 1.9.8 remains INTERNAL CANDIDATE, not customer release. Full web flash, controlled note capture, physical sensor/button/LED/audio gates,
 long soak, power-cycle and other-platform tests must be reported individually.
 
@@ -77,3 +77,13 @@ version/readback passed both cables. Settings vector and plant BPM equal the ini
 baseline; read-only query flash-save delta is zero. A picotool argument-order failure
 was preserved in logs and corrected before reboot. Native cycle is complete; the
 actual browser directory-picker/write/reconnect acceptance remains incomplete.
+
+## Release preparation — 7 October 2026
+
+Firmware 1.10.9 SHA-256 823d044374268462d39b13c0e65dc2676cda2fb3d5162edba78aedccb0a09f3d, source 303aafc. Source host sanitizer/optimized suites and ARM build passed; no composition-engine symbols remain. Native verified 1.10.9 → 1.9.8 → 1.10.9 completed. Final exact-version/settings readback passed both cables. Earlier candidate settings compare equals baseline with zero read-only flash saves; final post-calibration comparison also equals baseline; read-only flash-save delta is zero. Final 30-second note capture is balanced with no orphan or active notes. Mobile 375 px: scroll width 375, one H1, visible main buttons at least 44 px high.
+
+Fresh web at localhost:49294 targets this exact image. Download/preflight, BOOT, disappearance, reconnect to Firmware 1.10.9 ✓, settings load, device-confirmed calibration completion and release/reconnect for DAW observed. Browser directory selection/write is NOT RUN; native write is separate evidence. Do not infer web-flash success from the final version badge. Closing after BOOT exposes recovery but loses the prominent update-mode instruction; simplify this before broad rollout.
+
+Software runner now creates immutable run directories, records dirty status and per-log SHA-256, kills hung process groups, reports NOT RUN separately and marks incomplete coverage. Its fixture proves nonzero exit, timeout and preservation across repeated runs. Final run c883035: 19 software suites PASS, presets and sound-level browser checks NOT RUN. An earlier sound-level run failed at npm network lookup before browser startup; retained as environment failure evidence. Neither skipped check is converted to PASS. Browser tests must use the active browser tools.
+
+Remaining release gates: actual web write/reconnect, old-firmware update matrix, physical sensor/button/LED/audio judgement, clipping/voice-limit checks, mobile/Windows/Android/iOS device coverage, PWA offline restart/cache migration and long soak/power-cycle. This Mac/Fibonacci run does not establish those platforms. Retain prior orphan Note Off finding; balanced captures of another version cannot close it.
