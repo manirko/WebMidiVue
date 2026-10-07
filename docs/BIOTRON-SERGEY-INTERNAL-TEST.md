@@ -4,9 +4,9 @@
 
 ## Точный объект
 
-Web runtime source: `f602996dcbf23dc1296fa500a3f77e5b17f722da`, repository `manirko/WebMidiVue`, branch `codex/biotron-garden-release`. Последующие документационные коммиты не меняют runtime. Build mode: `biotron-firmware-beta`. Архив и hashes: `~/ProjectData/playtronica-firmware/biotron/sergey-internal-f602996/`. Внутренний архив не является проверенным customer candidate.
+Web runtime source: `30d978514f675d94950ae4a2af998a68e3a1e56e`, repository `manirko/WebMidiVue`, branch `codex/biotron-garden-release`. Последующие коммиты тестов/документации не меняют проверенные runtime-исходники; в архиве закреплён именно этот commit. Build mode: `biotron-firmware-beta`. Архив и hashes: `~/ProjectData/playtronica-firmware/biotron/sergey-internal-30d9785/`. Внутренний архив не является проверенным customer candidate.
 
-Preview для Windows: **НЕ ВЫДАН**. localhost:49303 работает только на Mac Андрея. Не отправлять его Сергею как рабочую ссылку. Не просить устанавливать SDK, Node, Python, запускать CMD или admin. Пакет не отправляется до появления доступного точного preview и принятого пути firmware recovery на его плате.
+Preview для Windows: **НЕ ВЫДАН**. localhost:49304 работает только на Mac Андрея. Не отправлять его Сергею как рабочую ссылку. Не просить устанавливать SDK, Node, Python, запускать CMD или admin. Пакет не отправляется до появления доступного точного preview и принятого пути firmware recovery на его плате.
 
 Firmware 1.10.9 clean: SHA256 `823d044374268462d39b13c0e65dc2676cda2fb3d5162edba78aedccb0a09f3d`.
 Rollback 1.9.8 beta08: SHA256 `38c7fd35ef5e456d86b03f50f380d499519835fa84b7516fbd7b1cd1012b91da`.
@@ -22,7 +22,7 @@ Rollback 1.9.8 beta08: SHA256 `38c7fd35ef5e456d86b03f50f380d499519835fa84b7516fb
 
 1. Закрыть DAW, открыть exact preview, подключить Biotron. Выбран один responsive MIDI port; версия читается. Нажать Start listening. Дождаться подтверждения калибровки, услышать звук.
 2. Развернуть Garden, drag, закрыть крестиком, повторить с Escape после drag. Звук не обрывается; закрытие срабатывает с первого клика.
-3. Stop & release: новых нот нет, хвост затихает. Повторный Start восстанавливает звук без дублей. Play→Settings→Play: остановка при уходе, без самозапуска при возврате.
+3. Stop & release: новых нот нет, хвост затихает. Повторный Start восстанавливает звук без дублей. Play→Settings→Play сохраняет звук одной сессии; Settings показывает «Sound stays on». Release device for DAW отдельно останавливает её.
 4. Отключить USB во время звука, подключить обратно и восстановить сессию. Нет зависшей ноты; UI различает потерю устройства и отсутствие звука.
 5. Изменить один обратимый параметр, сохранить, replug, проверить readback и восстановить baseline.
 
@@ -42,16 +42,18 @@ Rollback 1.9.8 beta08: SHA256 `38c7fd35ef5e456d86b03f50f380d499519835fa84b7516fb
 
 ## Один ответ по каждой карточке
 
-`Biotron f602996 / firmware <version> — PASS / FAIL / BLOCKED; Windows / browser / DAW / board marker; первый неуспешный шаг; что увидел и услышал; diagnostics/video при FAIL.`
+`Biotron 30d9785 / firmware <version> — PASS / FAIL / BLOCKED; Windows / browser / DAW / board marker; первый неуспешный шаг; что увидел и услышал; diagnostics/video при FAIL.`
 
 Ни молчание, ни «вроде работает», ни успех другой версии не считаются PASS. Этот документ не означает, что Сергей получил пакет или прошёл тест.
 
 ## Уже имеющиеся evidence и границы
 
-- Andrey, exact runtime f602996: крестик после изменения viewport mode, Stop/Start, route lifecycle, USB recovery, persistence — сообщения пользователя в этой сессии. Continuity после fullscreen не подтверждена отдельным ответом.
-- Machine: lint/build/PWA budget/fullscreen unit regressions PASS на f602996. Полный release gate на этом runtime не заявлен.
+- Andrey, прошлый runtime f602996: крестик, Stop/Start, route lifecycle, USB recovery, persistence — сообщения пользователя в этой сессии. Это историческое evidence, не полный human acceptance нового runtime.
+- CUA на exact 30d9785: первая установка, явное обновление, откат/повторное обновление веба на одном origin, две вкладки, отказ сервера файлов, Play→Settings→Play, закрытие полного экрана и Escape после фокуса iframe — PASS. AudioContext продолжал работать; физический выход динамика в этом прогоне не записывался. Подробности: `BIOTRON-PWA-UPDATE-QA-2026-10-07.md`.
+- Machine: firmware-beta build/PWA budget и ordinary production isolation PASS на 30d9785. Полный customer release gate не заявлен.
 - Реальные audio engine capture и controlled mute/stuck tests PASS; Garden+audio synthetic main-thread contention PASS на раннем runtime источнике той же сцены/engine. Это не физическая слышимость, слабая GPU, долгий soak или полная production UI instrumented acceptance.
 - Native physical rollback cycle 1.10.9→1.9.8→1.10.9 PASS; browser file verification/BOOT ранее PASS; full browser write NOT VERIFIED.
-- Existing-origin PWA upgrade, live D1 logger delivery, clipboard payload, физический mobile/reduced-motion и права Garden/panorama остаются открытыми. Сцена сохранена для внутреннего исследования по текущему указанию пользователя; правами это не является.
+- Старые билды до кнопки Update app нужно один раз закрыть во всех вкладках/окнах приложения и открыть снова. Новый UI не может переписать уже закешированный старый JavaScript.
+- Live D1 logger delivery, clipboard payload, физический mobile/reduced-motion, слабый компьютер/долгий soak и права Garden/panorama остаются открытыми. Сцена сохранена для внутреннего исследования по текущему указанию пользователя; правами это не является.
 
 После результата Сергея: воспроизвести FAIL, исправить в новом закреплённом candidate, повторить затронутую карточку; затем обязательные release gates и контрольный preview. Клиентам до этого не отправлять.

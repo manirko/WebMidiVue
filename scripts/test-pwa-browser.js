@@ -152,7 +152,7 @@ async function controllerVersion(page) {
   }))
 }
 
-;(async () => {
+(async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   origin = `http://127.0.0.1:${server.address().port}`
 
@@ -352,7 +352,7 @@ async function controllerVersion(page) {
   await page.locator('#patch-selector').selectOption({label: 'Fast role'})
   await page.getByText('Preset loaded in browser. Apply preset to Biotron to hear and save it.').waitFor({state: 'visible'})
   await page.locator('#patch-selector').press('Enter')
-  assert.strictEqual(await page.evaluate(before => window.__midiSent.length, presetSentBefore), presetSentBefore,
+  assert.strictEqual(await page.evaluate(() => window.__midiSent.length), presetSentBefore,
     'selecting a browser preset or pressing Enter unexpectedly wrote to Biotron')
   const applyPreset = page.getByRole('button', {name: 'Apply preset to Biotron'})
   await applyPreset.click()

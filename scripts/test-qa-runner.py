@@ -25,6 +25,8 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
   assert by_name['test:midi-lifecycle']['result'] == 'TIMEOUT'
   assert by_name['test:presets']['result'] == 'NOT RUN'
   assert by_name['test:sound:levels']['result'] == 'NOT RUN'
+  for name in ['test:pwa:browser','test:firmware:browser','test:firmware:physical-cycle','test:quality:browser','test:windows:daw']:
+   assert by_name[name]['result'] == 'NOT RUN', name
   for row in rows:
    if 'evidence' in row:
     assert hashlib.sha256((run/row['evidence']).read_bytes()).hexdigest() == row['sha256']

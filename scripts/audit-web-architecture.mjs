@@ -69,7 +69,7 @@ const report = {
 // когда страница открыта при приборе уже в режиме обновления (нет MIDI, есть диск
 // RPI-RP2), и явная подсказка выбора диска; +6 строк в UpdateFirmwareComponent.vue.
 // 07.10.2026: reviewed explicit PWA update + shared firmware reload guard.
-// Actual source 67/10290; bounded activation and cross-tab/firmware/audio fault
+// Actual final source 67/10299; bounded activation and cross-tab/firmware/audio fault
 // regressions cover the new lifecycle. No dependency or safety-cap increase.
 const limits = {
   eagerDeviceRouteImports: 0,
