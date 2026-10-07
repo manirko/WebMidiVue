@@ -375,17 +375,31 @@ async function controllerVersion(page) {
   )
   assert.strictEqual(await controllerVersion(page), 1, 'updated worker replaced the active session')
 
+  const spectator = await context.newPage()
+  await spectator.goto(`${origin}/#/biotron/play`, {waitUntil: 'load'})
+  await spectator.evaluate(() => { window.__pwaSpectator = 'still-open' })
+  await page.getByRole('button', {name: 'Update app', exact: true}).click()
+  await waitFor(async () => await controllerVersion(page) === 2, 'explicit update did not activate the new worker')
+  await page.getByText(/Offline mode is ready/i).waitFor({state: 'visible'})
+  await spectator.getByRole('button', {name: 'Update app', exact: true}).waitFor()
+  assert.strictEqual(await spectator.evaluate(() => window.__pwaSpectator), 'still-open',
+    'an update accepted in another tab reloaded the spectator')
+  await spectator.getByRole('button', {name: 'Update app', exact: true}).click()
+  await spectator.getByRole('heading', {name: 'Meet Biotron'}).waitFor()
+  assert.strictEqual(await spectator.evaluate(() => window.__pwaSpectator), undefined,
+    'spectator explicit update did not reload its page')
+
   await closeProfile()
   page = await openProfile(false)
   await page.goto(`${origin}/biotron`, {waitUntil: 'load'})
   await page.getByText(/Offline mode — Settings are working without internet/i).waitFor({state: 'visible', timeout: 10000})
-  assert.strictEqual(await controllerVersion(page), 2, 'waiting update did not activate after the browser process closed')
+  assert.strictEqual(await controllerVersion(page), 2, 'accepted update did not persist for the offline restart')
   assert.strictEqual(
     await page.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration()).waiting)),
     false,
     'old waiting worker remains after deliberate restart'
   )
-  console.log('5/7 A→B update stayed non-disruptive, activated after restart and launched offline')
+  console.log('5/7 A→B update required a click, left another tab open, and persisted for an offline restart')
 
   await context.addInitScript(() => {
     const getRegistration = navigator.serviceWorker.getRegistration.bind(navigator.serviceWorker)

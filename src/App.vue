@@ -164,6 +164,7 @@ export default {
       return `mailto:manirko@playtronica.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
     },
     offlineMessage() {
+      if (this.offlineStatus.state === 'update-pending') return 'Update the app to reopen the current version offline.'
       if (this.offlineStatus.ready && !this.online) {
         return "Offline mode — Settings are working without internet. Firmware updates still need internet."
       }

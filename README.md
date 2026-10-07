@@ -21,6 +21,18 @@ PWA: after one successful online visit, its settings UI and hash routes are
 cached for offline use. The general customer beta does not contain or expose a
 firmware updater.
 
+When a new PWA build is waiting, **Update app** appears in Settings and Play.
+Discovery never reloads a page. The explicit action stops the persistent sound
+session before reloading, and stays blocked while a firmware operation is in
+progress, including a closed modal or an in-flight write after navigation.
+An update accepted in another tab offers a reload here without interrupting it.
+The activation deadline is bounded and retryable. Regression checks:
+`npm run test:service-worker-ready` and `npm run test:firmware`.
+The lifecycle follows the [Workbox update flow](https://developer.chrome.com/docs/workbox/handling-service-worker-updates)
+with `skipWaiting: false`. A build predating this button needs all tabs and
+installed app windows for its origin closed once before reopening; this feature
+cannot patch JavaScript that is already cached in an older worker.
+
 Build the isolated Biotron beta (direct Biotron launch, visible source revision,
 and a separate PWA identity) with:
 
@@ -73,7 +85,7 @@ The hardware-confirmed firmware research build is separate:
 npm run build:biotron-firmware-beta
 ```
 
-Only that build copies the pinned 1.9.8 artifact and shows the Biotron updater.
+Only that build copies the pinned 1.10.9 clean artifact and shows the Biotron updater.
 It must not be sent to an unscreened customer segment. Firmware installation is
 desktop Chrome/Edge plus internet only, and each board revision must be
 confirmed before receiving its link.

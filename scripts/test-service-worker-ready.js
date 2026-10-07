@@ -200,6 +200,8 @@ function environment({ready = Promise.resolve({}), cached = true, controller = {
     env.worker.controller = installing
     env.worker.emit('controllerchange')
     assert.equal(env.reloads(), 0)
+    assert.equal(module.getOfflineStatus().code, 'SW_APP_UPDATE_PENDING',
+      'An old tab claimed its removed shell assets were still ready offline')
     await module.requestAppUpdate(() => false)
     assert.equal(env.reloads(), 0)
     await module.requestAppUpdate()

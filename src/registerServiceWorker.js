@@ -59,6 +59,7 @@ const observeUpdates = registration => {
       // its audio and any firmware operation continue until its own click.
       if (current && knownController && current !== knownController) {
         publishUpdateStatus({available: true})
+        publishOfflineStatus('update-pending', false, 'SW_APP_UPDATE_PENDING')
       }
       if (current) knownController = current
     })
