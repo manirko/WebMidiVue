@@ -2,7 +2,7 @@
 """Run repeatable software QA with durable JSONL and separate raw output files."""
 import argparse, datetime, hashlib, json, os, pathlib, signal, subprocess, sys, uuid
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-TESTS = ['test:garden', 'test:firmware', 'test:settings-readback', 'test:midi-lifecycle', 'test:diagnostics', 'test:telemetry', 'test:navigation', 'test:compatibility', 'test:listeners', 'test:midi-timing', 'test:sound', 'test:architecture', 'test:legacy-selector', 'test:playtron-variants', 'test:scales-variants', 'test:touchme-variants', 'test:presets', 'test:service-worker-ready', 'test:midi-permission-cancel', 'test:release-evidence', 'test:preview-guard', 'test:sound:levels']
+TESTS = ['test:audio-qa', 'test:audio:realtime', 'test:audio:system-output', 'test:audio:physical-output', 'test:garden', 'test:firmware', 'test:settings-readback', 'test:midi-lifecycle', 'test:diagnostics', 'test:telemetry', 'test:navigation', 'test:compatibility', 'test:listeners', 'test:midi-timing', 'test:sound', 'test:architecture', 'test:legacy-selector', 'test:playtron-variants', 'test:scales-variants', 'test:touchme-variants', 'test:presets', 'test:service-worker-ready', 'test:midi-permission-cancel', 'test:release-evidence', 'test:preview-guard', 'test:sound:levels']
 p = argparse.ArgumentParser()
 p.add_argument('--output', required=True, type=pathlib.Path)
 p.add_argument('--timeout', type=float, default=180)
@@ -28,8 +28,8 @@ counts = {}
 with (a.output/'tests.jsonl').open('x') as journal:
  for name in TESTS:
   at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-  if name in ('test:presets', 'test:sound:levels'):
-   record = dict(at=at,run_id=run_id,head=head,test=name,result='NOT RUN',reason='Requires browser automation; execute through the active browser tool.')
+  if name in ('test:presets', 'test:sound:levels', 'test:audio:realtime', 'test:audio:system-output', 'test:audio:physical-output'):
+   record = dict(at=at,run_id=run_id,head=head,test=name,result='NOT RUN',reason='Requires independent browser/capture evidence; this software runner cannot establish physical audio output.')
    journal.write(json.dumps(record)+'\n'); journal.flush()
    print(name, record['result'], flush=True)
    counts['NOT RUN'] = counts.get('NOT RUN', 0)+1
