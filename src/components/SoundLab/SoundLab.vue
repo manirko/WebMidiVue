@@ -809,10 +809,6 @@ export default {
 .sound-lab__variant span { display: inline-block; padding: 0 .1rem; white-space: nowrap; font-weight: 500; }
 .sound-lab__variant--active { border-color: var(--ui-accent); background: #e8edff; color: #2446bd; }
 .sound-lab__reveal { display: grid; grid-template-columns: minmax(200px, 300px) minmax(0, 1fr); gap: clamp(1.5rem, 5vw, 4rem); align-items: center; max-width: 760px; margin: 0 auto; padding: var(--beta-card-inset,24px); border: 1px solid #ded9d1; border-radius: 1.5rem; background: #fbfaf7; }
-.sound-lab__reveal-orb { width: min(48vw, 220px); aspect-ratio: 1; justify-self: center; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff 0 8%, #dcd4ff 24%, #7c69d8 65%, #302763 100%); box-shadow: 0 0 0 0 rgba(106, 90, 205, .24); transform: scale(.9); transition: transform 180ms ease, box-shadow 180ms ease; }
-.sound-lab__reveal-orb--active { transform: scale(1); box-shadow: 0 0 0 18px rgba(106, 90, 205, .16), 0 18px 50px rgba(69, 49, 150, .22); }
-.sound-lab__reveal-orb--settling { animation: biotron-settling 1.8s ease-in-out infinite; }
-.sound-lab__reveal-orb--calibrating { position: relative; animation: biotron-calibrating .28s ease-in-out infinite alternate; }
 .sound-lab__calibration-note { position: absolute; top: 50%; width: 18%; height: 36%; border-radius: 999px; background: rgba(255, 255, 255, .92); transform: translateY(-50%) scaleY(.45); }
 .sound-lab__calibration-note--one { left: 27%; animation: biotron-note-one .28s steps(2, end) infinite; }
 .sound-lab__calibration-note--two { right: 27%; animation: biotron-note-two .28s steps(2, end) .14s infinite; }
@@ -838,9 +834,7 @@ export default {
 .sound-lab__midi-actions { min-width:0; max-width:100%; }
 .sound-lab__midi-actions .form-select { min-width:0; width:100%; }
 @media (max-width: 640px) { .sound-lab__midi { align-items: flex-start; flex-direction: column; } .sound-lab__keyboard { grid-template-columns: repeat(13, 48px); } .sound-lab__reveal { grid-template-columns: 1fr; text-align: center; } .sound-lab__reveal-actions, .sound-lab__after-reveal { justify-content: center; } .sound-lab__task-feedback-actions { display:grid; } .sound-lab__task-feedback-actions .btn { width:100%; } .sound-lab__volume { width: 100%; grid-template-columns: auto minmax(0, 1fr) 3.25rem; text-align: left; } }
-@keyframes biotron-settling { 50% { transform: scale(.96); box-shadow: 0 0 0 12px rgba(106, 90, 205, .12); } }
-@keyframes biotron-calibrating { to { transform: scale(1.02); box-shadow: 0 0 0 20px rgba(106, 90, 205, .18), 0 18px 50px rgba(69, 49, 150, .22); } }
 @keyframes biotron-note-one { 50% { transform: translateY(-50%) scaleY(1); } }
 @keyframes biotron-note-two { 50% { transform: translateY(-50%) scaleY(1); } }
-@media (prefers-reduced-motion: reduce) { .sound-lab button, .sound-lab__reveal-orb { transition: none; } .sound-lab__reveal-orb, .sound-lab__calibration-note { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .sound-lab button { transition: none; } .sound-lab__calibration-note { animation: none; } }
 </style>
