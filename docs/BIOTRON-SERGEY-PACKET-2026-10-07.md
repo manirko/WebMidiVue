@@ -2,9 +2,16 @@
 
 Подготовлено 7 октября 2026 по исходникам `manirko/WebMidiVue` и
 `manirko/biotron-firmware`, сохранённым артефактам и переписке HT x PL → Biotron.
-Это **черновик внутреннего теста**: сообщение не отправлено, клиентский выпуск
-не разрешён. По прямому указанию Андрея все инструкции собраны сразу; отдельного
-ответа после каждого блока ждать не нужно.
+**Передано на внутренний тест 7 октября 2026** по явному указанию Андрея:
+[HT x PL → Biotron, сообщение 32465](https://t.me/c/1797899795/32465), с упоминанием
+`@L_747`. Все инструкции собраны сразу; отдельного ответа после каждого блока
+ждать не нужно. Клиентский выпуск не разрешён; результат Сергея ещё не получен.
+
+Отправлен один PDF на 11 страниц, подготовленный из commit `4803255`:
+`biotron-sergey-test-2026-10-07.pdf`, 121929 байт, SHA256
+`3fa4f6124fb893bef76aaa34c02a83a0154c60e0ed195b60b7d266ccae0ff7a8`.
+Canonical `tg.py` подтвердил сообщение, размер вложения и HTML entities.
+Это подтверждение доставки в топик, не прочтения или приёмки Сергеем.
 
 ## Сообщение Сергею
 
@@ -20,7 +27,8 @@
 <https://calm-payroll-homeland-conditions.trycloudflare.com/#/biotron>
 
 Ссылка временная: мой Mac и туннель должны быть включены на время теста.
-Согласуем окно проверки; перед асинхронной передачей нужна постоянная ссылка.
+В сообщении при передаче явно указано, что ссылка временная и работает пока
+мой Mac включён. Для долговечной передачи нужна постоянная ссылка.
 Web build: **`30d978514f67`**, 7 октября. Clean firmware candidate: **1.10.9**.
 Установленную на твоём приборе версию сначала прочитай в Settings; она может
 отличаться. Первый прогон выполняется на ней, без прошивания.
@@ -301,4 +309,4 @@ physical acceptance. Новые UF2 или поддержку плат по ни
 - Web/PWA evidence: [PWA QA](BIOTRON-PWA-UPDATE-QA-2026-10-07.md); staging/gates: [инженерная карточка](BIOTRON-SERGEY-INTERNAL-TEST.md); история ответов Сергея: context `reference/TESTING.md`, обновлённая по live topic 7 чтению 7 октября.
 - Тестировщик: firmware phase logs, fault/timeout/strict missing-evidence checks, обязательный physical rollback/reflash, real-time PCM/WAV анализ с negative controls, Garden+audio contention fixture, PWA/cross-tab/browser и отдельный physical owner mobile gate. Это инженерные улучшения, а не user session recorder.
 - Подготовленный idle-retention Worker после runtime D не развёрнут; временный API отдаёт 503 и не сохраняет события. Green Volume meter, session recorder и factory reset не входят в этот runtime/UF2.
-- До фактической передачи остаются full owner mobile acceptance и постоянный exact preview либо явно согласованное внутреннее временное окно. Допуск клиентам определяется только `product-experience/product-loop`; customer candidate/outcomes не созданы этим документом. Full browser firmware cycle, Windows/Ableton outcome, длительный/слабый GPU bench, live logger delivery и права Garden/panorama открыты.
+- Андрей явно разрешил внутреннюю передачу полного пакета 7 октября; передано сообщение 32465 с временной ссылкой и её ограничением. Full owner mobile acceptance остаётся partial, постоянный exact preview не выдан. Допуск клиентам определяется только `product-experience/product-loop`; customer candidate/outcomes не созданы отправкой. Full browser firmware cycle остаётся BLOCKED; Windows/Ableton outcome, длительный/слабый GPU bench, live logger delivery и права Garden/panorama открыты.
