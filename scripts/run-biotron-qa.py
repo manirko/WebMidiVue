@@ -4,6 +4,7 @@ import argparse, datetime, hashlib, json, os, pathlib, signal, subprocess, sys, 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TESTS = ['test:audio-qa', 'test:audio:realtime', 'test:audio:system-output', 'test:audio:physical-output', 'test:garden', 'test:firmware', 'test:settings-readback', 'test:midi-lifecycle', 'test:diagnostics', 'test:telemetry', 'test:navigation', 'test:compatibility', 'test:listeners', 'test:midi-timing', 'test:sound', 'test:architecture', 'test:legacy-selector', 'test:playtron-variants', 'test:scales-variants', 'test:touchme-variants', 'test:presets', 'test:service-worker-ready', 'test:midi-permission-cancel', 'test:release-evidence', 'test:preview-guard', 'test:sound:levels']
 EXTERNAL_CHECKS = {
+ 'test:mobile:owner': 'Mandatory before Sergey handoff: Andrey must physically test the exact build and firmware on his phone, including USB/MIDI, calibration, audible sound, Garden touch/fullscreen, Stop/Start, settings and reconnect. A viewport/emulator or unsupported-browser message is not functional mobile PASS.',
  'test:pwa:browser': 'Production PWA install/update/rollback and offline launch require independent browser evidence.',
  'test:firmware:browser': 'Full directory-picker write and reconnect verification require browser and physical-device evidence.',
  'test:firmware:physical-cycle': 'Rollback, reinstall and settings readback require a compatible physical board and pinned images.',
