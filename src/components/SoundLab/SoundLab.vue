@@ -24,22 +24,12 @@
       </header>
 
       <section class="sound-lab__reveal" aria-labelledby="device-reveal-title">
-        <div
-          class="sound-lab__reveal-orb"
-          :class="{
-            'sound-lab__reveal-orb--active': voiceCount > 0,
-            'sound-lab__reveal-orb--settling': revealStage === 'settling',
-            'sound-lab__reveal-orb--calibrating': revealStage === 'calibrating'
-          }"
-          aria-hidden="true"
-        >
-          <span v-if="revealStage === 'calibrating'" class="sound-lab__calibration-note sound-lab__calibration-note--one"></span>
-          <span v-if="revealStage === 'calibrating'" class="sound-lab__calibration-note sound-lab__calibration-note--two"></span>
-        </div>
+        <GardenVisual ref="garden" :stage="revealStage" />
         <div class="sound-lab__reveal-copy">
-          <small v-if="revealStage !== 'intro'" class="sound-lab__recognized" :title="recognizedInput">{{ revealProfile.productName }} connected</small>
-          <h2 id="device-reveal-title">{{ revealCopy.heading }}</h2>
+          <small v-if="recognizedInput && revealStage !== 'intro'" class="sound-lab__recognized" :title="recognizedInput">Device connected</small>
+          <h2 id="device-reveal-title">{{ revealStage === 'revealed' ? (midiActive ? 'Notes arriving' : 'Ready for the next note') : revealCopy.heading }}</h2>
           <p>{{ revealCopy.instruction }}</p>
+          <details v-if="revealStage === 'intro'" class="play-help"><summary>Connection steps</summary><ol><li>Push both contact cables onto the device’s CONTACT PINS.</li><li>Clip them to two separate points on the same plant.</li><li>Connect USB with a data cable, then press Start listening.</li></ol></details>
 
           <div v-if="revealIssue" class="sound-lab__connect-notice" role="status" aria-live="polite">
             <strong>{{ revealIssue.title }}</strong>
@@ -71,24 +61,21 @@
           </div>
           <label class="sound-lab__volume" for="biotron-play-volume">
             <span>Volume</span>
-            <input
-              id="biotron-play-volume"
-              type="range"
-              min="0"
-              max="150"
-              step="1"
-              :value="volume"
-              @input="updateVolume"
-            >
+            <WakeVolume id="biotron-play-volume" :value="volume" @input="updateVolume" />
             <output for="biotron-play-volume">{{ volume }}{{ volume > 100 ? '% boost' : '%' }}</output>
           </label>
           <span class="sound-lab__status sound-lab__status--reveal" role="status" aria-live="polite">{{ status }}</span>
-          <div v-if="engine || revealIssue" class="sound-lab__diagnostic">
-            <button type="button" class="btn btn-outline-secondary btn-sm" @click="copyPlayDiagnostics">Copy diagnostics for Andrey</button>
-            <small>{{ diagnosticMessage || 'Copies technical version, audio and MIDI state. Technical events sent online. Copy details here.' }}</small>
-          </div>
+          <details class="play-help" v-if="engine || revealIssue">
+            <summary>No sound? · Help</summary>
+            <p>Incoming notes move the visual. To hear them, the browser audio must also be running.</p>
+            <ol><li>Check Volume here and on your computer or phone.</li><li>Check which speakers or headphones your device is using.</li><li v-if="audioState !== 'running'">Press Resume sound if available, or stop and start listening again.</li><li v-else>If notes are arriving but you hear nothing, try a different sound below.</li></ol>
+            <p class="play-audio-state">Browser audio: {{ audioState === 'running' ? 'running' : audioState }}. Only you can confirm that sound is audible.</p>
+            <div class="sound-lab__diagnostic"><button type="button" class="btn btn-outline-secondary btn-sm" @click="copyPlayDiagnostics">Copy diagnostics</button><small>{{ diagnosticMessage || 'Copies audio, MIDI and version details for support.' }}</small></div>
+            <div v-if="firstSoundOutcome" class="sound-lab__task-feedback"><h3>Can you hear the notes?</h3><div class="sound-lab__reveal-actions"><a :href="firstSoundFeedbackUrl('helped')" @click="recordFirstSound('heard')" class="btn btn-outline-dark" target="_blank" rel="noopener">Yes — WhatsApp</a><a :href="firstSoundFeedbackUrl('not_yet')" @click="recordFirstSound('not_heard')" class="btn btn-outline-dark" target="_blank" rel="noopener">Not yet — WhatsApp</a></div><small>Opens a draft with the version and stop point. Send it to share.</small></div>
+          </details>
         </div>
       </section>
+      <small class="garden-credit">Visual adapted from <a href="https://dasprinzip.com/tinker/day41/" target="_blank" rel="noopener">Garden Anomaly · Frank Reitberger</a>. Volume adapted from <a href="https://reactbits.dev/micro/wake-slider" target="_blank" rel="noopener">React Bits · David Haz</a>.</small>
 
       <section v-if="revealStage === 'revealed'" class="sound-lab__after-reveal" :aria-label="`Continue with ${revealProfile.productName}`">
         <button type="button" class="btn btn-primary" @click="revealExpanded = !revealExpanded">
@@ -109,9 +96,7 @@
         </div>
       </section>
 
-      <section v-if="firstSoundOutcome" class="sound-lab__connect-notice sound-lab__task-feedback" aria-labelledby="first-sound-feedback-title"><small>One quick answer</small><h2 id="first-sound-feedback-title">Did you hear Biotron play from the plant?</h2>
-        <div class="sound-lab__reveal-actions sound-lab__task-feedback-actions"><a :href="firstSoundFeedbackUrl('helped')" @click="recordFirstSound('heard')" class="btn btn-dark" target="_blank" rel="noopener">Yes — open WhatsApp</a><a :href="firstSoundFeedbackUrl('not_yet')" @click="recordFirstSound('not_heard')" class="btn btn-outline-dark" target="_blank" rel="noopener">Not yet — open WhatsApp</a></div>
-        <small>WhatsApp draft includes the version date and stop point. Press Send to share.</small></section>
+
     </template>
 
     <template v-else>
@@ -216,6 +201,8 @@
 
 <script>
 import {markRaw} from 'vue'
+import GardenVisual from './GardenVisual.vue'
+import WakeVolume from './WakeVolume.vue'
 import {KEYBOARD_CODE_TO_NOTE, noteForKeyboardCode} from '@/audio/core.mjs'
 import {createRealtimeElementarySynth as createRealtimeSynth, DEFAULT_VOLUME, normalizeVolume} from '@/audio/elementary/engine.mjs'
 import {registerSoundController, soundSessionState, unregisterSoundController, updateSoundSession} from '@/audio/sessionState.mjs'
@@ -257,7 +244,7 @@ function audioWithin(task, milliseconds, message) {
 const resumeAudioWithin = engine => audioWithin(engine.resume(), 3500, 'Audio resume timed out.')
 export default {
   name: 'SoundLab',
-  components: {CompatibilityNotice, DeviceTaskNav},
+  components: {CompatibilityNotice, DeviceTaskNav, GardenVisual, WakeVolume},
   props: {
     mode: {type: String, default: 'lab'},
     profileId: {type: String, default: ''}
@@ -322,6 +309,8 @@ export default {
       revealExpanded: false,
       recognizedInput: '',
       revealIssue: null,
+      midiActive: false,
+      midiIdleTimer: null,
       firstSoundOutcome: ''
     }
   },
@@ -338,6 +327,7 @@ export default {
     document.addEventListener('visibilitychange', this.visibilityHandler)
   },
   beforeUnmount() {
+    window.clearTimeout(this.midiIdleTimer)
     this.cancelMidiPermission({silent: true})
     this.resumeAttemptId++
     unregisterSoundController(this)
@@ -552,11 +542,13 @@ export default {
     play(note, source = 'screen') {
       if (this.engine?.state === 'running') {
         this.engine.noteOn(source, 0, note, 104)
+        this.$refs?.garden?.note(true, note, 104)
         this.voiceCount = this.engine.activeVoiceCount
       }
     },
     release(note, source = 'screen') {
       this.engine?.noteOff(source, 0, note)
+      this.$refs?.garden?.note(false, note)
       window.clearTimeout(this.voiceRefreshTimer)
       this.voiceRefreshTimer = window.setTimeout(() => {
         this.voiceCount = this.engine?.activeVoiceCount || 0
@@ -656,11 +648,11 @@ export default {
         this.status = this.revealProfile.settlingStatus
         if (this.revealProfile.id === 'biotron') {
           const nonce = this.revealCalibrationNonce = this.revealCalibrationNonce % 127 + 1
-          // No calibration state within 15 s means no plant signal (clips off): say so instead of pulsing forever.
+          // A missing confirmation is not proof of absent plant signal; legacy cues cannot confirm readiness.
           window.clearTimeout(this.revealWatchdog)
           this.revealWatchdog = window.setTimeout(() => {
-            if (this.revealCalibrationNonce === nonce && this.revealStage === 'settling') Object.assign(this, {revealStage: 'intro', status: `No plant signal in 15 s. ${this.revealProfile.introInstruction}`,
-              revealIssue: {title: 'No plant signal yet', body: this.revealProfile.introInstruction}, firstSoundOutcome: 'not_yet'})
+            if (this.revealCalibrationNonce === nonce && !this.explicitCalibration && ['settling', 'calibrating'].includes(this.revealStage)) Object.assign(this, {revealStage: 'intro', status: 'The device did not confirm calibration. Check the contacts and firmware version in Settings.',
+              revealIssue: {title: 'Calibration not confirmed', body: 'Check both plant contacts. Open Settings to check the firmware, then try again.'}, firstSoundOutcome: 'not_yet'})
           }, 15000)
           await this.midi.sendToPairedOutput([0xf0, 0x14, 0x0d, 125, nonce, 0xf7])
           if (attemptId !== this.permissionAttemptId) return
@@ -673,10 +665,10 @@ export default {
         recordBiotronEvent('midi.connection_changed', {result: 'failed', error_type: denied ? 'permission_denied' : missingDevice ? 'device_missing' : 'connection_failed'})
         await this.stop()
         if (!this.releaseBlocked) {
-          this.status = missingDevice ? 'Biotron is not connected yet.' : 'Biotron could not start.'
+          this.status = missingDevice ? 'Device not connected.' : 'Could not start listening.'
           this.revealIssue = missingDevice
-            ? {title: 'Connect Biotron first', body: 'Plug Biotron into this computer with a USB data cable, then press Hear Biotron again.'}
-            : {title: denied ? 'Allow access to Biotron' : 'Biotron could not start', body: failure}
+            ? {title: 'Connect the device', body: 'Connect the device to this computer with a USB data cable, then press Start listening again.'}
+            : {title: denied ? 'Allow access to Biotron' : 'Could not start listening', body: failure}
           this.firstSoundOutcome = 'not_yet'
         }
       } finally {
@@ -706,7 +698,7 @@ export default {
         if (this.revealMode) {
           this.revealStage = 'intro'
           this.recognizedInput = ''
-          this.revealIssue = {title: 'Biotron disconnected', body: 'Reconnect its USB data cable, then press Hear Biotron again.'}
+          this.revealIssue = {title: 'Connection lost', body: 'Reconnect its USB data cable, then press Start listening again.'}
           if (this.firstSoundOutcome !== 'helped') this.firstSoundOutcome = 'not_yet'
           this.resetCalibration()
         }
@@ -714,6 +706,13 @@ export default {
       }
       else if (event.type === 'release-error') this.status = 'MIDI release failed — retry Stop'
       else if (event.type === 'voices') {
+        if (event.message?.type === 'note-on') {
+          this.midiActive = true
+          window.clearTimeout(this.midiIdleTimer)
+          this.midiIdleTimer = window.setTimeout(() => { this.midiActive = false }, 1800)
+          this.$refs?.garden?.note(true, event.message.note, event.message.velocity)
+        }
+        if (event.message?.type === 'note-off') this.$refs?.garden?.note(false, event.message.note)
         if (event.message?.type === 'panic') {
           window.cancelAnimationFrame(this.voiceFrame); this.voiceFrame = null; this.pendingVoiceCount = this.voiceCount = 0; return
         }
@@ -763,7 +762,7 @@ export default {
       if (state === 'closed') {
         this.setAudioState('closed', 'Audio stopped unexpectedly — press Stop & release')
         this.releaseBlocked = true
-        if (this.revealMode && this.firstSoundOutcome !== 'helped') Object.assign(this, {revealIssue: {title: 'Audio stopped unexpectedly', body: 'Press Stop & release, then try Hear Biotron again.'}, firstSoundOutcome: 'not_yet'})
+        if (this.revealMode && this.firstSoundOutcome !== 'helped') Object.assign(this, {revealIssue: {title: 'Audio stopped unexpectedly', body: 'Press Stop & release, then try Start listening again.'}, firstSoundOutcome: 'not_yet'})
         return
       }
       // Respect an OS interruption; retry on foreground return or a user gesture, never in a hidden loop.
@@ -783,6 +782,9 @@ export default {
 </script>
 
 <style scoped>
+.play-help{margin:.8rem 0;color:#625e58;font-size:.9rem;text-align:left}.play-help summary{cursor:pointer;min-height:44px;display:list-item;align-content:center;color:#4f456c}.play-help p{font-size:.9rem;margin:.6rem 0}.play-help ol{padding-left:1.3rem;line-height:1.6}.play-help h3{font-size:1rem;margin-top:1rem}.play-audio-state{font-size:.8rem!important}
+
+.garden-credit{display:block;max-width:760px;margin:12px auto 0;color:#6b6761;font-size:11px;text-align:center}.garden-credit a{color:inherit}
 .sound-lab { width: min(900px, 100%); margin: 0 auto; padding: 1.5rem 0 4rem; text-align: left; color: #17171a; }
 .sound-lab__intro { max-width: 650px; margin-bottom: 2rem; }
 .sound-lab__intro--reveal { margin: 2.25rem auto 1.5rem; text-align: center; }
@@ -806,7 +808,7 @@ export default {
 .sound-lab__variant { min-height: 44px; border: 1px solid var(--ui-control-border); border-radius: var(--ui-radius); background: #fff; padding: 0 1rem; font: inherit; font-weight: 600; }
 .sound-lab__variant span { display: inline-block; padding: 0 .1rem; white-space: nowrap; font-weight: 500; }
 .sound-lab__variant--active { border-color: var(--ui-accent); background: #e8edff; color: #2446bd; }
-.sound-lab__reveal { display: grid; grid-template-columns: minmax(150px, 240px) minmax(0, 1fr); gap: clamp(1.5rem, 5vw, 4rem); align-items: center; max-width: 760px; margin: 0 auto; padding: var(--beta-card-inset,24px); border: 1px solid #ded9d1; border-radius: 1.5rem; background: #fbfaf7; }
+.sound-lab__reveal { display: grid; grid-template-columns: minmax(200px, 300px) minmax(0, 1fr); gap: clamp(1.5rem, 5vw, 4rem); align-items: center; max-width: 760px; margin: 0 auto; padding: var(--beta-card-inset,24px); border: 1px solid #ded9d1; border-radius: 1.5rem; background: #fbfaf7; }
 .sound-lab__reveal-orb { width: min(48vw, 220px); aspect-ratio: 1; justify-self: center; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff 0 8%, #dcd4ff 24%, #7c69d8 65%, #302763 100%); box-shadow: 0 0 0 0 rgba(106, 90, 205, .24); transform: scale(.9); transition: transform 180ms ease, box-shadow 180ms ease; }
 .sound-lab__reveal-orb--active { transform: scale(1); box-shadow: 0 0 0 18px rgba(106, 90, 205, .16), 0 18px 50px rgba(69, 49, 150, .22); }
 .sound-lab__reveal-orb--settling { animation: biotron-settling 1.8s ease-in-out infinite; }

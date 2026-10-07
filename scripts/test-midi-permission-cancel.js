@@ -105,7 +105,7 @@ const bind = (componentOptions, props = {}, withData = true) => {
   pending = deferred()
   const soundContext = {
     module: {exports: {}}, markRaw: value => value, AbortController,
-    CompatibilityNotice: {}, DeviceTaskNav: {}, MIDI_PROMPT_HINT: 'Allow MIDI',
+    CompatibilityNotice: {}, DeviceTaskNav: {}, GardenVisual: {}, WakeVolume: {}, MIDI_PROMPT_HINT: 'Allow MIDI',
     selectRevealInput: inputs => inputs[0], window: {setTimeout, clearTimeout},
     document: {}, trace() {}, recordBiotronEvent() {}
   }

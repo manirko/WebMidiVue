@@ -46,7 +46,8 @@
     "test:beta-build": "npm run build:biotron-beta && npm run test:device-scope && npm run test:midi-lifecycle && npm run test:pwa && npm run test:firmware",
     "test:firmware:browser": "npm run build:biotron-firmware-beta && node scripts/test-firmware-modal-browser.js",
     "test:browser": "npm run test:sound:browser && npm run test:pwa:browser && npm run test:quality:browser && npm run test:playtron-variants:browser && npm run test:scales-variants:browser && npm run test:touchme-variants:browser",
-    "test:biotron": "npm run test:quick && npm run test:production-isolation && npm run test:firmware:browser && npm run test:beta-build && npm run test:browser"
+    "test:biotron": "npm run test:quick && npm run test:production-isolation && npm run test:firmware:browser && npm run test:beta-build && npm run test:browser",
+    "test:garden": "node scripts/test-garden-fullscreen.cjs"
   },
   "dependencies": {
     "@elemaudio/core": "^4.0.1",

@@ -1,0 +1,11 @@
+const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('src/components/SoundLab/GardenVisual.vue','utf8').split('<script>')[1].split('</script>')[0].replace('export default','module.exports=');
+const document={body:{style:{overflow:'auto'}},fullscreenElement:null};document.removeEventListener=()=>{};const context={module:{exports:{}},document,window:{removeEventListener(){}}};vm.runInNewContext(source,context);const component=context.module.exports;
+function fixture(){const visual={};const target={...component.data(),$refs:{visual,expand:{focus(){}}},$nextTick:fn=>fn()};for(const [key,fn] of Object.entries(component.methods))target[key]=fn.bind(target);return target}
+(async()=>{
+let t=fixture(),finish; t.$refs.visual.requestFullscreen=()=>new Promise(r=>{finish=()=>{document.fullscreenElement=t.$refs.visual;r()}});document.exitFullscreen=async()=>{document.fullscreenElement=null};
+const entering=t.toggleFullscreen();await t.closeFullscreen();finish();await entering;assert.equal(t.expanded,false);assert.equal(document.fullscreenElement,null);assert.equal(document.body.style.overflow,'auto');
+t=fixture();t.$refs.visual.requestFullscreen=async()=>{document.fullscreenElement=t.$refs.visual};await t.toggleFullscreen();let exit;document.exitFullscreen=()=>new Promise(r=>{exit=()=>{document.fullscreenElement=null;r()}});const closing=t.closeFullscreen();assert.equal(t.expanded,true);await t.toggleFullscreen();exit();await closing;assert.equal(t.expanded,false);assert.equal(document.body.style.overflow,'auto');
+t=fixture();let late;const detachedVisual=t.$refs.visual;detachedVisual.requestFullscreen=()=>new Promise(r=>{late=()=>{document.fullscreenElement=detachedVisual;r()}});document.exitFullscreen=async()=>{document.fullscreenElement=null};const pending=t.toggleFullscreen();component.beforeUnmount.call(t);t.$refs.visual=undefined;late();await pending;assert.equal(document.fullscreenElement,null);assert.equal(document.body.style.overflow,'auto');
+console.log('PASS: unmount cancels pending native entry; late fullscreen entry cancelled; close waits for native exit; repeated click cannot reopen');
+})().catch(e=>{console.error(e);process.exitCode=1});

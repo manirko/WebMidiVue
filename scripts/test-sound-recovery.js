@@ -26,7 +26,7 @@ function fixture() {
     KEYBOARD_CODE_TO_NOTE,
     window: {setTimeout, clearTimeout, __biotronTrace: []},
     trace: (kind, data) => events.push([kind, data]), recordBiotronEvent() {},
-    CompatibilityNotice: {}, DeviceTaskNav: {},
+    CompatibilityNotice: {}, DeviceTaskNav: {}, GardenVisual: {}, WakeVolume: {},
     parseBiotronCalibrationState: message => message.calibration || null,
     selectRevealInput: inputs => inputs[0], MIDI_PROMPT_HINT: 'Allow MIDI',
     BIOTRON_CALIBRATION: {quietCompletionMs: 1100}, performance: {now: () => 100},
@@ -168,7 +168,7 @@ test('explicit calibration ends visibly and ignores a late reply after timeout',
   context.window.setTimeout = (callback, delay) => { assert.equal(delay, 25000); deadline = callback; return 1 }
   target.revealStage = 'settling'
   target.handleRevealMessage({calibration: {nonce: 7, state: 'waiting'}})
-  assert.equal(target.revealStage, 'calibrating')
+  assert.equal(target.revealStage, 'settling')
   assert.equal(target.explicitCalibration, true)
   deadline()
   assert.equal(target.revealStage, 'intro')
@@ -191,7 +191,7 @@ test('a note at zero volume asks for the human result instead of claiming audibl
   target.handleRevealMessage({type: 'note-on', channel: 2, note: 60, velocity: 100})
   assert.equal(target.revealStage, 'revealed')
   assert.equal(target.firstSoundOutcome, 'awaiting_answer')
-  assert.match(target.status, /can you hear them/)
+  assert.match(target.status, /check your volume and audio output/)
   assert.doesNotMatch(target.status, /making sound|plant signal/)
 })
 
@@ -216,25 +216,29 @@ test('a calibration ACK before send resolves keeps the completion deadline', asy
     await Promise.resolve()
   }
   await target.startReveal()
-  assert.equal(target.revealStage, 'calibrating')
+  assert.equal(target.revealStage, 'settling')
   assert.deepEqual([...pending.values()].map(timer => timer.delay), [25000])
   pending.values().next().value.callback()
   assert.equal(target.revealStage, 'intro')
   assert.equal(target.revealIssue.title, 'Calibration did not finish')
 })
 
-test('explicit ACK clears legacy timers and a queued legacy callback cannot finish it', () => {
+test('legacy notes cannot finish calibration; readiness requires the matching device reply', () => {
   const {target, context} = fixture()
   const pending = timers(context)
   target.revealStage = 'settling'
-  target.calibrationTracker.observe = () => 'candidate'
-  target.handleRevealMessage({type: 'note-on', note: 64, velocity: 24})
-  const legacy = pending.values().next().value.callback
+  for (const hint of ['candidate', 'calibrating', 'activity']) {
+    target.calibrationTracker.observe = () => hint
+    target.handleRevealMessage({type: 'note-on', note: 64, velocity: 24})
+    assert.notEqual(target.revealStage, 'ready')
+    assert.equal(pending.size, 0)
+  }
+  target.handleRevealMessage({calibration: {nonce: 8, state: 'ready'}})
+  assert.notEqual(target.revealStage, 'ready')
   target.handleRevealMessage({calibration: {nonce: 7, state: 'waiting'}})
+  assert.equal(target.revealStage, 'settling')
   assert.deepEqual([...pending.values()].map(timer => timer.delay), [25000])
-  legacy()
-  assert.equal(target.revealStage, 'calibrating')
-  assert.equal(target.explicitCalibration, true)
-  pending.values().next().value.callback()
-  assert.equal(target.revealStage, 'intro')
+  target.handleRevealMessage({calibration: {nonce: 7, state: 'ready'}})
+  assert.equal(target.revealStage, 'ready')
+  assert.equal(pending.size, 0)
 })

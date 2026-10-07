@@ -72,7 +72,7 @@ const limits = {
   eagerDeviceRouteImports: 0,
   sleepCalls: 0,
   unmanagedListenerFiles: 0,
-  sourceFiles: 64,
+  sourceFiles: 66, // GardenVisual + WakeVolume; total line cap remains unchanged.
   sourceLines: 10242,
   largestProductFileLines: 850
 }

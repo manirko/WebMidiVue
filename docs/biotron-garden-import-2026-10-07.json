@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-07",
+  "base": "5cd7853",
+  "source": "/Users/andreymanirko/.codex/visualizations/2026/10/07/01a11591-7b76-7be2-af58-da9448997c9d/biotron-research/garden-build",
+  "source_sha256": {
+    "src/components/SoundLab/GardenVisual.vue": "5835b0e7fbc6fc7b4bab69b29b07e8edbdc627ba8942241bbc0efaa5f71ca088",
+    "src/components/SoundLab/WakeVolume.vue": "c18c9a1b916351337614a6679db3f2d962181b34a91126041a1c1fe59e1e60b2",
+    "public/garden/scene.html": "3b3d6128d71239890ee1f5a37895dfc145831209399586b193b4735977622842",
+    "public/garden/REACT-BITS-LICENSE.md": "f4c33af6739191537738662d223b68d77bc226f4b57ea883e16481d8cc5c73c9",
+    "scripts/test-garden-fullscreen.cjs": "86721fbf86273f43788176f2954dec818ed0388b58452d2dd195dffc52527bc9",
+    "src/components/SoundLab/SoundLab.vue": "86af9d35be700ee7cf87a5bbe8d06d73cab570669b636015ed90a05b173416f9",
+    "src/audio/revealProfiles.mjs": "33b9d8c878af61c3bfac216cbfaf4dc755dc1831b917060557129436c6dbd187",
+    "src/audio/soundSessionEffects.mjs": "3c6d0ea2932949937224b1c2f8d9ead686139b4fb7f681ea4e587957c2fdd8d8",
+    "scripts/test-sound-recovery.js": "ac32d5febfd2823c0eeb8140e673a8d1907ecd4fd46eec4b73f63ba59971c2fb"
+  },
+  "vue_config_imported": false,
+  "license_release_gate": "BLOCKED: Garden author and panorama commercial rights unconfirmed"
+}
