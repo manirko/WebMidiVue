@@ -20,7 +20,7 @@ counts = {}
 with (a.output/'tests.jsonl').open('x') as journal:
  for name in TESTS:
   at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-  if name == 'test:presets':
+  if name in ('test:presets', 'test:sound:levels'):
    record = dict(at=at,run_id=run_id,head=head,test=name,result='NOT RUN',reason='Requires browser automation; execute through the active browser tool.')
    journal.write(json.dumps(record)+'\n'); journal.flush()
    print(name, record['result'], flush=True)
