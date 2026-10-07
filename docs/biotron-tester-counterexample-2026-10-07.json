@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-07",
+  "source_file": "/Users/andreymanirko/Projects/Claude/Playtronica Claude/projects/firmware-engineering/scripts/biotron_mac_bench.py",
+  "source_sha256": "11072011a5289fcdcd76c842f04e044e677cbdc88fdaa1ef5c74af82b2fc996c",
+  "function": "summarize_note_capture",
+  "input": {
+    "Biotron Port 1": [
+      [
+        145,
+        60,
+        100
+      ]
+    ],
+    "Biotron Port 2": [
+      [
+        129,
+        60,
+        0
+      ]
+    ]
+  },
+  "actual": {
+    "note_on": 1,
+    "note_off": 1,
+    "active_notes": [],
+    "note_off_without_note_on": [],
+    "balanced": true
+  },
+  "expected": {
+    "balanced": false,
+    "reason": "Note identity must include port/cable; Port 1 remains active and Port 2 has an unmatched Off"
+  },
+  "scope": "Synthetic host-only counterexample, no hardware I/O"
+}
