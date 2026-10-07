@@ -28,7 +28,7 @@ const observeUpdates = registration => {
   if (!registration) return
   updateRegistration = registration
   const checkWaiting = () => {
-    if (registration.waiting && registration.waiting.state !== 'redundant') {
+    if (navigator.serviceWorker.controller && registration.waiting && registration.waiting.state !== 'redundant') {
       publishUpdateStatus({available: true})
     }
   }

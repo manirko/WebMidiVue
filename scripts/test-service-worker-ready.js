@@ -154,6 +154,21 @@ function environment({ready = Promise.resolve({}), cached = true, controller = {
 
     assert.equal(env.status.at(-1).code, 'SW_READY')
 
+    // First install briefly has a waiting worker too. It is not an update of
+    // this page until an existing controller is being replaced.
+    env = environment({controller: null})
+    env.worker.registration.waiting = {state: 'installed'}
+    module = await loadModule()
+    const firstInstall = module.prepareOfflineAccess()
+    await pause(0)
+    assert.equal(module.getAppUpdateStatus().available, false, 'First installation offered an app update')
+    env.worker.registration.waiting = null
+    env.worker.controller = {}
+    env.worker.emit('controllerchange')
+    await firstInstall
+    assert.equal(module.getOfflineStatus().ready, true)
+    assert.equal(module.getAppUpdateStatus().available, false)
+
     // A waiting update on a previously opened page must be visible without
     // activating it or interrupting sound/firmware merely by discovering it.
     env = environment()

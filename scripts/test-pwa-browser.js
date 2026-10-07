@@ -159,6 +159,8 @@ async function controllerVersion(page) {
   let page = await openProfile(true, true)
   await page.goto(`${origin}/biotron`, { waitUntil: 'load' })
   await page.getByText(/Offline mode is ready/i).waitFor({state: 'visible', timeout: 15000})
+  assert.strictEqual(await page.getByRole('button', {name: 'Update app', exact: true}).count(), 0,
+    'first online installation should not offer an update of itself')
   const versionStamp = await page.locator('.beta-build').first().innerText()
   assert.match(versionStamp, /Biotron beta · \d{1,2} [A-Za-z]+ 20\d{2}/,
     'the visible beta version must use a calendar date')
