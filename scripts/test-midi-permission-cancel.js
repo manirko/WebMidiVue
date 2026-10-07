@@ -104,7 +104,7 @@ const bind = (componentOptions, props = {}, withData = true) => {
   midiAccess.resetSharedMidiAccessForTests()
   pending = deferred()
   const soundContext = {
-    module: {exports: {}}, markRaw: value => value, AbortController,
+    module: {exports: {}}, markRaw: value => value, defineAsyncComponent: () => ({}), AbortController,
     CompatibilityNotice: {}, DeviceTaskNav: {}, GardenVisual: {}, WakeVolume: {}, MIDI_PROMPT_HINT: 'Allow MIDI',
     selectRevealInput: inputs => inputs[0], window: {setTimeout, clearTimeout},
     document: {}, trace() {}, recordBiotronEvent() {}

@@ -41,7 +41,16 @@ export function validEvent(e) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
-    if (url.pathname !== '/api/telemetry') return env.ASSETS.fetch(request)
+    if (url.pathname !== '/api/telemetry') {
+      const response = await env.ASSETS.fetch(request)
+      if (url.pathname !== '/garden/scene.html') return response
+      // _headers forbids app framing. Only this decorative same-origin child may be framed.
+      const headers = new Headers(response.headers)
+      headers.set('X-Frame-Options', 'SAMEORIGIN')
+      const policy = (headers.get('Content-Security-Policy') || '').replace(/(?:^|;)\s*frame-ancestors[^;]*/gi, '').trim()
+      headers.set('Content-Security-Policy', `${policy}${policy ? '; ' : ''}frame-ancestors 'self'`)
+      return new Response(response.body, {status: response.status, statusText: response.statusText, headers})
+    }
     if (request.method === 'GET') {
       if (!env.SESSION_EVENTS) return json(503, {status: 'storage_unavailable'})
       try { await env.SESSION_EVENTS.prepare('SELECT 1 FROM session_events LIMIT 1').first() }

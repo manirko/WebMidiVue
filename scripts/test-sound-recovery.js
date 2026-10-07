@@ -22,7 +22,7 @@ function fixture() {
   const events = []
   const calls = {resume: 0, connect: 0, calibrate: 0, sysex: 0}
   const context = {
-    module: {exports: {}}, document: {hidden: false}, markRaw: value => value, AbortController,
+    module: {exports: {}}, document: {hidden: false}, markRaw: value => value, defineAsyncComponent: () => ({}), AbortController,
     KEYBOARD_CODE_TO_NOTE,
     window: {setTimeout, clearTimeout, __biotronTrace: []},
     trace: (kind, data) => events.push([kind, data]), recordBiotronEvent() {},

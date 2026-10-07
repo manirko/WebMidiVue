@@ -200,9 +200,9 @@
 </template>
 
 <script>
-import {markRaw} from 'vue'
-import GardenVisual from './GardenVisual.vue'
-import WakeVolume from './WakeVolume.vue'
+import {markRaw, defineAsyncComponent} from 'vue'
+const GardenVisual = defineAsyncComponent(() => import(/* webpackChunkName: "garden-visual" */ './GardenVisual.vue'))
+const WakeVolume = defineAsyncComponent(() => import(/* webpackChunkName: "garden-visual" */ './WakeVolume.vue'))
 import {KEYBOARD_CODE_TO_NOTE, noteForKeyboardCode} from '@/audio/core.mjs'
 import {createRealtimeElementarySynth as createRealtimeSynth, DEFAULT_VOLUME, normalizeVolume} from '@/audio/elementary/engine.mjs'
 import {registerSoundController, soundSessionState, unregisterSoundController, updateSoundSession} from '@/audio/sessionState.mjs'

@@ -66,6 +66,15 @@ try {
   assert.equal((await worker.fetch(makePost(event), {ASSETS: env.ASSETS})).status, 503)
   assert.deepEqual(await (await worker.fetch(new Request(origin + '/api/telemetry'), env)).json(), {status: 'ready'})
   assert.equal(await (await worker.fetch(new Request(origin + '/'), env)).text(), 'asset')
+  const framedEnv = {ASSETS: {fetch: async () => new Response('scene', {headers: {
+    'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'self'; frame-ancestors 'none'"
+  }})}}
+  const scene = await worker.fetch(new Request(origin + '/garden/scene.html'), framedEnv)
+  assert.equal(scene.headers.get('X-Frame-Options'), 'SAMEORIGIN')
+  assert.equal(scene.headers.get('Content-Security-Policy'), "default-src 'self'; frame-ancestors 'self'")
+  const app = await worker.fetch(new Request(origin + '/'), framedEnv)
+  assert.equal(app.headers.get('X-Frame-Options'), 'DENY')
+  assert.match(app.headers.get('Content-Security-Policy'), /frame-ancestors 'none'/)
   console.log('Telemetry contract verified: allowlist, no raw device data, offline isolation, receiver validation and D1 write.')
 } finally {
   if (previousNavigator) Object.defineProperty(globalThis, 'navigator', previousNavigator)
