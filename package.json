@@ -38,7 +38,7 @@
     "test:scales-variants": "node scripts/test-scales-variants.js",
     "test:touchme-variants": "node scripts/test-touchme-variants.js",
     "test:presets": "node scripts/test-presets-idb.js",
-    "test:service-worker-ready": "node scripts/test-service-worker-ready.js",
+    "test:service-worker-ready": "node scripts/test-service-worker-ready.js && node scripts/test-app-update.js",
     "test:midi-permission-cancel": "node scripts/test-midi-permission-cancel.js",
     "test:sound:soak:smoke": "node scripts/test-sound-browser.js --soak-seconds=60",
     "test:sound:soak": "node scripts/test-sound-browser.js --soak-seconds=600",

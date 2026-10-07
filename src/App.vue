@@ -60,6 +60,15 @@
     </small>
     </div>
   </div>
+  <div v-if="betaBuild && appUpdate.available" class="offline-status-slot app-update-slot">
+    <div class="offline-status mx-auto px-3 py-2" role="status" aria-live="polite">
+      <span>{{ appUpdateMessage }}</span>
+      <button type="button" class="btn btn-outline-secondary offline-action" @click="updateApp"
+              :disabled="appUpdate.updating || appUpdating">
+        {{ appUpdate.updating || appUpdating ? 'Updating…' : 'Update app' }}
+      </button>
+    </div>
+  </div>
   <div class="wrapper">
     <div class="m-2 content ">
       <main :class="{'route-stage': betaBuild && !firstPlay, 'route-stage--compact': betaBuild && firstPlay}">
@@ -104,8 +113,13 @@ import CompatibilityGate from "@compatibility-gate";
 import {
   getOfflineStatus,
   OFFLINE_STATUS_EVENT,
-  prepareOfflineAccess
+  prepareOfflineAccess,
+  APP_UPDATE_EVENT,
+  getAppUpdateStatus,
+  requestAppUpdate
 } from "@pwa-entry";
+import {canReloadApp} from '@/appUpdateSafety.mjs';
+import {stopPersistentSound} from '@/audio/sessionState.mjs';
 import {
   clearInstallPrompt,
   getInstallPrompt,
@@ -123,6 +137,8 @@ export default {
   data() {
     return {
       offlineStatus: getOfflineStatus(),
+      appUpdate: getAppUpdateStatus(),
+      appUpdating: false,
       online: navigator.onLine,
       installPrompt: getInstallPrompt(),
       installed: runningStandalone(),
@@ -133,6 +149,12 @@ export default {
     }
   },
   computed: {
+    appUpdateMessage() {
+      if (this.appUpdate.error === 'SW_UPDATE_BLOCKED') return 'Finish the firmware update before reloading the app.'
+      if (this.appUpdate.error === 'AUDIO_RELEASE_FAILED') return 'Sound could not stop. Press Stop & release, then retry the app update.'
+      if (this.appUpdate.error) return 'The app update did not finish. Check the connection, then try again.'
+      return 'A new app version is ready. Updating stops sound and reloads this page.'
+    },
     firstPlay() {
       return this.betaBuild && this.$route.meta.firstPlay === true
     },
@@ -175,6 +197,7 @@ export default {
   mounted() {
     if (this.betaBuild) document.title = 'Biotron Settings Beta — Playtronica'
     window.addEventListener(OFFLINE_STATUS_EVENT, this.handleOfflineStatus)
+    window.addEventListener(APP_UPDATE_EVENT, this.handleAppUpdate)
     window.addEventListener("online", this.handleConnectionChange)
     window.addEventListener("offline", this.handleConnectionChange)
     window.addEventListener(INSTALL_PROMPT_AVAILABLE_EVENT, this.handleInstallPrompt)
@@ -182,12 +205,31 @@ export default {
   },
   beforeUnmount() {
     window.removeEventListener(OFFLINE_STATUS_EVENT, this.handleOfflineStatus)
+    window.removeEventListener(APP_UPDATE_EVENT, this.handleAppUpdate)
     window.removeEventListener("online", this.handleConnectionChange)
     window.removeEventListener("offline", this.handleConnectionChange)
     window.removeEventListener(INSTALL_PROMPT_AVAILABLE_EVENT, this.handleInstallPrompt)
     window.removeEventListener("appinstalled", this.handleInstalled)
   },
   methods: {
+    handleAppUpdate(event) { this.appUpdate = event.detail },
+    async updateApp() {
+      if (this.appUpdating || this.appUpdate.updating) return
+      if (!canReloadApp()) {
+        this.appUpdate = {...this.appUpdate, error: 'SW_UPDATE_BLOCKED'}
+        return
+      }
+      this.appUpdating = true
+      try {
+        if (!await stopPersistentSound()) {
+          this.appUpdate = {...this.appUpdate, error: 'AUDIO_RELEASE_FAILED'}
+          return
+        }
+        this.appUpdate = await requestAppUpdate(canReloadApp)
+      } catch {
+        this.appUpdate = {...this.appUpdate, updating: false, error: 'AUDIO_RELEASE_FAILED'}
+      } finally { this.appUpdating = false }
+    },
     handleOfflineStatus(event) {
       this.offlineStatus = event.detail
     },
@@ -245,6 +287,8 @@ export default {
 .beta-build { color:var(--beta-muted,#6c757d); font-size:var(--beta-text-small,.875rem); }
 .beta-build span { color:var(--beta-accent); font-weight:700; }
 .offline-status-slot { min-height:58px; }
+.beta-shell .app-update-slot .offline-status { width:min(760px,calc(100% - 2 * var(--beta-page-inset))); display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem; text-align:left; background:#fff; border-color:rgba(49,94,231,.25); }
+.app-update-slot .offline-action { margin-left:0; flex-shrink:0; }
 .offline-actions { display:inline-flex; align-items:center; gap:.5rem; margin-left:.75rem; }
 .offline-action--error { margin-left:.75rem; }
 .offline-installed { display:inline-block; margin-left:.75rem; font-weight:600; }

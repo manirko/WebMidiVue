@@ -36,6 +36,7 @@ assert(!serviceWorker.includes('_worker.js'), 'telemetry worker must not enter t
 assert(serviceWorker.includes('precacheAndRoute'), 'Workbox precache is not enabled')
 assert(serviceWorker.includes('index.html'), 'app shell is not precached')
 assert(serviceWorker.includes('revision'), 'precache entries are not revisioned')
+assert(serviceWorker.includes('SKIP_WAITING'), 'the explicit app-update activation handler is missing')
 for (const icon of ['img/icons/icon-192x192.png', 'img/icons/icon-512x512.png']) {
   assert(serviceWorker.includes(icon), `${icon} is not in the precache manifest`)
 }
@@ -58,6 +59,7 @@ const biotronBundle = allJavascriptFiles.find(file => read(path.join('js', file)
 const soundBundle = allJavascriptFiles.find(file => read(path.join('js', file)).includes('Play your device'))
 assert(javascript.includes('Offline mode is ready'), 'the production UI has no truthful offline-readiness status')
 assert(javascript.includes('Install app'), 'the production UI has no explicit PWA install action')
+assert(javascript.includes('Update app'), 'the production UI has no explicit waiting-update action')
 assert(javascript.includes('Biotron beta'), 'the beta UI has no visible version identity')
 assert(biotronBundle, 'the beta build does not include the Biotron DAW handoff')
 assert(allJavascript.includes('Release device for DAW'), 'the Biotron lifecycle was not emitted into any route chunk')

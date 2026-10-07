@@ -1,5 +1,6 @@
 <script>
 import {recordFirmwarePhase} from '@/biotron/telemetry.mjs'
+import {setFirmwareUpdateBusy} from '@/appUpdateSafety.mjs'
 import {bootDevice} from '@/assets/js/SysExCommand'
 import {compareFirmwareVersions, DESKTOP_ONLY, GetLatestFirmware, LoadFirmware, prepareFirmware, writeFirmware} from '@/assets/js/LoadFirmware'
 const target = process.env.VUE_APP_BIOTRON_FIRMWARE_TARGET
@@ -12,7 +13,7 @@ export default {
   props: {repo: String, device: Object, currentVersion: {type: String, default: ''},
     versionAware: {type: Boolean, default: false}, text: {type: String, default: 'Update firmware'}},
   data: () => ({online: navigator.onLine, latest: internalFirmware, phase: 'idle', message: '', error: '', pick: PICK, desktopOnly: DESKTOP_ONLY,
-    prepared: null, checking: false, reconnectTimer: null}),
+    prepared: null, checking: false, reconnectTimer: null, updaterUnmounted: false, runStepPending: false}),
   computed: {
     available() { return Boolean(this.currentVersion && this.latest?.version && compareFirmwareVersions(this.latest.version, this.currentVersion) > 0) },
     current() { return Boolean(this.currentVersion && this.latest?.version && !this.available) },
@@ -43,10 +44,16 @@ export default {
     if (this.versionAware && this.currentVersion && !this.latest) this.refresh()
   },
   beforeUnmount() {
+    this.updaterUnmounted = true
+    // An in-flight write/BOOT/download keeps its guard until runStep settles.
+    setFirmwareUpdateBusy(this, this.runStepPending)
     window.removeEventListener('online', this.syncOnline); window.removeEventListener('offline', this.syncOnline)
     clearTimeout(this.reconnectTimer)
   },
-  watch: {phase: {immediate: true, handler(value) { recordFirmwarePhase(value, this.currentVersion, this.latest?.version) }}, currentVersion(value) {
+  watch: {phase: {immediate: true, flush: 'sync', handler(value) {
+    recordFirmwarePhase(value, this.currentVersion, this.latest?.version)
+    setFirmwareUpdateBusy(this, ['preparing', 'booting', 'select-drive', 'writing', 'reconnecting'].includes(value))
+  }}, currentVersion(value) {
     if (this.versionAware && value && !this.latest) this.refresh()
     if (this.phase === 'reconnecting' && value === this.latest?.version) {
       clearTimeout(this.reconnectTimer); this.prepared = null; this.phase = 'complete'
@@ -64,8 +71,11 @@ export default {
     },
     async runStep() {
       this.error = ''
+      this.runStepPending = true
       if (!this.internal) {
+        setFirmwareUpdateBusy(this, true)
         try { await LoadFirmware(this.repo, this.device) } catch (error) { this.error = error.message }
+        finally { this.runStepPending = false; setFirmwareUpdateBusy(this, false) }
         return
       }
       try {
@@ -84,6 +94,7 @@ export default {
           this.phase = 'select-drive'; this.message = `🔄 Biotron is now drive RPI-RP2. ${PICK}`
         } else if (this.phase === 'select-drive') {
           this.phase = 'writing'; await writeFirmware(this.prepared, this.latest); this.phase = 'reconnecting'
+          if (this.updaterUnmounted) return
           this.message = `📤 Copied. ⏳ Waiting for Biotron ${this.latest.version}…`
           this.reconnectTimer = setTimeout(() => {
             if (this.phase !== 'reconnecting') return
@@ -94,6 +105,9 @@ export default {
         if (error?.name === 'AbortError') { this.phase = 'select-drive'; this.message = `❌ No drive chosen. ${PICK}`; return }
         if (this.phase === 'writing') { this.phase = 'select-drive'; this.error = error.message; return }
         this.error = error.message; this.phase = ['idle', 'preparing', 'preflight-error'].includes(this.phase) ? 'preflight-error' : `${this.phase}-error`
+      } finally {
+        this.runStepPending = false
+        if (this.updaterUnmounted) setFirmwareUpdateBusy(this, false)
       }
     }
   }

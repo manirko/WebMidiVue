@@ -18,6 +18,23 @@ const bounded = operation => Promise.race([
 
 function environment({ready = Promise.resolve({}), cached = true, controller = {}} = {}) {
   const listeners = new Map()
+  const eventTarget = (target = {}) => Object.assign(target, {
+    addEventListener(type, handler) {
+      if (!listeners.has(type)) listeners.set(type, new Set())
+      listeners.get(type).add(handler)
+    },
+    removeEventListener(type, handler) {
+      listeners.get(type)?.delete(handler)
+      if (!listeners.get(type)?.size) listeners.delete(type)
+    },
+    emit(type) { for (const handler of [...(listeners.get(type) || [])]) handler() }
+  })
+  const registrationListeners = new Map()
+  const registration = {
+    waiting: null, installing: null,
+    addEventListener(type, handler) { registrationListeners.set(type, handler) },
+    emit(type) { registrationListeners.get(type)?.() }
+  }
   const status = []
   const paths = [
     '/index.html?__WB_REVISION__=one', '/manifest.json?__WB_REVISION__=one',
@@ -29,20 +46,17 @@ function environment({ready = Promise.resolve({}), cached = true, controller = {
     paths: cached ? paths : paths.filter(value => !value.includes('sound-lab')),
     async keys() { return this.paths.map(value => ({url: `https://test.local${value}`})) }
   }
-  const worker = {
+  const worker = eventTarget({
     controller,
     ready,
-    registration: {},
+    registration,
     registerCalls: 0,
     getRegistration: async () => worker.registration,
-    register: async () => { worker.registerCalls++; return worker.registration },
-    addEventListener(type, handler) { listeners.set(type, handler) },
-    removeEventListener(type, handler) {
-      if (listeners.get(type) === handler) listeners.delete(type)
-    }
-  }
+    register: async () => { worker.registerCalls++; return worker.registration }
+  })
+  let reloads = 0
   const window = {
-    location: {origin: 'https://test.local', href: 'https://test.local/biotron'},
+    location: {origin: 'https://test.local', href: 'https://test.local/biotron', reload: () => { reloads++ }},
     caches: {keys: async () => ['web-midi-playtronica-precache-v2'], open: async () => cache},
     setTimeout: (handler, milliseconds) => setTimeout(handler, Math.min(milliseconds, 30)),
     clearTimeout,
@@ -59,7 +73,7 @@ function environment({ready = Promise.resolve({}), cached = true, controller = {
   Object.defineProperty(global, 'navigator', {
     configurable: true, value: {serviceWorker: worker, onLine: true}
   })
-  return {worker, cache, listeners, status, window}
+  return {worker, cache, listeners, status, window, reloads: () => reloads}
 }
 
 (async () => {
@@ -133,12 +147,103 @@ function environment({ready = Promise.resolve({}), cached = true, controller = {
     env = environment({controller: null})
     module = await loadModule()
     assert.equal((await bounded(module.prepareOfflineAccess())).code, 'SW_SETUP_TIMEOUT')
-    assert.equal(env.listeners.size, 0, 'Timed-out controller listener was not removed')
+    assert.equal(env.listeners.get('controllerchange').size, 1,
+      'Only the persistent update observer should survive the offline deadline')
     env.worker.controller = {}
     assert.equal((await bounded(module.prepareOfflineAccess())).ready, true, 'Controller retry failed')
 
     assert.equal(env.status.at(-1).code, 'SW_READY')
+
+    // A waiting update on a previously opened page must be visible without
+    // activating it or interrupting sound/firmware merely by discovering it.
+    env = environment()
+    const messages = []
+    const waiting = {state: 'installed', postMessage: message => messages.push(message)}
+    env.worker.registration.waiting = waiting
+    module = await loadModule()
+    await module.prepareOfflineAccess()
+    assert.equal(module.getAppUpdateStatus().available, true)
+    assert.equal(messages.length, 0)
+    assert.equal(env.reloads(), 0)
+    await module.requestAppUpdate(() => false)
+    assert.equal(module.getAppUpdateStatus().error, 'SW_UPDATE_BLOCKED')
+    assert.equal(messages.length, 0, 'Blocked firmware action activated an update')
+    const update = module.requestAppUpdate()
+    assert.deepStrictEqual(messages, [{type: 'SKIP_WAITING'}])
+    assert.equal(env.reloads(), 0, 'Reload happened before the new worker controlled the page')
+    env.worker.registration.waiting = null
+    env.worker.controller = waiting
+    env.worker.emit('controllerchange')
+    await update
+    assert.equal(env.reloads(), 1)
+    assert.equal(env.listeners.get('controllerchange').size, 1, 'Update listener leaked')
+
+    // A new worker discovered after startup follows the same explicit path.
+    env = environment()
+    module = await loadModule()
+    await module.prepareOfflineAccess()
+    const installing = {state: 'installing',
+      addEventListener(type, handler) { this.changed = handler },
+      removeEventListener() { this.changed = null }}
+    env.worker.registration.installing = installing
+    env.worker.registration.emit('updatefound')
+    assert.equal(module.getAppUpdateStatus().available, false)
+    installing.state = 'installed'
+    env.worker.registration.waiting = installing
+    installing.changed()
+    assert.equal(module.getAppUpdateStatus().available, true)
+    assert.equal(env.reloads(), 0)
+    assert.equal(installing.changed, null)
+
+    // An update accepted in another tab never reloads this one automatically.
+    env.worker.registration.waiting = null
+    env.worker.controller = installing
+    env.worker.emit('controllerchange')
+    assert.equal(env.reloads(), 0)
+    await module.requestAppUpdate(() => false)
+    assert.equal(env.reloads(), 0)
+    await module.requestAppUpdate()
+    assert.equal(env.reloads(), 1)
+
+    // Stalled activation is bounded and retryable; late control does not reload.
+    env = environment()
+    env.worker.registration.waiting = waiting
+    module = await loadModule()
+    await module.prepareOfflineAccess()
+    await bounded(module.requestAppUpdate())
+    assert.equal(module.getAppUpdateStatus().error, 'SW_UPDATE_TIMEOUT')
+    assert.equal(env.listeners.get('controllerchange').size, 1)
+    env.worker.controller = waiting
+    env.worker.registration.waiting = null
+    env.worker.emit('controllerchange')
+    assert.equal(env.reloads(), 0)
+    await module.requestAppUpdate()
+    assert.equal(env.reloads(), 1)
+
+    // A firmware operation may begin while activation is in flight.
+    env = environment()
+    env.worker.registration.waiting = waiting
+    module = await loadModule()
+    await module.prepareOfflineAccess()
+    let safe = true
+    const raced = module.requestAppUpdate(() => safe)
+    safe = false
+    env.worker.controller = waiting
+    env.worker.registration.waiting = null
+    env.worker.emit('controllerchange')
+    await raced
+    assert.equal(env.reloads(), 0)
+    assert.equal(module.getAppUpdateStatus().error, 'SW_UPDATE_BLOCKED')
+
+    env = environment()
+    env.worker.registration.waiting = {state: 'installed', postMessage() { throw Error('gone') }}
+    module = await loadModule()
+    await module.prepareOfflineAccess()
+    assert.equal((await module.requestAppUpdate()).error, 'SW_UPDATE_FAILED')
+    assert.equal(env.reloads(), 0)
+    assert.equal(env.listeners.get('controllerchange').size, 1)
     console.log('Service worker deadline regression passed: hung/late ready, failed update, missing worker/cache/controller, retry')
+    console.log('App update regression passed: waiting/discovered worker, explicit activation, cross-tab control, deadline, firmware race, failed message')
   } finally {
     console.error = previousError
     process.env.NODE_ENV = originalNodeEnv

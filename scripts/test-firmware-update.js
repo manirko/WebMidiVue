@@ -231,7 +231,9 @@ async function testComponentStateMachine(componentSource) {
     plugins: ['@babel/plugin-transform-modules-commonjs']
   }).code
   const calls = []
+  const busyOwners = new Set()
   let writeFailure = null
+  let writeGate = null
   const prepared = {buffer: new ArrayBuffer(512), sha256: '38c7fd35ef5e456d86b03f50f380d499519835fa84b7516fbd7b1cd1012b91da'}
   const context = {
     exports: {},
@@ -256,6 +258,10 @@ async function testComponentStateMachine(componentSource) {
     clearTimeout: id => calls.push(['clear', id]),
     require: name => {
       if (name === '@/biotron/telemetry.mjs') return {recordFirmwarePhase: () => {}}
+      if (name === '@/appUpdateSafety.mjs') return {setFirmwareUpdateBusy: (owner, busy) => {
+        if (busy) busyOwners.add(owner)
+        else busyOwners.delete(owner)
+      }}
       if (name === '@/assets/js/LoadFirmware') {
         return {
           compareFirmwareVersions: contextForHelpers().compareFirmwareVersions,
@@ -268,6 +274,7 @@ async function testComponentStateMachine(componentSource) {
           writeFirmware: async (value, firmware) => {
             calls.push(['write', value, firmware.version])
             if (writeFailure) throw writeFailure
+            if (writeGate) await writeGate
           }
         }
       }
@@ -282,6 +289,11 @@ async function testComponentStateMachine(componentSource) {
   const definition = context.module.exports.default
   const build = props => {
     const instance = {...definition.data(), repo: 'Playtronica/biotron-firmware', versionAware: true, ...props}
+    let phase = instance.phase
+    Object.defineProperty(instance, 'phase', {get: () => phase, set: value => {
+      phase = value
+      if (!instance.updaterUnmounted) definition.watch.phase.handler.call(instance, value)
+    }})
     for (const [name, method] of Object.entries(definition.methods)) instance[name] = method.bind(instance)
     for (const [name, computed] of Object.entries(definition.computed)) {
       Object.defineProperty(instance, name, {get: computed.bind(instance)})
@@ -295,18 +307,36 @@ async function testComponentStateMachine(componentSource) {
   assert.strictEqual(instance.buttonText, 'Update to 1.9.8')
   await instance.runStep()
   assert.strictEqual(instance.phase, 'prepared')
+  assert(!busyOwners.has(instance), 'A completed download left the reload guard stuck')
   assert.deepStrictEqual(calls[0], ['prepare', '1.9.8'])
   await instance.runStep()
   assert.strictEqual(instance.phase, 'select-drive')
+  assert(busyOwners.has(instance), 'BOOT/drive selection did not guard against app reload')
   assert.deepStrictEqual(calls[1], ['boot', 'selected-midi-output'])
   assert.match(instance.message, drive)
   await instance.runStep()
   assert.strictEqual(instance.phase, 'reconnecting')
+  assert(busyOwners.has(instance), 'Version verification did not guard against app reload')
   assert.strictEqual(calls[2][0], 'write')
   definition.watch.currentVersion.call(instance, '1.9.8')
   assert.strictEqual(instance.phase, 'complete')
   assert.strictEqual(instance.prepared, null)
+  assert(!busyOwners.has(instance), 'A verified update left the app reload guard stuck')
   assert.match(instance.message, /installed and verified/)
+
+  // Navigating away must not clear the guard during an in-flight disk write.
+  let finishWrite
+  const unmounted = build({device: null, currentVersion: ''})
+  await unmounted.runStep()
+  writeGate = new Promise(resolve => { finishWrite = resolve })
+  const pendingWrite = unmounted.runStep()
+  assert.strictEqual(unmounted.phase, 'writing')
+  definition.beforeUnmount.call(unmounted)
+  assert(busyOwners.has(unmounted), 'Unmount released the guard while disk I/O was pending')
+  finishWrite()
+  await pendingWrite
+  assert(!busyOwners.has(unmounted), 'Unmounted updater kept a stale guard after its write settled')
+  writeGate = null
 
   // F3: page opened while Biotron is already in update mode — no MIDI device, no version, drive RPI-RP2 present.
   calls.length = 0
