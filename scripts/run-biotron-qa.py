@@ -8,7 +8,7 @@ EXTERNAL_CHECKS = {
  'test:firmware:browser': 'Full directory-picker write and reconnect verification require browser and physical-device evidence.',
  'test:firmware:physical-cycle': 'Rollback, reinstall and settings readback require a compatible physical board and pinned images.',
  'test:quality:browser': 'Layout, animation, keyboard and reduced-motion checks require independent browser evidence.',
- 'test:windows:daw': 'Windows MIDI ownership and physical DAW sound require a real Windows host.'
+ 'test:windows:daw': 'Windows/Ableton release, actual MIDI-clip recording, physical sound and web reconnect require independent evidence on a real Windows host; a listed port is not PASS.'
 }
 TESTS.extend(EXTERNAL_CHECKS)
 p = argparse.ArgumentParser()
