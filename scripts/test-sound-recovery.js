@@ -242,3 +242,25 @@ test('legacy notes cannot finish calibration; readiness requires the matching de
   assert.equal(target.revealStage, 'ready')
   assert.equal(pending.size, 0)
 })
+
+test('legacy calibration cues time out without claiming absent plant signal or readiness', async () => {
+  const {target, context} = fixture()
+  const pending = timers(context)
+  target.canStartReveal = true
+  target.revealProfile.id = 'biotron'
+  target.acquireTabLease = async () => true
+  target.ensureEngine = async () => target.engine
+  target.midi.requestAccess = async () => [{id: 'music', name: 'Biotron'}]
+  await target.startReveal()
+  target.calibrationTracker.observe = () => 'calibrating'
+  target.handleRevealMessage({type: 'note-on', note: 91, velocity: 24})
+  assert.equal(target.revealStage, 'calibrating')
+  const deadline = [...pending.values()].find(timer => timer.delay === 15000)
+  assert(deadline, 'legacy confirmation must retain a finite deadline')
+  deadline.callback()
+  assert.equal(target.revealStage, 'intro')
+  assert.equal(target.revealIssue.title, 'Calibration not confirmed')
+  assert.doesNotMatch(target.status, /No plant signal/i)
+  target.handleRevealMessage({calibration: {nonce: target.revealCalibrationNonce, state: 'ready'}})
+  assert.equal(target.revealStage, 'intro', 'late readiness cannot complete a timed-out attempt')
+})

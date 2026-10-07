@@ -27,7 +27,7 @@ module.exports = {
   publicPath: '/',
   configureWebpack: {
     optimization: {splitChunks: {cacheGroups: {
-      soundSession: {test: /[\/]src[\/]audio[\/]soundSessionEffects\.mjs$/, name: 'sound-session', chunks: 'all', enforce: true}
+      soundSession: {test: /[\\/]src[\\/]audio[\\/]soundSessionEffects\.mjs$/, name: 'sound-session', chunks: 'all', enforce: true}
     }}}
   },
   chainWebpack: config => {
