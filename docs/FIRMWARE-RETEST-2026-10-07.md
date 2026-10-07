@@ -2,6 +2,14 @@
 
 Build source: codex/biotron-updater-layout @42043c8; browser localhost:49291/#/biotron.
 
+This is the earlier 7 October checkpoint, preserved as history. Later in the
+same session the exact 1.10.8 image was found and native rollback/reflash cycles
+completed; clean 1.10.9 was built and the internal D updater target changed to
+it. The current bounds and Sergey delivery are in
+[BIOTRON-SERGEY-INTERNAL-TEST.md](BIOTRON-SERGEY-INTERNAL-TEST.md).
+The NOT RUN/missing-image statements below describe this older checkpoint, not
+the later native result. Full browser directory-picker write is still unverified.
+
 ## Verified again
 
 - Firmware contract suite: PASS (artifact validation before BOOT, write destination,
