@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-07",
+  "candidate": "f602996",
+  "url": "http://localhost:49303/#/biotron",
+  "user_reported_pass": [
+    "viewport close button",
+    "stop and restart",
+    "Play Settings route lifecycle",
+    "USB disconnect reconnect",
+    "settings persistence across USB reconnect"
+  ],
+  "hardware_preflight": "PASS_READ_ONLY_SETTINGS_BOTH_CABLES; fresh 1.10.9",
+  "firmware_unit_checks": "PASS",
+  "images": {
+    "1.10.9": "823d044374268462d39b13c0e65dc2676cda2fb3d5162edba78aedccb0a09f3d",
+    "1.9.8 beta08": "38c7fd35ef5e456d86b03f50f380d499519835fa84b7516fbd7b1cd1012b91da"
+  },
+  "existing_full_flash_backup_sha256": "4e3c2aaeca13cde4d7bcb155fd92571601cc6531406a5179e4846e02b6f047c8",
+  "browser_flash_result": "BLOCKED: current-version button disabled by supported UX; no downgrade offered; native directory picker not controllable through available browser API",
+  "boot_sent": false,
+  "firmware_written": false,
+  "release_ready": false,
+  "historical_native_cycle": "1.10.9 to 1.9.8 to 1.10.9 previously PASS; not equivalent to browser flash"
+}
