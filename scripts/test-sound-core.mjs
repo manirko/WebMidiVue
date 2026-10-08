@@ -43,8 +43,8 @@ test('sound volume is bounded', () => {
   assert.equal(normalizeVolume(null), DEFAULT_VOLUME)
   assert.equal(normalizeVolume('37'), 37)
   assert.equal(normalizeVolume(-1), 0)
-  assert.equal(normalizeVolume(140), 140)
-  assert.equal(normalizeVolume(200), 150)
+  assert.equal(normalizeVolume(140), 100)
+  assert.equal(normalizeVolume(200), 100)
 })
 
 test('MIDI note-on, velocity-zero note-off and panic are accepted', () => {
@@ -246,7 +246,7 @@ test('reveal profiles keep first-use copy plain and product-specific', () => {
   assert.doesNotMatch(beforeReveal, /leaf[- _]?pads?/i)
   assert.match(beforeReveal, /Step away.*Keep them still/i)
   assert.match(beforeReveal, /device to confirm it is ready/i)
-  assert.match(profile.explanation, /colours follow the pitch/i)
+  assert.match(profile.explanation, /Incoming notes animate the visual/i)
   assert.doesNotMatch(profile.revealedHeading, /you can hear|plant signal/i)
   assert.throws(() => getRevealProfile('unknown'), /Unknown reveal profile/)
 })

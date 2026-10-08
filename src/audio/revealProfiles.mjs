@@ -41,9 +41,9 @@ const biotron = validateRevealProfile(Object.freeze({
   calibratingInstruction: 'Keep the plant, cables and device still. Wait for the device to confirm it is ready.',
   calibratingStatus: 'Calibrating — keep the plant, cables and device still',
   readyHeading: 'Ready to play',
-  readyInstruction: 'Touch a leaf. Listen for a note and watch the colours change.',
+  readyInstruction: 'Keep the contacts attached. Listen for notes as the plant signal changes.',
   revealedHeading: 'Notes are arriving',
-  explanation: 'Touch the plant and listen for a change. The colours follow the pitch of incoming notes.',
+  explanation: 'Listen to the plant signal. Incoming notes animate the visual.',
   readyStatus: 'Waiting for a note',
   settingsRoute: '/biotron'
 }))

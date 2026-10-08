@@ -707,8 +707,6 @@ addEventListener('message', e => {
     setPitchColour(e.data.pitch);
     if(motionPaused) updateCellColours(0,true);
     activityUntil = performance.now() + 1600;
-    for(let i=0;i<N_BLOBS;i++) { V[i*3+1] += 1.0; V[i*3] += Math.sin(i)*0.3; }
-    spawnBulge(0.4,0.2,0.9,0.12);
   }
   if(e.data.noteOff) activityUntil = Math.min(activityUntil,performance.now()+350);
   firstFrame = true; renderFrame();

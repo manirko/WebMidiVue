@@ -56,13 +56,13 @@
               v-if="engine && revealStage !== 'intro'"
               type="button"
               class="btn btn-outline-danger"
-              @click="panic"
-            >Stop notes</button>
+              @click="stop"
+            >Stop listening</button>
           </div>
           <label class="sound-lab__volume" for="biotron-play-volume">
             <span>Volume</span>
             <WakeVolume id="biotron-play-volume" :value="volume" @input="updateVolume" />
-            <output for="biotron-play-volume">{{ volume }}{{ volume > 100 ? '% boost' : '%' }}</output>
+            <output for="biotron-play-volume">{{ volume }}%</output>
           </label>
           <span class="sound-lab__status sound-lab__status--reveal" role="status" aria-live="polite">{{ status }}</span>
           <details class="play-help" v-if="engine || revealIssue">
@@ -127,12 +127,12 @@
           id="sound-lab-volume"
           type="range"
           min="0"
-          max="150"
+          max="100"
           step="1"
           :value="volume"
           @input="updateVolume"
         >
-        <output for="sound-lab-volume">{{ volume }}{{ volume > 100 ? '% boost' : '%' }}</output>
+        <output for="sound-lab-volume">{{ volume }}%</output>
       </label>
       <span class="sound-lab__status" role="status" aria-live="polite">{{ status }}</span>
     </section>
@@ -514,7 +514,6 @@ export default {
     },
     resetVoiceUi() {
       this.heldCodes.clear()
-      window.clearTimeout(this.voiceRefreshTimer)
       window.cancelAnimationFrame(this.voiceFrame)
       this.voiceFrame = null
       this.pendingVoiceCount = 0
@@ -546,7 +545,6 @@ export default {
     release(note, source = 'screen') {
       this.engine?.noteOff(source, 0, note)
       this.$refs?.garden?.note(false, note)
-      window.clearTimeout(this.voiceRefreshTimer)
       this.voiceRefreshTimer = window.setTimeout(() => {
         this.voiceCount = this.engine?.activeVoiceCount || 0
       }, 3100)
@@ -805,7 +803,7 @@ export default {
 .sound-lab__variant { min-height: 44px; border: 1px solid var(--ui-control-border); border-radius: var(--ui-radius); background: #fff; padding: 0 1rem; font: inherit; font-weight: 600; }
 .sound-lab__variant span { display: inline-block; padding: 0 .1rem; white-space: nowrap; font-weight: 500; }
 .sound-lab__variant--active { border-color: var(--ui-accent); background: #e8edff; color: #2446bd; }
-.sound-lab__reveal { display: grid; grid-template-columns: minmax(200px, 300px) minmax(0, 1fr); gap: clamp(1.5rem, 5vw, 4rem); align-items: center; max-width: 760px; margin: 0 auto; padding: var(--beta-card-inset,24px); border: 1px solid #ded9d1; border-radius: 1.5rem; background: #fbfaf7; }
+.sound-lab__reveal { display: grid; grid-template-columns: minmax(200px, 300px) minmax(0, 1fr); gap: clamp(1.5rem, 5vw, 4rem); align-items: start; max-width: 760px; margin: 0 auto; padding: var(--beta-card-inset,24px); border: 1px solid #ded9d1; border-radius: 1.5rem; background: #fbfaf7; }
 .sound-lab__reveal-copy h2 { margin: .25rem 0 .5rem; font-size: var(--ui-text-section); }
 .sound-lab__reveal-copy p { max-width: 34rem; color: #625e58; line-height: 1.5; }
 .sound-lab__connect-notice { display:grid; gap:.2rem; margin:1rem 0; padding:.85rem 1rem; border:1px solid rgba(106,90,205,.28); border-radius:.9rem; color:#302763; background:#f0edff; }

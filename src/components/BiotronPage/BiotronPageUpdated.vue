@@ -13,7 +13,7 @@
       <p v-if="betaBuild" class="settings-hero__intro">Connect Biotron, then shape how it listens, plays, and responds.</p>
     </header>
     <div v-if="betaBuild && soundSession.running" class="alert alert-success py-2" role="status">
-      🔊 Sound stays on while you adjust settings. Touch the plant to hear each change.
+      🔊 Sound stays on while you adjust settings. Listen as you adjust each setting.
       <router-link to="/biotron/play" class="alert-link ms-1">Sound &amp; volume</router-link>
     </div>
     <section :class="{'beta-connect-card': betaBuild}" aria-label="Connect Biotron">

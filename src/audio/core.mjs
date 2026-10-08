@@ -81,8 +81,8 @@ export class VoiceLedger {
 }
 
 export const DEFAULT_VOLUME = 70
-// Громкость интерфейса 0…150; в ослабление её переводит движок.
+// Громкость интерфейса 0…100; в ослабление её переводит движок.
 export function normalizeVolume(input) {
   if (input === null || input === undefined || input === '') return DEFAULT_VOLUME
-  return Math.round(clamp(Number(input), 0, 150, DEFAULT_VOLUME))
+  return Math.round(clamp(Number(input), 0, 100, DEFAULT_VOLUME))
 }
