@@ -5,18 +5,20 @@ const {execFileSync} = require('node:child_process')
 const {chromium} = require('playwright-core')
 const {chromePath} = require('./browser-test-harness')
 const http = require('node:http')
+const os = require('node:os')
 const root = path.resolve(__dirname,'..')
-const output = path.resolve(process.argv.find(arg=>arg.startsWith('--output='))?.slice(9) || `/private/tmp/biotron-auditions-${Date.now()}`)
-const prefix=`scripts/_audition-${process.pid}`, entry=path.join(root,prefix+'.mjs'), bundle=path.join(root,prefix+'.js')
+const output = path.resolve(process.argv.find(arg=>arg.startsWith('--output='))?.slice(9) || fs.mkdtempSync(path.join(process.env.BIOTRON_QA_OUTPUT || os.tmpdir(),'audition-render-')))
+const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'biotron-audition-build-'))
+const prefix='audition', entry=path.join(scratch,'entry.mjs'), bundle=path.join(scratch,'bundle.js')
 const sourceInputs = Object.fromEntries(['src/audio/auditionBanks.mjs','src/audio/elementary/timbres.mjs','src/audio/elementary/engine.mjs','scripts/test-audition-render.js','package.json','package-lock.json'].map(file=>[file,crypto.createHash('sha256').update(fs.readFileSync(path.join(root,file))).digest('hex')]))
 const selectedCase=process.argv.find(arg=>arg.startsWith('--case='))?.slice(7)
 const handpanControl=process.env.HANDPAN_DSP_CONTROL||null
 if(handpanControl&&(!selectedCase||handpanControl!=='legacy-round'))throw new Error('Handpan negative control requires a selected case and legacy-round')
 const timeoutMs=Number(process.env.AUDITION_TIMEOUT_MS)||30000
-const cleanup=()=>{fs.rmSync(entry,{force:true});fs.rmSync(bundle,{force:true})}
+const cleanup=()=>fs.rmSync(scratch,{recursive:true,force:true})
 process.on('exit',cleanup)
-fs.writeFileSync(entry,"export {ElementarySynthEngine} from '../src/audio/elementary/engine.mjs'\nexport {AUDITION_BANKS,auditionEvents,auditionDuration} from '../src/audio/auditionBanks.mjs'\n")
-execFileSync('npx',['--yes','esbuild@0.24.0',prefix+'.mjs','--bundle','--format=iife','--global-name=__Audition','--outfile='+prefix+'.js','--log-level=error'],{cwd:root,timeout:60000})
+fs.writeFileSync(entry,'export {ElementarySynthEngine} from '+JSON.stringify(path.join(root,'src/audio/elementary/engine.mjs'))+'\nexport {AUDITION_BANKS,auditionEvents,auditionDuration} from '+JSON.stringify(path.join(root,'src/audio/auditionBanks.mjs'))+'\n')
+execFileSync('npx',['--yes','esbuild@0.24.0',entry,'--bundle','--format=iife','--global-name=__Audition','--outfile='+bundle,'--log-level=error'],{cwd:root,timeout:60000})
 const server=http.createServer((request,response)=>{
  if(request.url==='/'){response.setHeader('Content-Type','text/html');response.end('<!doctype html><meta charset="utf-8"><title>Audition rendering</title>')}
  else if(request.url===`/${prefix}.js`){response.setHeader('Content-Type','text/javascript');response.end(fs.readFileSync(bundle))}
@@ -144,7 +146,8 @@ function wav(samples,sampleRate){
   }
   const sourceCommit=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim()
   const sourceDirty=Boolean(execFileSync('git',['status','--porcelain','--untracked-files=no'],{cwd:root,encoding:'utf8'}).trim())
-  if(!selectedCase)assert.equal(metrics.length,2*banks.reduce((sum,bank)=>sum+bank.variants.length,0),'Incomplete bank coverage')
+  if(selectedCase)assert.equal(metrics.length,1,'Unknown or incomplete selected audition case')
+  else assert.equal(metrics.length,2*banks.reduce((sum,bank)=>sum+bank.variants.length,0),'Incomplete bank coverage')
   for(const {id:bank} of banks){const hashes=metrics.filter(x=>x.bank===bank&&x.quality==='standard').map(x=>x.wavSha256);assert.equal(new Set(hashes).size,hashes.length,bank+': duplicate rendered options')}
   fs.writeFileSync(path.join(output,'manifest.json'),JSON.stringify({schema:'biotron-audition-render/v1',sourceCommit,sourceDirty,sourceInputs,handpanControl,bundleSha256:crypto.createHash('sha256').update(fs.readFileSync(bundle)).digest('hex'),sampleRate,masterVolume:70,chordMasterVolume:100,phraseNormalization:false,browser:browser.version(),metrics,status:selectedCase?'PARTIAL':'RENDERED',humanListening:'NOT RUN'},null,2)+'\n')
   console.log(`${metrics.filter(x=>x.wav).length} listening WAVs and ${metrics.length} quality/render cases passed${selectedCase ? " (selected diagnostic case only)" : ""}: ${output}`)
