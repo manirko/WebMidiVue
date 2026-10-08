@@ -396,6 +396,7 @@ export default {
       return false
     },
     async ensureEngine() {
+      registerSoundController(this)
       if (!this.engine || this.engine.state === 'closed') {
         this.engine = markRaw(createRealtimeSynth({
           preset: this.variants[this.currentVariant],

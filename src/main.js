@@ -66,6 +66,7 @@ if (betaBuild) {
         meta: {...playMeta('Biotron'), firstPlay: true}
     })
     routes.push({path: '/sound', component: SoundLab, meta: {requiresAudio: true, productName: 'Playtronica Sound'}})
+    routes.push({path: '/biotron/compare', component: () => import(/* webpackChunkName: "biotron-auditions" */ '@/components/SoundLab/AudioCompare.vue'), meta: {requiresAudio: true, productName: 'Biotron sound comparison'}})
 }
 
 const router = createRouter({

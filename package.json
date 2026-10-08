@@ -49,7 +49,10 @@
     "test:biotron": "npm run test:quick && npm run test:production-isolation && npm run test:firmware:browser && npm run test:beta-build && npm run test:browser",
     "test:garden": "node scripts/test-garden-fullscreen.cjs",
     "test:audio-qa": "node scripts/audio-qa/test-analyze.mjs",
-    "test:qa-runner": "PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3 scripts/test-qa-runner.py"
+    "test:qa-runner": "PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3 scripts/test-qa-runner.py",
+    "test:auditions": "node --test scripts/test-audition-banks.mjs",
+    "test:auditions:render": "node scripts/test-audition-render.js",
+    "test:auditions:browser": "node scripts/test-audition-browser.js"
   },
   "dependencies": {
     "@elemaudio/core": "^4.0.1",

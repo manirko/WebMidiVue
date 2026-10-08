@@ -18,6 +18,7 @@
     </div>
     <details v-if="betaBuild" class="beta-preset-card mb-3">
       <summary>NEW — Experiments</summary>
+      <router-link to="/biotron/compare" class="btn btn-outline-primary my-2">Compare sounds · 10 × 3</router-link>
       <p class="mt-2 mb-2">Try a calmer response when Biotron plays too many similar notes.</p>
       <p id="calmer-play-help" class="mb-2">Reduce extra notes changes and saves three settings: turns off Input variation, turns on Manual control to prevent idle pitch drift, and sets Note repeat to 2 — skipping notes less than two semitones apart. It keeps your tempo, scale and note velocity. Save your current preset first if you want to return to it.</p>
       <button type="button" class="btn btn-outline-primary" aria-describedby="calmer-play-help"
@@ -52,7 +53,7 @@
           aria-live="polite"
       >{{ calibrationMessage }}</span>
     </div>
-    <div v-if="betaBuild && settingsMessage" class="settings-feedback alert py-2" :class="settingsState === 'error' ? 'alert-warning' : 'alert-light'" role="status" aria-live="polite">
+    <div v-if="betaBuild && settingsMessage" class="settings-feedback" :class="{'settings-feedback--error': settingsState === 'error'}" role="status" aria-live="polite">
       <span>{{ settingsMessage }}</span>
       <button v-if="settingsState === 'saved'" type="button" class="btn btn-outline-secondary btn-sm" aria-label="Dismiss saved message" @click="settingsMessage = ''">Dismiss</button>
       <button v-if="device && settingsState === 'error' && !settingsSnapshotKnown && !legacyFirmware" type="button" class="btn btn-outline-primary btn-sm" @click="retrySettingsConnection">Retry settings connection</button>
@@ -168,8 +169,8 @@
         <GroupOfCommands name-of-group="Buttons mode">
           <template v-slot:objects>
             <SwitchComponent
-                command-label="Mute button state"
-                description="Enables and disables mute button"
+                command-label="Biotron mute pad"
+                description="Enable the upper touch pad on Biotron. Touch it to mute notes; touch it again to resume."
                 :command-object="this.commands_data.button_mode_state"
                 @input-changed="this.sys_ex_changed"
 
@@ -177,11 +178,11 @@
           </template>
         </GroupOfCommands>
 
-        <GroupOfCommands name-of-group="Swing note">
+        <GroupOfCommands name-of-group="Rhythm">
           <template v-slot:objects>
             <SliderCommand
                 command-label="Swing note"
-                description="Duration of the first note compare to BPM"
+                description="Changes the timing of alternating beats. At 100%, beats are evenly spaced; lower values make one interval shorter and the next longer."
                 :key="this.forceRerender"
                 :command-object="this.commands_data.swing_first_note_percent"
                 @input-changed="this.sys_ex_changed"
@@ -334,11 +335,11 @@
             />
 
             <SliderCommand
-                command-label="🌞 The beat"
+                command-label="🌞 Every N plant beats"
                 :key="this.forceRerender"
                 :command-object="this.commands_data.lightBpm"
                 @input-changed="this.sys_ex_changed"
-                description="Set tempo of light sensor notes BPM"
+                description="Checks the light sensor every N plant beats. The plant tempo sets this counter even when plant notes are muted or unchanged. Used while Pitch Bend is off."
                 :class="betaBuild ? 'beta-command' : 'm-2'"
             />
 

@@ -160,16 +160,45 @@ export const SOUNDS = Object.freeze([
     fx: fx({reverbWet: 0.25, delayWet: 0.1})}
 ].map(Object.freeze))
 
-// Звук существует в одной форме; другой вход — ошибка, а не тихий фолбэк.
+// Optional register treatments use frequency-dependent blends; the default
+// voice path is unchanged. No pitch remapping or note-triggered graph rebuild.
+function registerTreatment(input) {
+  if (!input || !Number.isFinite(input.startNote) || !Number.isFinite(input.endNote) ||
+      input.startNote < 0 || input.endNote > 127 || input.endNote <= input.startNote) throw new TypeError('Invalid register transition')
+  for (const [key, low, high] of [['gain',0,1], ['cutoff',80,12000], ['resonance',0.3,2]]) {
+    if (input[key] !== undefined && (!Number.isFinite(input[key]) || input[key] < low || input[key] > high)) throw new TypeError(`Invalid register ${key}`)
+  }
+  if (input.voice?.registers) throw new TypeError('Nested register voices are not supported')
+  return Object.freeze({...input, voice: input.voice ? toSound(input.voice) : null})
+}
 export function toSound(input) {
   if (!input || !TIMBRES[input.timbre]) throw new TypeError(`Unknown timbre: ${input?.timbre}`)
-  return Object.freeze({name: String(input.name || 'Sound').slice(0, 32), timbre: input.timbre,
-    cv: {...input.cv}, fx: {...FX_DEFAULT, ...input.fx}})
+  const output = {name: String(input.name || 'Sound').slice(0, 32), timbre: input.timbre,
+    cv: {...input.cv}, fx: {...FX_DEFAULT, ...input.fx}}
+  if (input.registers) output.registers = Object.freeze(Object.fromEntries(
+    Object.entries(input.registers).map(([key, value]) => {
+      if (!['upper','lower'].includes(key)) throw new TypeError('Unknown register')
+      return [key, registerTreatment(value)]
+    })))
+  return Object.freeze(output)
 }
-
-// Как построить один голос этого звука.
+const noteHz = note => 440 * 2 ** ((note - 69) / 12)
+function blendRegister(base, ctx, treatment, lower) {
+  let mix = el.min(1, el.max(0, el.div(el.sub(ctx.freq, noteHz(treatment.startNote)),
+    noteHz(treatment.endNote) - noteHz(treatment.startNote))))
+  if (lower) mix = el.sub(1, mix)
+  let treated = treatment.voice ? TIMBRES[treatment.voice.timbre](ctx, treatment.voice.cv) : base
+  if (treatment.cutoff) treated = el.lowpass(treatment.cutoff, treatment.resonance || 0.7, treated)
+  treated = el.mul(treatment.gain ?? 1, treated)
+  return el.add(el.mul(el.sub(1, mix), base), el.mul(mix, treated))
+}
 export function voiceBuilder(sound) {
-  return ctx => TIMBRES[sound.timbre](ctx, sound.cv)
+  return ctx => {
+    let voice = TIMBRES[sound.timbre](ctx, sound.cv)
+    if (sound.registers?.lower) voice = blendRegister(voice, ctx, sound.registers.lower, true)
+    if (sound.registers?.upper) voice = blendRegister(voice, ctx, sound.registers.upper, false)
+    return voice
+  }
 }
 
 // master(sum, {volume, fx, sampleRate, quality}) — общая цепь, через которую

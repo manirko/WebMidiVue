@@ -71,12 +71,17 @@ const report = {
 // 07.10.2026: reviewed explicit PWA update + shared firmware reload guard.
 // Actual final source 67/10299; bounded activation and cross-tab/firmware/audio fault
 // regressions cover the new lifecycle. No dependency or safety-cap increase.
+// 08.10.2026: Andrey explicitly adds 10 timbres + 10 cue sounds + 10 high-note
+// treatments. +2 files (bank data and a lazy comparison page), +284 source lines
+// including bounded register DSP and the pinned renderer resource cleanup.
+// This is the scoped implementation budget, not firmware-owner/release approval.
+// Pool caps, dependency versions, largest component and listener limits stay fixed.
 const limits = {
   eagerDeviceRouteImports: 0,
   sleepCalls: 0,
   unmanagedListenerFiles: 0,
-  sourceFiles: 67,
-  sourceLines: 10300,
+  sourceFiles: 69,
+  sourceLines: 10584,
   largestProductFileLines: 850
 }
 const violations = [

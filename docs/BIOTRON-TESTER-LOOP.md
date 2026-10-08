@@ -77,3 +77,54 @@ Baseline602d19c passed32 software lanes and a600s Mac Chrome synthetic-MIDI soak
 (2892 cycles). That evidence does not attest the later feedback changes or close
 Windows/physical mobile/musical acceptance. Canonical product-loop on8 October
 still has no registered customer candidate and release_ready=false.
+
+
+## Thirty listening options — 8 October 2026
+
+Andrey explicitly requests three separate banks of ten: timbres, calibration
+sounds, upper-note treatment. NEW → Compare sounds opens a lazy, audio-only
+comparison page. Each bank uses identical note events and master volume; cue
+levels are the declared experimental variable. Calibration previews reproduce
+firmware1.10.10's eight-note/velocity24 cue; they never start calibration or send
+MIDI. High-note treatments transition at MIDI72–84. The three-register option
+also blends the bass at48–60; middle note64 remains the current Round sound.
+
+Run `npm run test:auditions`, `test:auditions:render` and `test:auditions:browser`.
+The renderer writes30 unnormalized48kHz WAVs, parameter/source hashes and60
+quality cases. Every option must be finite, have headroom, settle its tail and
+release its voice pool. Upper processing must leave the middle-register control
+unchanged. Actual WAV hashes must differ within each bank. A case timeout writes
+failure.json; first failures remain evidence. OfflineAudioContext cannot close,
+so each bank uses a new page. This isolation does not replace the browser's
+same-page100-start/close resource regression, nor a real mobile/Windows test.
+
+WebRenderer4.0.3 retained a polling interval and a worklet Blob URL after every
+Stop (two of each after two renders, reproduced before the fix). Pin4.0.3 and keep
+its small lifecycle adapter in engine.mjs: revoke this context's module URL,
+clear its poller, reject pending requests and close the loaded worklet port.
+Restore addModule immediately after initialize's synchronous call. A late load
+must dispose again and cannot build a graph. Browser checks cover all30 options,
+100 starts/closes, interrupted loading, close failure/retry/route blocking,
+suspension, background release and local feedback. Do not identify this leak as
+the cause of Sergey's Windows freeze without reproducing his environment.
+
+Choices require a listener's explicit Prefer action and optional comment;
+playing is never LISTENED/APPROVED. Export includes buildId, exact preset,
+level/volume/quality and enteredAt. Defaults stay unchanged until human choice.
+The30-option implementation increases the reviewed source budget from67/10300
+to69/10584, adding bank data and a lazy comparison component. No voice-cap,
+firmware ABI, eager-route, dependency-version or largest-component increase.
+
+Fresh Sergey feedback13:00–13:12 UTC: status messages should read as text;
+Swing note needs a distinct Rhythm group; light tempo is a count of plant beats,
+including muted/unchanged notes, not independent BPM. Source music.c275–287 and
+global.c195–201 confirm these descriptions. The offline download destination
+is a browser/user choice; do not assert every user downloads to Desktop.
+
+Quick disconnected-clip calibration is still a proposed firmware behavior.
+Source global.c319–354 waits for raw frequency above MIN_FREQ60 and restarts
+when it falls below; it has no physical clip-presence sensor. last_freq telemetry
+is not a raw-sample oracle throughout Sleep. Avoid claiming “clips disconnected”
+from silence, a timeout or stale telemetry. A short no-signal diagnostic needs
+raw sample timing/threshold evidence, a bounded state transition and independent
+firmware-owner review; keep valid low/unstable plant inputs and recovery intact.
