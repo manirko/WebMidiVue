@@ -28,6 +28,13 @@ microphone/system/physical audio are distinct unavailable lanes.
 | Scale seems ineffective at low BPM | Preset encoding and musical settings contracts | Known tempo, plant/light stimulus, listening |
 | PWA update probe reads destroyed context | Explicit navigation wait and persistent-profile restart | Real upgrade session with installed app |
 | Readiness invisible on first-play screen | Check readiness on Settings; first-play stays clean | Human first-play outcome |
+| Stop button restarts on the next MIDI note | Actual browser closes input/audio, rejects later On, can restart | Real held note and receiver Stop/Start |
+| Volume boost is confusing | Percent normalization clamps legacy saved boost to 100 | Human volume control clarity |
+| Help disclosure moves the sphere | Browser checks sphere document position before/after disclosure | Visual review on Windows/mobile |
+| Calibration cue is too quiet | Render all seven sounds with old-level control; gain band and finite output | Listen through actual device/output |
+| Cells stay at the ceiling and pulse | Actual physics/handler: capped lift and idle settling, negative old-source control | Human living/natural motion acceptance |
+| Reduce extra notes has no explanation | Browser opens NEW disclosure with exact three changes before click | Human comprehension and preset restoration |
+| High notes are unpleasant | Spectra/level/non-finite measurements at pitches36/60/84/96 | Listening comparison; no pleasantness PASS from a spectrum |
 | Fixture hides a protocol defect | Frozen actual readback vectors/real encoder frames | Native both-cable comparison |
 
 ## Manufacturing boundary, verified 8 October 2026
@@ -54,3 +61,19 @@ No PASS from absent input, no inferred customer outcome, no self approval.
 After each new fault: keep the first evidence, reproduce at the smallest scope,
 add an oracle that fails on the original behavior, fix, rerun the affected lanes,
 then integrate into this map and runner. Retrying does not erase the first fault.
+
+## Feedback priorities —8 October, refreshed12:27 UTC
+
+Andrey asks for substantial simplification and truthful descriptions. Sergey says
+Input variation is an existing function, formerly Ultra sensitivity: do not label
+it NEW or experimental. It adds sensor jitter, not measured sensitivity or
+velocity. Group it under Plant response. NEW is for genuinely new experiments,
+currently Reduce extra notes. Basic tasks stay visible; exact advanced behavior
+is disclosed near the control. Do not erase intentional firmware/music choices
+just to pass a test or hide uncertainty behind a vague label.
+
+Latest source changes are internal and have not updated Sergey's temporary site.
+Baseline602d19c passed32 software lanes and a600s Mac Chrome synthetic-MIDI soak
+(2892 cycles). That evidence does not attest the later feedback changes or close
+Windows/physical mobile/musical acceptance. Canonical product-loop on8 October
+still has no registered customer candidate and release_ready=false.

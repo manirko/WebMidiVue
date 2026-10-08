@@ -16,6 +16,14 @@
       🔊 Sound stays on while you adjust settings. Listen as you adjust each setting.
       <router-link to="/biotron/play" class="alert-link ms-1">Sound &amp; volume</router-link>
     </div>
+    <details v-if="betaBuild" class="beta-preset-card mb-3">
+      <summary>NEW — Experiments</summary>
+      <p class="mt-2 mb-2">Try a calmer response when Biotron plays too many similar notes.</p>
+      <p id="calmer-play-help" class="mb-2">Reduce extra notes changes and saves three settings: turns off Input variation, turns on Manual control to prevent idle pitch drift, and sets Note repeat to 2 — skipping notes less than two semitones apart. It keeps your tempo, scale and note velocity. Save your current preset first if you want to return to it.</p>
+      <button type="button" class="btn btn-outline-primary" aria-describedby="calmer-play-help"
+              @click="reduceExtraNotes" :disabled="!device || calibrationBusy || is_loading || !settingsSnapshotKnown">Reduce extra notes</button>
+      <small v-if="!device" class="d-block mt-1">Connect Biotron to try this experiment.</small>
+    </details>
     <section :class="{'beta-connect-card': betaBuild}" aria-label="Connect Biotron">
     <DeviceSelector
         ref="deviceSelector"
@@ -30,20 +38,12 @@
         :class="betaBuild ? 'beta-command' : 'm-2'"
     />
     <div v-if="betaBuild && device && settingsSnapshotKnown" class="calibration-control mt-3">
-      <div class="calibration-control__actions">
         <button
             type="button"
             class="btn btn-outline-primary"
             @click="startCalibration"
             :disabled="!device || calibrationBusy || is_loading || !settingsSnapshotKnown"
         >{{ calibrationBusy ? 'Calibrating…' : 'Calibrate plant again' }}</button>
-        <button
-            type="button"
-            class="btn btn-outline-primary"
-            @click="reduceExtraNotes"
-            :disabled="!device || calibrationBusy || is_loading || !settingsSnapshotKnown"
-        >Reduce extra notes</button>
-      </div>
       <span
           v-if="calibrationMessage"
           class="calibration-control__status"
@@ -227,13 +227,13 @@
             </div>
           </template>
         </GroupOfCommands>
-        <GroupOfCommands name-of-group="Sensitivity">
+        <GroupOfCommands name-of-group="Plant response">
           <template v-slot:objects>
             <div :class="betaBuild ? 'row beta-command' : 'row m-2'">
               <div class="col">
                 <SwitchComponent
                     :key="this.forceRerender"
-                    command-label="📡 Input variation (experimental)"
+                    command-label="📡 Input variation"
                     :command-object="commands_data.randomness"
                     @input-changed="this.sys_ex_changed"
                     description="Adds a small random 0–9 offset to each new plant-sensor reading before note calculation. It does not increase the sensor's measured sensitivity or control velocity."
@@ -245,7 +245,7 @@
                     command-label="✋ Manual control"
                     :command-object="commands_data.performance"
                     @input-changed="this.sys_ex_changed"
-                    description="Plant only reacts to human interaction, doesn’t play by itself."
+                    description="Prevents slow automatic pitch drift during inactivity. Notes driven by the sensor still play."
                 />
               </div>
             </div>
@@ -255,7 +255,7 @@
                 :command-object="commands_data.same_note_plant"
                 command-label="🔂 Note repeat"
                 @input-changed="this.sys_ex_changed"
-                description="Move near the plant to change notes (1 = small moves change notes, 10 = big moves needed). 🎶"
+                description="Skip a note when its pitch is less than this many semitones from the previous note. 0 allows repeats; 1 skips identical notes; 2 skips identical notes and one-semitone changes. This does not change sensor sensitivity."
                 :class="betaBuild ? 'beta-command' : 'm-2'"
             />
             <SliderCommand

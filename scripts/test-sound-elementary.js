@@ -246,9 +246,9 @@ const server = http.createServer((request, response) => {
       }
       const sounds = []
       for (const sound of SOUNDS) {
-        const note = (velocity, offAt, levelScale = 1) => playEvents(3, [
-          {at: 0.05, action: e => e.noteOn('t', 0, 64, velocity, 0.05, levelScale)},
-          {at: offAt, action: e => e.noteOff('t', 0, 64, offAt)}
+        const note = (velocity, offAt, levelScale = 1, pitch = 64) => playEvents(3, [
+          {at: 0.05, action: e => e.noteOn('t', 0, pitch, velocity, 0.05, levelScale)},
+          {at: offAt, action: e => e.noteOff('t', 0, pitch, offAt)}
         ], {preset: sound}).then(run => run.channel)
         const heldChannel = await note(98, 0.55)
         const heldPeak = peak(heldChannel)
@@ -259,6 +259,13 @@ const server = http.createServer((request, response) => {
         }
         const heldRms = rms(heldChannel)
         const relativeDb = channel => +(20 * Math.log10(rms(channel) / Math.max(heldRms, 1e-9))).toFixed(1)
+        const registers = []
+        for (const pitch of [36, 60, 84, 96]) {
+          const channel = await note(98, 0.55, 1, pitch)
+          registers.push({pitch, peak: +peak(channel).toFixed(4), rms: +rms(channel).toFixed(6),
+            centroidHz: centroidHz(channel, Math.round(0.2 * sampleRate)),
+            nonFinite: channel.reduce((count, sample) => count + !Number.isFinite(sample), 0)})
+        }
         sounds.push({
           name: sound.name,
           peak: +heldPeak.toFixed(4),
@@ -266,12 +273,16 @@ const server = http.createServer((request, response) => {
           centroidHz: centroidHz(heldChannel, Math.round(0.2 * sampleRate)),
           plantPercent: Math.round(100 * peak(await note(98, 0.077)) / Math.max(heldPeak, 1e-9)),
           calibrationDb: relativeDb(await note(24, 0.55, BIOTRON_CALIBRATION.localLevel)),
+          previousCalibrationDb: relativeDb(await note(24, 0.55, 0.025)),
+          registers,
           lightDb: relativeDb(await note(68, 0.55, BIOTRON_CALIBRATION.lightLevel))
         })
       }
 
       return {plantNote, dynamics, thdPercent, eightVoices, release, panicClick, sounds}
     })
+
+    console.log('SOUND_LEVEL_METRICS ' + JSON.stringify(metrics))
 
     // Plant-note and click thresholds carried over from the previous engine's
     // gates; dynamics and THD specified for this one.
@@ -294,22 +305,26 @@ const server = http.createServer((request, response) => {
     assert(metrics.panicClick.settledDelta <= 0.0005,
       `panic settled-tail delta ${metrics.panicClick.settledDelta} can produce an audible click`)
 
-    // Level bands, checked on every sound (2026-09-04, measured on all seven):
-    // the calibration cue keeps the previous engine's band -36..-18 dB below a
-    // velocity-98 plant note (measured -33.7..-34.5 dB); light-sensor notes
-    // must stay a background layer (<= -8 dB, the previous ceiling) and stay
-    // audibly above the cue (>= cue + 6 dB) so a broken lightLevel cannot
-    // mute them silently. Measured -18.8..-19.6 dB, which is ~2.5 dB below the
-    // lightest Humanize touch (velocity 8: -16.2..-17.0 dB); whether that is
-    // too quiet is Andrey's ear call (lightLevel 0.12 → -16 dB, 0.16 → -14 dB,
-    // 0.20 → -13 dB), so the previous -18 dB floor is deliberately not gated.
+    // Sergey reported an inaudible cue (2026-10-08). Raising localLevel
+    // 0.025 -> 0.14 gives about +12 dB after the velocity curve; keep it below plant playback and prove
+    // that improvement against a rendered old-level control for every sound.
+    // The light layer has its own band; its level must not depend on the cue.
     for (const sound of metrics.sounds) {
-      assert(sound.calibrationDb <= -18 && sound.calibrationDb >= -36,
-        `${sound.name}: calibration cue at ${sound.calibrationDb} dB is outside -36..-18 dB`)
-      assert(sound.lightDb <= -8, `${sound.name}: light-sensor notes at ${sound.lightDb} dB are above the -8 dB background ceiling`)
-      assert(sound.lightDb >= sound.calibrationDb + 6,
-        `${sound.name}: light-sensor notes at ${sound.lightDb} dB are not audibly above the calibration cue (${sound.calibrationDb} dB)`)
+      assert(sound.calibrationDb <= -18 && sound.calibrationDb >= -24,
+        `${sound.name}: calibration cue at ${sound.calibrationDb} dB is outside -24..-18 dB`)
+      const improvement = sound.calibrationDb - sound.previousCalibrationDb
+      assert(improvement >= 11 && improvement <= 13,
+        `${sound.name}: cue improvement ${improvement} dB is outside 11..13 dB`)
+      assert(sound.lightDb <= -8 && sound.lightDb >= -24,
+        `${sound.name}: light-sensor notes at ${sound.lightDb} dB are outside -24..-8 dB`)
+      for (const register of sound.registers) {
+        assert.strictEqual(register.nonFinite, 0, `${sound.name}: pitch ${register.pitch} produced non-finite audio`)
+        assert(register.peak > 0 && register.peak <= 1,
+          `${sound.name}: pitch ${register.pitch} is silent or exceeds digital full scale: ${register.peak}`)
+      }
     }
+    // These are spectra/level measurements, not a verdict on pleasantness.
+    console.log('REGISTER_METRICS ' + JSON.stringify(metrics.sounds.map(({name, registers}) => ({name, registers}))))
 
     const {sounds, ...gates} = metrics
     console.log('Elementary engine sound levels: ' + JSON.stringify(gates, null, 1))

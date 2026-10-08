@@ -8,7 +8,7 @@ export const BIOTRON_CALIBRATION = Object.freeze({
   cue: CUE, cueVelocityProfiles: VELOCITIES,
   legacyNotes: Object.freeze([91, 92]), legacyVelocity: 90,
   detectionNotes: 4, maxAlternationGapMs: 700, quietCompletionMs: 1100,
-  localLevel: 0.025, lightChannel: 2, lightLevel: 0.08
+  localLevel: 0.14, lightChannel: 2, lightLevel: 0.08
 })
 
 const matchesCue = (message, index, contract, profiles = contract.cueVelocityProfiles) =>
