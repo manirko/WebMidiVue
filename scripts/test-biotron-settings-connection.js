@@ -7,6 +7,7 @@ const script = source.match(/<script>([\s\S]*?)<\/script>/)[1]
 const context = {
   module: {exports: {}},
   process: {env: {}},
+  defineAsyncComponent: () => ({}),
   applySettingsVector() {},
   soundSessionState: {running: false},
   BiotronCommandsData: [],

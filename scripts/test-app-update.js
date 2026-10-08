@@ -21,6 +21,7 @@ async function main() {
   let stops = 0, requests = 0
   const context = {window: {addEventListener() {}, removeEventListener() {}}, document: {},
     module: {exports: {}}, exports: {}, require: name => {
+    if (name === 'vue') return {defineAsyncComponent: () => ({})}
     if (name === '@/appUpdateSafety.mjs') return safety
     if (name === '@/audio/sessionState.mjs') return {stopPersistentSound: () => { stops++; return stop() }}
     if (name === '@pwa-entry') return {requestAppUpdate: async canReload => {
