@@ -2,7 +2,7 @@
   <section class="audio-compare" :class="{'audio-compare--embedded': embedded}" :data-variant="variant.id">
     <DeviceTaskNav v-if="!embedded" device-name="Biotron" active-task="settings" play-route="/biotron/play" settings-route="/biotron" />
     <h1 v-if="!embedded">Compare sounds</h1>
-    <p>Choose a sound to use it immediately. It stays selected while you adjust settings and when you reopen this browser.</p>
+    <p>Choose a sound for the browser synth. It stays selected while you adjust settings and when you reopen this browser.</p>
     <div class="compare-groups" role="group" aria-label="Sound experiment group">
       <button v-for="group in banks" :key="group.id" type="button" class="btn btn-outline-primary" :class="{active: bankId === group.id}" :aria-pressed="bankId === group.id" @click="changeBank(group.id)">{{ group.label }}</button>
     </div>
@@ -12,6 +12,7 @@
     </select>
     <p class="compare-description">{{ variant.description }}</p>
     <template v-if="player">
+      <p class="compare-current" aria-live="polite">Selected: {{ variant.label }}<span v-if="player.audioState === 'running'"> · Active sound: {{ player.appliedSoundName }}</span></p>
       <div class="compare-actions">
         <button type="button" class="btn btn-primary" @click="play"
           :disabled="player.releaseBlocked || (!player.engine && !player.canStartReveal)">{{ player.midi?.input ? 'Stop & release Biotron' : player.starting && !player.examplePlaying ? 'Cancel connection' : 'Play with Biotron' }}</button>
@@ -22,7 +23,8 @@
       <p v-if="bankId === 'calibration'">This changes the calibration cue only. Plant notes keep their ordinary sound. Stop and start Biotron to recalibrate.</p>
       <p v-else-if="bankId === 'high-notes'">Changes begin above C5. Middle notes stay the same; the three-register option also changes bass notes.</p>
       <label class="compare-volume" for="compare-volume"><span>Volume</span><input id="compare-volume" type="range" min="0" max="100" step="1" :value="player.volume" @input="player.updateVolume"><output>{{ player.volume }}%</output></label>
-      <label class="compare-quality"><input type="checkbox" v-model="player.lowCpu" :disabled="Boolean(player.engine)"> Low CPU</label>
+      <label class="compare-quality"><input type="checkbox" :checked="player.lowCpu" @change="player.changeQuality($event)" :disabled="player.starting || player.releaseBlocked"> Low CPU</label>
+      <small>4 voices instead of 8. Changing this stops sound; press Play again.</small>
       <KeyboardControls />
       <p role="status" aria-live="polite">{{ storageMessage || player.status }}</p>
     </template>
@@ -47,7 +49,7 @@ export default {
   },
   mounted() { restoreSoundExperiment(resolveAudition) },
   methods: {
-    changeBank(id) { this.choose(id, this.banks.find(bank => bank.id === id).variants[0].id) },
+    changeBank(id) { if (id !== this.bankId) this.choose(id, this.banks.find(bank => bank.id === id).variants[0].id) },
     choose(bankId, variantId) {
       const selection = resolveAudition(bankId, variantId)
       if (!selection) return

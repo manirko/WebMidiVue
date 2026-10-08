@@ -132,6 +132,14 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
       this.resetVoiceUi()
       this.status = 'All notes stopped'
     },
+    async changeQuality(event) {
+      if (this.starting || this.releaseBlocked) { event.target.checked = this.lowCpu; return }
+      const previous = this.lowCpu, safe = event.target.checked
+      this.lowCpu = safe
+      if (this.engine) await this.stop()
+      if (this.releaseBlocked) { this.lowCpu = previous; return }
+      this.status = `${safe ? 'Low CPU: 4 voices' : 'Standard: 8 voices'}. Press Play to start again.`
+    },
     applySelectedSound() {
       const engine = this.engine, sound = this.selectedSound
       this.presetTask = markRaw(this.presetTask.catch(() => {}).then(async () => {
@@ -168,7 +176,7 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
       this.status = `Example: ${variant.label}`
       for (const event of events) schedule(() => {
         if (engine !== this.engine || !this.examplePlaying) return
-        if (event.type === 'on') engine.noteOn('audition', 0, event.note, event.velocity, engine.context.currentTime, variant.level ?? 1)
+        if (event.type === 'on') engine.noteOn('audition', 0, event.note, event.velocity, engine.context.currentTime, this.audition.variant.level ?? 1)
         else engine.noteOff('audition', 0, event.note)
         this.voiceCount = engine.activeVoiceCount
       }, event.at)

@@ -7,7 +7,7 @@
     :data-example="examplePlaying ? 'playing' : 'idle'"
     :data-example-timers="exampleTimers.size"
     :data-sound="engine ? appliedSoundName : null"
-    :data-quality="lowCpu ? 'safe' : 'standard'"
+    :data-quality="engine?.quality || (lowCpu ? 'safe' : 'standard')"
     :data-tab-lease="tabLeaseState"
     :data-reveal-stage="revealMode ? revealStage : null"
     :data-volume="volume"
@@ -120,12 +120,13 @@
       <label class="sound-lab__quality">
         <input
           type="checkbox"
-          v-model="lowCpu"
-          :disabled="Boolean(engine) || releaseBlocked"
+          :checked="lowCpu" @change="changeQuality"
+          :disabled="starting || releaseBlocked"
           aria-label="Low CPU — use if sound crackles"
         >
         Low CPU
       </label>
+      <small>Low CPU uses 4 voices; standard uses 8. Changing this stops sound. Press Play to start again.</small>
       <label class="sound-lab__volume" for="sound-lab-volume">
         <span>Volume</span>
         <input
@@ -333,7 +334,7 @@ export default {
   watch: {
     keyboardOctave() { this.releaseHeldKeyboard() },
     selectedSound() { void this.applySelectedSound() },
-    audition() { if (this.examplePlaying) void this.stop() },
+    audition(next, previous) { if (this.examplePlaying && next?.bankId !== previous?.bankId) void this.stop() },
     revealStage(stage) { trace('stage', stage); if (this.revealMode) recordBiotronEvent('play.stage_changed', {stage}) }
   },
   methods: {

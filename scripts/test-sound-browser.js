@@ -507,7 +507,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await page.locator('.sound-lab[data-audio-state="running"][data-quality="safe"][data-tab-lease="held"]').waitFor()
     const constrainedStartMilliseconds = Date.now() - constrainedStart
     assert(constrainedStartMilliseconds < 5000, `6x-throttled Low CPU start took ${constrainedStartMilliseconds} ms`)
-    assert.strictEqual(await page.getByLabel('Low CPU').isDisabled(), true)
+    assert.strictEqual(await page.getByLabel('Low CPU').isDisabled(), false)
     for (const code of ['KeyA', 'KeyW', 'KeyS', 'KeyE', 'KeyD', 'KeyF', 'KeyT', 'KeyG']) {
       await page.dispatchEvent('body', 'keydown', {code, key: code})
     }
