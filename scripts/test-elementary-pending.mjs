@@ -197,7 +197,7 @@ function soundStartupFixture(engines) {
   let nextTimer = 0
   let releases = 0
   const context = {
-    module: {exports: {}}, markRaw: value => value, defineAsyncComponent: () => ({}), CompatibilityNotice: {}, DeviceTaskNav: {}, GardenVisual: {}, WakeVolume: {},
+    module: {exports: {}}, markRaw: value => value, defineAsyncComponent: () => ({}), CompatibilityNotice: {}, DeviceTaskNav: {}, DiagnosticCopy: {}, GardenVisual: {}, WakeVolume: {},
     window: {
       setTimeout(callback, delay) { timers.set(++nextTimer, {callback, delay}); return nextTimer },
       clearTimeout(id) { timers.delete(id) }

@@ -60,8 +60,7 @@
     </div>
     <details v-if="betaBuild" class="diagnostic-copy mt-3">
       <summary>Connection details &amp; diagnostics</summary>
-      <button type="button" class="btn btn-outline-secondary btn-sm" @click="copyDiagnosticInfo">Copy diagnostics for Andrey</button>
-      <small class="d-block mt-1 text-muted">{{ diagnosticMessage || "Copies technical version, browser, connection and device state. Technical events sent online. Copy more details here." }}</small>
+      <DiagnosticCopy :packet="settingsDiagnosticPacket" label="Copy diagnostics for Andrey" />
     </details>
     <UpdateFirmwareComponent v-if="betaBuild && firmwareTestEnabled" class="w-100 mt-3" text="Update firmware" repo="Playtronica/biotron-firmware" :device="device" :current-version="firmwareVersion" version-aware @check_firmware="checkFirmware"/>
     </section>
@@ -413,13 +412,14 @@ import UpdateFirmwareComponent from "@/components/MidiComponents/UpdateFirmwareC
 import LoaderComponent from "@/components/MidiComponents/LoaderComponent.vue";
 import BootstrapCollapse from "@/components/BootstrapCollapse.vue";
 import DeviceTaskNav from "@/components/DeviceTaskNav.vue";
+import DiagnosticCopy from "@/components/DiagnosticCopy.vue";
 import {createListenerScope} from "@/assets/js/ListenerScope.mjs";
 import {withPresetFeedback} from "@/assets/js/PresetsIDB.js";
 import {soundSessionState, stopPersistentSound, updateSoundSession} from "@/audio/sessionState.mjs";
 import {
   applySettingsVector,
   applyCalmerPlay,
-  copyBiotronDiagnostic,
+  buildSettingsDiagnostic,
   savedSettingsMessage,
   sendBiotronSettings,
   settingsVectorFromCommands,
@@ -427,6 +427,7 @@ import {
 } from "@/biotron/settingsReadback.mjs";
 export default  {
   components: {
+    DiagnosticCopy,
     DeviceTaskNav,
     BootstrapCollapse,
     LoaderComponent,
@@ -473,8 +474,8 @@ export default  {
   watch: {settingsState(state, previous) { if (this.betaBuild) recordSettingsState(state, previous, this.firmwareVersion) }},
   methods: {
     ...createSettingsConnectionMethods({settingsVectorFromCommands, settingsVectorsEqual, savedSettingsMessage}),
-    async copyDiagnosticInfo() {
-      this.diagnosticMessage = await copyBiotronDiagnostic(this, process.env.VUE_APP_BUILD_ID || "local-build")
+    settingsDiagnosticPacket() {
+      return buildSettingsDiagnostic(this, process.env.VUE_APP_BUILD_ID || "local-build")
     },
     async handleDeviceChanged(device) {
       this.clearLiveVerification()
@@ -788,7 +789,6 @@ export default  {
       liveVerifyId: 0,
       lastChangedSetting: "",
       firmwareVersion: "",
-      diagnosticMessage: "",
       commands_data: Object.fromEntries(BiotronCommandsData),
     }
   },

@@ -21,11 +21,11 @@ assert(!app.includes('<router-link to="/sound"'),
   'Sound must not appear beside physical devices in the top-level menu')
 assert(app.includes('mailto:manirko@playtronica.com'),
   'the beta must offer a direct feedback channel to Andrey')
-assert(app.includes('What is the one thing you most want me to change or build') &&
+assert(app.includes('What would make Biotron better?') &&
   !app.includes('Where did you hesitate or get a result you did not expect?'),
   'the beta feedback action must ask one low-effort question')
-assert(app.includes('Nothing is sent automatically.'),
-  'the feedback action must explain that opening an email does not send it')
+assert(app.includes('Your text stays on this page.') && app.includes('Copy feedback'),
+  'feedback must support local input and copying without requiring email')
 assert(app.includes('v-if="betaBuild && !firstPlay"'),
   'first play must use its task-specific result prompt instead of a second generic prompt')
 assert(app.includes('More tools → Apps → Install this site as an app.'),
@@ -62,7 +62,7 @@ assert(settingsReadback.includes('Note Hold changes note length, not the LEDs.')
   selector.includes('Release device for DAW'),
   'a verified save must be dismissible without releasing the separate DAW port')
 assert(biotron.includes('Copy diagnostics for Andrey') &&
-  biotron.includes('Technical events sent online.') &&
+  app.includes('Technical events are sent online.') &&
   app.includes('What is collected') &&
   settingsReadback.includes('buildBiotronDiagnosticPacket'),
   'the beta must disclose automatic technical events and retain manual detailed diagnostics')

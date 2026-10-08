@@ -70,7 +70,7 @@
             <p>Incoming notes move the visual. To hear them, the browser audio must also be running.</p>
             <ol><li>Check Volume here and on your computer or phone.</li><li>Check which speakers or headphones your device is using.</li><li v-if="audioState !== 'running'">Press Resume sound if available, or stop and start listening again.</li><li v-else>If notes are arriving but you hear nothing, try a different sound below.</li></ol>
             <p class="play-audio-state">Browser audio: {{ audioState === 'running' ? 'running' : audioState }}. Only you can confirm that sound is audible.</p>
-            <div class="sound-lab__diagnostic"><button type="button" class="btn btn-outline-secondary btn-sm" @click="copyPlayDiagnostics">Copy diagnostics</button><small>{{ diagnosticMessage || 'Copies audio, MIDI and version details for support.' }}</small></div>
+            <DiagnosticCopy class="sound-lab__diagnostic" :packet="playDiagnosticPacket" />
             <div v-if="firstSoundOutcome" class="sound-lab__task-feedback"><h3>Can you hear the notes?</h3><div class="sound-lab__reveal-actions"><a :href="firstSoundFeedbackUrl('helped')" @click="recordFirstSound('heard')" class="btn btn-outline-dark" target="_blank" rel="noopener">Yes — WhatsApp</a><a :href="firstSoundFeedbackUrl('not_yet')" @click="recordFirstSound('not_heard')" class="btn btn-outline-dark" target="_blank" rel="noopener">Not yet — WhatsApp</a></div><small>Opens a draft with the version and stop point. Send it to share.</small></div>
           </details>
         </div>
@@ -215,6 +215,7 @@ import {BIOTRON_CALIBRATION, biotronVoiceLevel, BiotronCalibrationTracker, parse
 import {getRevealProfile, selectRevealInput} from '@/audio/revealProfiles.mjs'
 import {detectSoundCapabilities, soundCapabilityMessage} from '@/audio/capabilities.mjs'
 import DeviceTaskNav from '@/components/DeviceTaskNav.vue'
+import DiagnosticCopy from '@/components/DiagnosticCopy.vue'
 import CompatibilityNotice from '@/components/CompatibilityNotice.vue'
 import {biotronFirstSoundFeedbackUrl, buildMidiAdvisory, detectPlatformCapabilities, recordBiotronEvent} from '@/compatibility.mjs'
 
@@ -244,7 +245,7 @@ function audioWithin(task, milliseconds, message) {
 const resumeAudioWithin = engine => audioWithin(engine.resume(), 3500, 'Audio resume timed out.')
 export default {
   name: 'SoundLab',
-  components: {CompatibilityNotice, DeviceTaskNav, GardenVisual, WakeVolume},
+  components: {CompatibilityNotice, DeviceTaskNav, DiagnosticCopy, GardenVisual, WakeVolume},
   props: {
     mode: {type: String, default: 'lab'},
     profileId: {type: String, default: ''}
@@ -281,7 +282,6 @@ export default {
       audioState: 'closed',
       resumeOutcome: 'not_attempted',
       resumeAttemptId: 0,
-      diagnosticMessage: '',
       voiceCount: 0,
       lowCpu: this.mode === 'reveal',
       starting: false,
@@ -790,8 +790,7 @@ export default {
 .sound-lab section { margin-top: 2rem; }
 .sound-lab__controls, .sound-lab__variants, .sound-lab__midi-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .sound-lab__status { min-height: 1.5rem; padding-left: .5rem; color: #625e58; }
-.sound-lab__diagnostic { display: flex; flex-direction: column; align-items: flex-start; gap: .3rem; margin-top: .5rem; }
-.sound-lab__diagnostic small { color: #625e58; }
+.sound-lab__diagnostic { margin-top: .5rem; }
 .sound-lab__quality { display: inline-flex; min-height: 44px; align-items: center; gap: .4rem; margin: 0; padding: 0 .35rem; white-space: nowrap; }
 .sound-lab__quality input { width: 1.1rem; height: 1.1rem; }
 

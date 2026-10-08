@@ -11,10 +11,10 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'presets-idb-'))
 const entry = path.join(scratch, 'entry.js')
 const bundle = path.join(scratch, 'bundle.js')
 fs.writeFileSync(entry,
-  `export {Db, withPresetFeedback} from ${JSON.stringify(path.join(root, 'src/assets/js/PresetsIDB.js'))}\n`)
+  `export {Db, withPresetFeedback} from ${JSON.stringify(path.join(root, 'src/assets/js/PresetsIDB.js'))}\nexport {BiotronDb} from ${JSON.stringify(path.join(root, 'src/components/BiotronPage/BiotronIDB.js'))}\n`)
 process.once('exit', () => fs.rmSync(scratch, {recursive: true, force: true}))
 execFileSync('npx', ['--yes', 'esbuild@0.24.0', entry, '--bundle', '--format=iife',
-  '--global-name=__Presets', `--outfile=${bundle}`, '--log-level=error'], {cwd: root})
+  '--global-name=__Presets', `--alias:@=${path.join(root,'src')}`, `--outfile=${bundle}`, '--log-level=error'], {cwd: root})
 
 const server = http.createServer((request, response) => {
   if (request.url === '/bundle.js') {
@@ -166,6 +166,26 @@ const server = http.createServer((request, response) => {
       return {upgrade: 'preserved', transactions: 'commit/abort', faults: 'open/blocked/quota/missing', feedback: 'after completion'}
     }, result)
     assert.equal(cases.upgrade, 'preserved')
+    await page.evaluate(async () => {
+      const {BiotronDb, Db} = window.__Presets
+      const check = (value, message) => { if (!value) throw Error(message) }
+      const db = new BiotronDb()
+      await db.ready
+      const fresh = await db.getPatch()
+      check(fresh.length === 4, 'built-in Biotron preset count changed')
+      check(fresh.every(patch => patch.data.minPlantVelocity >= 1 && patch.data.minLightVelocity >= 1), 'fresh Humanize starts at zero')
+      const fast = fresh.find(patch => patch.name === 'Fast role')
+      const oldData = {...fast.data, minPlantVelocity: 0, minLightVelocity: 0}
+      await db.updatePatch(fast.id, oldData)
+      const selected = await db.getPatch(fast.id)
+      check(selected.data.minPlantVelocity === 1 && selected.data.minLightVelocity === 1, 'exact old built-in was not refreshed')
+      const raw = await Db.prototype.getPatch.call(db, fast.id)
+      check(raw.data.minPlantVelocity === 0, 'reading migrated the database silently')
+      const user = await db.createPatch(oldData, 'Fast role')
+      check((await db.getPatch(user)).data.minPlantVelocity === 0, 'user preset zero was changed')
+      await db.updatePatch(fast.id, {...oldData, plantBpm: oldData.plantBpm + 1})
+      check((await db.getPatch(fast.id)).data.minPlantVelocity === 0, 'edited locked preset was changed')
+    })
     console.log('Preset IndexedDB regression passed:', JSON.stringify(cases))
   } finally {
     await browser.close()

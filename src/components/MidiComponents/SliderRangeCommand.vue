@@ -1,6 +1,5 @@
 <script>
 import {SysExCommand} from "@/assets/js/SysExCommand"
-import "@/../node_modules/multi-range-slider-vue/MultiRangeSliderBarOnly.css"
 import Slider from '@vueform/slider'
 import HintComponent from "@/components/HintComponent.vue";
 

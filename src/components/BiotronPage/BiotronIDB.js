@@ -145,6 +145,17 @@ const mixolyd = {
 }
 
 
+const builtinPresets = [
+    {data: mixolyd, name: "Mixolyd (Default)"},
+    {data: fast_role_preset, name: "Fast role"},
+    {data: the_performer_mode, name: "The Performer mode"},
+    {data: in_discussion, name: "In Discussion"},
+]
+const audibleHumanize = data => ({...data,
+    minPlantVelocity: Math.max(1, data.minPlantVelocity),
+    minLightVelocity: Math.max(1, data.minLightVelocity),
+})
+
 export class BiotronDb extends Db {
     DB_NAME = "BiotronDB"
     STORE_NAME = "Biotron_Patches"
@@ -152,11 +163,21 @@ export class BiotronDb extends Db {
 
     constructor() {
         super(BiotronCommandsData)
-        this.ready = this.initialize([
-            {data: mixolyd, name: "Mixolyd (Default)"},
-            {data: fast_role_preset, name: "Fast role"},
-            {data: the_performer_mode, name: "The Performer mode"},
-            {data: in_discussion, name: "In Discussion"},
-        ])
+        this.ready = this.initialize(builtinPresets.map(preset => ({...preset, data: audibleHumanize(preset.data)})))
+    }
+
+    async getPatch(id) {
+        const result = await super.getPatch(id)
+        // Refresh only an exact old, locked factory preset when it is selected.
+        // No database migration or write to a connected device; explicit user
+        // zeros, edited/imported presets and live readback remain unchanged.
+        const refresh = patch => {
+            if (!patch || patch.editable) return patch
+            const builtin = builtinPresets.find(preset => preset.name === patch.name)
+            if (!builtin || Object.keys(patch.data).length !== Object.keys(builtin.data).length ||
+                !Object.entries(builtin.data).every(([key, value]) => patch.data[key] === value)) return patch
+            return {...patch, data: audibleHumanize(patch.data)}
+        }
+        return Array.isArray(result) ? result.map(refresh) : refresh(result)
     }
 }

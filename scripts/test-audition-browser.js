@@ -2,6 +2,12 @@ const assert=require('node:assert/strict'),path=require('node:path'),fs=require(
 const {chromium,devices}=require('playwright-core')
 const {chromePath,createStaticServer}=require('./browser-test-harness')
 const server=createStaticServer(path.resolve(__dirname,'..','dist'))
+const artifacts=process.env.AUDITION_BROWSER_OUTPUT||`/private/tmp/biotron-audition-browser-${Date.now()}`
+fs.mkdirSync(artifacts,{recursive:true})
+let page,stage='launch',starts=0
+const progress=[]
+const mark=value=>{stage=value;progress.push({stage,starts,at:new Date().toISOString()});fs.writeFileSync(path.join(artifacts,'progress.json'),JSON.stringify(progress,null,2))}
+const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()=>resolve({unavailable:'page did not respond within 1500ms'}),1500))])
 ;(async()=>{
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
  const browser=await chromium.launch({executablePath:chromePath(),headless:true})
@@ -25,7 +31,8 @@ const server=createStaticServer(path.resolve(__dirname,'..','dist'))
    }
    Object.defineProperty(navigator,'requestMIDIAccess',{configurable:true,value:()=>{window.__comparisonMidiRequests++;throw new Error('comparison must not request MIDI')}})
   })
-  const page=await context.newPage(),errors=[];page.setDefaultTimeout(8000)
+  page=await context.newPage();const errors=[];page.setDefaultTimeout(8000)
+  await context.tracing.start({screenshots:true,snapshots:true})
   page.on('pageerror',error=>errors.push(error.message))
   await page.goto(`http://127.0.0.1:${server.address().port}/#/biotron/compare`)
   await page.getByRole('heading',{name:'Compare sounds',exact:true}).waitFor()
@@ -42,19 +49,25 @@ const server=createStaticServer(path.resolve(__dirname,'..','dist'))
    const options=await page.locator('#compare-variant option').evaluateAll(elements=>elements.map(element=>element.value))
    assert.equal(options.length,10)
    for(const id of options){
+    mark(`option ${group}/${id}: click Play`)
     await page.getByLabel('Option',{exact:true}).selectOption(id)
     await page.getByRole('button',{name:'Play example',exact:true}).click()
     await page.locator('.audio-compare[data-phase="playing"][data-audio-state="running"]').waitFor()
     await page.waitForFunction(()=>Number(document.querySelector('.audio-compare')?.dataset.activeVoices)>0)
-    await page.getByRole('button',{name:'Stop example',exact:true}).click();await stopped();cases++
+    await page.getByRole('button',{name:'Stop example',exact:true}).click();await stopped();cases++;starts++
+    mark(`option ${id}: released`)
    }
   }
   // Same page, 100 actual starts/closes: a fresh offline page is not this oracle.
   for(let index=cases;index<100;index++){
+   mark(`repeat ${index+1}: click Play`)
    await page.getByRole('button',{name:'Play example',exact:true}).click()
+   mark(`repeat ${index+1}: waiting for audio`)
    await page.locator('.audio-compare[data-phase="playing"][data-audio-state="running"]').waitFor()
-   await page.getByRole('button',{name:'Stop example',exact:true}).click();await stopped()
+   await page.getByRole('button',{name:'Stop example',exact:true}).click();await stopped();starts++
+   mark(`repeat ${index+1}: released`)
   }
+  mark('startup and release fault controls')
   await page.evaluate(()=>window.__delayModule=true)
   await page.getByRole('button',{name:'Play example',exact:true}).click()
   await page.waitForFunction(()=>Boolean(window.__releaseModule))
@@ -119,6 +132,14 @@ const server=createStaticServer(path.resolve(__dirname,'..','dist'))
    await mobile.close()
   }
   assert.deepEqual(errors,[])
+  mark('PASS')
+  await context.tracing.stop({path:path.join(artifacts,'trace.zip')})
   console.log(`Comparison browser: ${cases}/30 real-engine option Play/Stop, 100 repeated starts/closes without timers/Blobs, cancelled module load, failed-close route protection/retry, suspend/background release, three natural completions, switch/route release, reference, no MIDI or inferred outcome, explicit local feedback/export and 320/iPhone layout passed.`)
- }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}
+ }catch(error){
+  const state=await boundedCapture(page?.evaluate(()=>({url:location.href,phase:document.querySelector('.audio-compare')?.dataset,contexts:window.__comparisonContexts.map(context=>({state:context.state,time:context.currentTime})),intervals:window.__comparisonIntervals.size,blobs:window.__comparisonBlobs.size,heap:performance.memory?.usedJSHeapSize})).catch(cause=>({unavailable:cause.message})))
+  fs.writeFileSync(path.join(artifacts,'failure.json'),JSON.stringify({stage,starts,error:error.message,state},null,2))
+  await boundedCapture(page?.screenshot({path:path.join(artifacts,'failure.png'),timeout:1000}).catch(()=>{}))
+  await boundedCapture(page?.context().tracing.stop({path:path.join(artifacts,'trace.zip')}).catch(()=>{}))
+  throw error
+ }finally{console.log(`Browser evidence: ${artifacts}`);await browser.close();await new Promise(resolve=>server.close(resolve))}
 })().catch(error=>{console.error(error);process.exitCode=1})

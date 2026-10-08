@@ -30,6 +30,9 @@ const observeUpdates = registration => {
   const checkWaiting = () => {
     if (navigator.serviceWorker.controller && registration.waiting && registration.waiting.state !== 'redundant') {
       publishUpdateStatus({available: true})
+      if (offlineStatus.code === 'SW_CACHE_INCOMPLETE') {
+        publishOfflineStatus('update-pending', false, 'SW_APP_UPDATE_PENDING')
+      }
     }
   }
   checkWaiting()
@@ -215,7 +218,9 @@ export const prepareOfflineAccess = () => {
     } catch (error) {
       if (generation === setupGeneration) {
         console.error('Could not prepare Settings for offline use:', error)
-        publishOfflineStatus('error', false, error.code || 'SW_SETUP_FAILED')
+        if (error.code === 'SW_CACHE_INCOMPLETE' && updateStatus.available) {
+          publishOfflineStatus('update-pending', false, 'SW_APP_UPDATE_PENDING')
+        } else publishOfflineStatus('error', false, error.code || 'SW_SETUP_FAILED')
       }
     }
     return getOfflineStatus()

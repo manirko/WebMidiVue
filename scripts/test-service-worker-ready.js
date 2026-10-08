@@ -138,6 +138,25 @@ function environment({ready = Promise.resolve({}), cached = true, controller = {
     env.cache.paths.push('/js/sound-lab.123.js')
     assert.equal((await bounded(module.prepareOfflineAccess())).ready, true, 'Incomplete cache retry failed')
 
+    // Opera GX report: a newer network shell with an old worker/cache has an
+    // explicit update available. Retry cannot make that old cache this build.
+    env = environment({cached: false})
+    env.worker.registration.waiting = {state: 'installed'}
+    module = await loadModule()
+    assert.deepStrictEqual(await bounded(module.prepareOfflineAccess()),
+      {state: 'update-pending', code: 'SW_APP_UPDATE_PENDING', ready: false})
+    assert.equal(env.reloads(), 0, 'Cache mismatch automatically reloaded the tab')
+
+    // Discovery may arrive after the cache check failed.
+    env = environment({cached: false})
+    module = await loadModule()
+    await module.prepareOfflineAccess()
+    env.worker.registration.waiting = {state: 'installed'}
+    env.worker.registration.emit('updatefound')
+    env.worker.registration.installing = {state: 'installed', addEventListener(type, changed) { this.changed = changed }, removeEventListener() {}}
+    env.worker.registration.emit('updatefound')
+    assert.equal(module.getOfflineStatus().code, 'SW_APP_UPDATE_PENDING')
+
     env = environment()
     env.window.caches.keys = () => new Promise(() => {})
     module = await loadModule()

@@ -76,12 +76,15 @@ const report = {
 // including bounded register DSP and the pinned renderer resource cleanup.
 // This is the scoped implementation budget, not firmware-owner/release approval.
 // Pool caps, dependency versions, largest component and listener limits stay fixed.
+// 08.10.2026 Sergey feedback: +1 shared diagnostic preview replaces two copy
+// paths; local feedback editor, footer, cache-update race and exact built-in
+// Humanize refresh. +99 lines, no backend, migration or dependency added.
 const limits = {
   eagerDeviceRouteImports: 0,
   sleepCalls: 0,
   unmanagedListenerFiles: 0,
-  sourceFiles: 69,
-  sourceLines: 10598,
+  sourceFiles: 70,
+  sourceLines: 10697,
   largestProductFileLines: 850
 }
 const violations = [

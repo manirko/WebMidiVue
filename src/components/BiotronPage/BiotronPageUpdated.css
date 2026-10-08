@@ -61,3 +61,15 @@
 .biotron-settings-beta :deep(.command-range-pair .col) { min-width:0; }
 .biotron-settings-beta :deep(.settings_elem .form-select) { padding-right:2.25rem; }
 .biotron-settings-beta :deep(.description_elem) { padding:16px; }
+.biotron-settings-beta :deep(.settings_input) {
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.biotron-settings-beta :deep(.settings_input::-webkit-slider-runnable-track) { height:6px; background:#d1d5db; border-radius:999px; }
+.biotron-settings-beta :deep(.settings_input::-moz-range-track) { height:6px; background:#d1d5db; border-radius:999px; }
+.biotron-settings-beta :deep(.settings_input::-webkit-slider-thumb) { appearance:none; width:18px; height:18px; margin-top:-6px; background:#fff; border:1px solid #8995a7; border-radius:50%; }
+.biotron-settings-beta :deep(.settings_input::-moz-range-thumb) { width:18px; height:18px; background:#fff; border:1px solid #8995a7; border-radius:50%; }
+.biotron-settings-beta :deep(.slider-blue) { --slider-connect-bg:#8995a7; --slider-handle-bg:#fff; --slider-handle-border:1px solid #8995a7; --slider-handle-width:18px; --slider-handle-height:18px; --slider-handle-ring-color:#315ee755; }
+.biotron-settings-beta :deep(.slider-handle),.biotron-settings-beta :deep(.slider-draggable) { cursor:pointer; }
+.biotron-settings-beta :deep(.settings_input:focus-visible) { outline:2px solid #315ee7; outline-offset:3px; border-radius:4px; }

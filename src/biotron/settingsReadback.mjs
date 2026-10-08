@@ -180,27 +180,14 @@ export function buildBiotronPlayDiagnosticPacket(state, environment = {}) {
   }
 }
 
-export async function copyBiotronPlayDiagnostic(state, environment = {}) {
-  const navigatorRef = environment.navigator || globalThis.navigator || {}
-  try {
-    await navigatorRef.clipboard.writeText(JSON.stringify(buildBiotronPlayDiagnosticPacket(state, environment), null, 2))
-    return 'Copied — paste it into your email or WhatsApp message.'
-  } catch {
-    return 'Copy was blocked by the browser. Send the version date shown at the top instead.'
-  }
-}
-
-export async function copyBiotronDiagnostic(page, buildId, environment = {}) {
-  const navigatorRef = environment.navigator || globalThis.navigator || {}
-  const packet = buildBiotronDiagnosticPacket({
+export function buildSettingsDiagnostic(page, buildId) {
+  return buildBiotronDiagnosticPacket({
     buildId, route: page.$route.path, device: page.device, firmwareVersion: page.firmwareVersion,
     settingsState: page.settingsState, calibrationState: page.calibrationState,
     soundRunning: page.soundSession.running,
-  }, environment)
-  try {
-    await navigatorRef.clipboard.writeText(JSON.stringify(packet, null, 2))
-    return "Copied — paste it into your email or WhatsApp message."
-  } catch {
-    return "Copy was blocked by the browser. Send the version date shown at the top instead."
-  }
+  })
+}
+
+export function formatBiotronDiagnostic(packet) {
+  return `Biotron diagnostics\nBrowser, connection and workflow details for support\n---\n${JSON.stringify(packet, null, 2)}`
 }

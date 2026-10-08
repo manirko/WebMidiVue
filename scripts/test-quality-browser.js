@@ -22,6 +22,11 @@ async function auditProfile(browser, origin, profile) {
   const context = await browser.newContext({...profile.options, reducedMotion: 'reduce'})
   context.setDefaultTimeout(5000)
   await context.addInitScript(hasMidi => {
+    window.__copiedText = ''
+    Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {writeText: async text => {
+      if (window.__blockClipboard) throw Error('Injected clipboard denial')
+      window.__copiedText = text
+    }}})
     window.__layoutShiftScore = 0
     new PerformanceObserver(list => {
       for (const entry of list.getEntries()) {
@@ -100,7 +105,43 @@ async function auditProfile(browser, origin, profile) {
   assert.deepStrictEqual(result.smallPrimaryTargets, [], `${profile.name}: primary target below 44px`)
   assert.deepStrictEqual(result.logo, {source: '/Logo-Black-280.webp', width: '280', height: '199'})
 
+  // Feedback is a local editor. No mail client, backend or recorded outcome is
+  // required to write, close/reopen or copy a rejection on a phone.
+  const feedbackPosts=[]
+  page.on('request', request=>{if(request.method()==='POST') feedbackPosts.push(request.postData()||'')})
+  await page.getByRole('button',{name:'Tell me what to change',exact:true}).click()
+  await page.getByLabel('Your feedback',{exact:true}).fill('Automated feedback fixture: too harsh, no favourite')
+  await page.getByRole('button',{name:'Copy feedback',exact:true}).click()
+  const feedback=await page.evaluate(()=>window.__copiedText)
+  assert(feedback.includes('Version:') && feedback.includes('Page: /biotron') && feedback.includes('too harsh'))
+  await page.getByRole('button',{name:'Close',exact:true}).click()
+  await page.getByRole('button',{name:'Tell me what to change',exact:true}).click()
+  assert((await page.getByLabel('Your feedback').inputValue()).includes('too harsh'))
+  await page.evaluate(()=>window.__blockClipboard=true)
+  await page.getByRole('button',{name:'Copy feedback',exact:true}).click()
+  await page.getByText('Copy was blocked. Select your text and copy it, or use Open email.',{exact:true}).waitFor()
+  await page.evaluate(()=>window.__blockClipboard=false)
+  assert(feedbackPosts.every(text=>!text.includes('too harsh')), 'feedback text was sent automatically')
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth), 'feedback overflows viewport')
+  assert.equal(await page.getByRole('link',{name:'Privacy',exact:true}).getAttribute('href'),'https://shop.playtronica.com/pages/privacy')
+
   if (profile.midi) {
+    await page.getByText('Connection details & diagnostics',{exact:true}).click()
+    await page.getByText('Show what will be copied',{exact:true}).click()
+    await page.waitForFunction(()=>document.querySelector('[aria-label="Diagnostic report"]')?.value.startsWith('Biotron diagnostics'))
+    const preview=await page.getByLabel('Diagnostic report',{exact:true}).inputValue()
+    await page.getByRole('button',{name:'Copy diagnostics for Andrey',exact:true}).click()
+    assert.equal(await page.evaluate(()=>window.__copiedText),preview, 'copied diagnostics differ from preview')
+    const packet=JSON.parse(preview.split('\n---\n')[1])
+    assert.equal(packet.device.connected,false)
+    assert.equal(packet.web_tool.route,'/biotron')
+    assert(!preview.includes('too harsh') && !preview.includes('minPlantVelocity') && !preview.includes('no personal data'))
+    await page.evaluate(()=>window.__blockClipboard=true)
+    await page.getByRole('button',{name:'Copy diagnostics for Andrey',exact:true}).click()
+    await page.getByText('Copy was blocked. Open the preview, select the report and copy it.',{exact:true}).waitFor()
+    await page.evaluate(()=>window.__blockClipboard=false)
+    const sliders=await page.locator('.biotron-settings-beta .slider-handle').evaluateAll(elements=>elements.map(element=>getComputedStyle(element).cursor))
+    assert(sliders.length && sliders.every(cursor=>cursor==='pointer'), 'settings slider uses a resize cursor')
     await page.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
     await page.getByRole('heading', {name: 'Plant music'}).waitFor()
     assert.strictEqual(await page.locator('.beta-feedback').count(), 0,

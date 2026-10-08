@@ -13,7 +13,7 @@ const context = {
   BiotronDb: class {},
 }
 for (const name of [
-  'DeviceTaskNav', 'BootstrapCollapse', 'LoaderComponent', 'UpdateFirmwareComponent',
+  'DeviceTaskNav', 'DiagnosticCopy', 'BootstrapCollapse', 'LoaderComponent', 'UpdateFirmwareComponent',
   'DeviceSelector', 'PatchSelector', 'SelectCommand', 'SliderRangeCommand',
   'SliderCommand', 'SwitchComponent', 'GroupOfCommands', 'FileDropArea',
 ]) context[name] = {}

@@ -26,7 +26,7 @@ function fixture() {
     KEYBOARD_CODE_TO_NOTE,
     window: {setTimeout, clearTimeout, __biotronTrace: []},
     trace: (kind, data) => events.push([kind, data]), recordBiotronEvent() {},
-    CompatibilityNotice: {}, DeviceTaskNav: {}, GardenVisual: {}, WakeVolume: {},
+    CompatibilityNotice: {}, DeviceTaskNav: {}, DiagnosticCopy: {}, GardenVisual: {}, WakeVolume: {},
     parseBiotronCalibrationState: message => message.calibration || null,
     selectRevealInput: inputs => inputs[0], MIDI_PROMPT_HINT: 'Allow MIDI',
     BIOTRON_CALIBRATION: {quietCompletionMs: 1100}, performance: {now: () => 100},

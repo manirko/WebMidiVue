@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import {buildBiotronDiagnosticPacket, buildBiotronPlayDiagnosticPacket} from "../src/biotron/settingsReadback.mjs"
+import {buildBiotronDiagnosticPacket, buildBiotronPlayDiagnosticPacket, formatBiotronDiagnostic} from "../src/biotron/settingsReadback.mjs"
 
 const packet = buildBiotronDiagnosticPacket({
   buildId: "abc123def456",
@@ -52,5 +52,9 @@ assert.equal(playPacket.workflow.resume_outcome, 'timed_out')
 assert.equal(playPacket.workflow.recent_events.length, 2)
 assert(!JSON.stringify(playPacket).includes('secret-id'))
 assert(!JSON.stringify(playPacket).includes('[144,60,99]'), 'raw MIDI payload entered support packet')
+const report = formatBiotronDiagnostic(playPacket)
+assert(report.startsWith('Biotron diagnostics\n'))
+assert.deepEqual(JSON.parse(report.split('\n---\n')[1]), playPacket)
+assert(!report.includes('no personal data'), 'Manual report contains browser and device identifiers')
 
 console.log("Biotron diagnostics contract: PASS")

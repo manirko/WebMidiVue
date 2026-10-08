@@ -3,9 +3,9 @@
 export function createSoundSessionEffects({resumeAudioWithin, trace, updateSoundSession,
   parseBiotronCalibrationState, BIOTRON_CALIBRATION}) {
   return {
-    async copyPlayDiagnostics() {
-      const {copyBiotronPlayDiagnostic} = await import(/* webpackChunkName: "biotron-diagnostics" */ '@/biotron/settingsReadback.mjs')
-      this.diagnosticMessage = await copyBiotronPlayDiagnostic({
+    async playDiagnosticPacket() {
+      const {buildBiotronPlayDiagnosticPacket} = await import(/* webpackChunkName: "biotron-diagnostics" */ '@/biotron/settingsReadback.mjs')
+      return buildBiotronPlayDiagnosticPacket({
         buildId: process.env.VUE_APP_BUILD_ID || 'local-build',
         route: this.$route?.path || '/biotron/play',
         device: this.midi?.input || null,

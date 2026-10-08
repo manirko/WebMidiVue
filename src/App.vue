@@ -25,9 +25,8 @@
   </header>
   <div v-if="betaBuild" class="beta-meta">
     <small class="beta-build"><span>Biotron beta</span> · {{ versionLabel }}</small>
-    <small class="beta-build">Technical events are sent online. <a href="/telemetry.html">What is collected</a></small>
   </div>
-  <div v-if="!firstPlay" class="offline-status-slot">
+  <div v-if="!firstPlay && offlineStatus.state !== 'update-pending'" class="offline-status-slot">
     <div
       v-if="offlineMessage"
       class="offline-status mx-auto mt-2 px-3 py-2"
@@ -82,11 +81,19 @@
       </main>
 
       <aside v-if="betaBuild && !firstPlay" class="beta-feedback mx-auto my-4 text-start" aria-labelledby="beta-feedback-title">
-        <small class="beta-feedback__eyebrow">Built with Biotron owners</small>
-        <p id="beta-feedback-title" class="beta-feedback__title">Help shape the next Biotron Settings</p>
-        <p class="text-secondary mb-3">I’m Andrey from Playtronica. I read every reply myself. Send me anything: what felt confusing, what worked, or even the craziest idea. I’ll try to build it and tell testers what changed.</p>
-        <a :href="feedbackMailto" class="btn btn-primary beta-feedback__action">Tell me what to change</a>
-        <small class="d-block mt-2 text-muted">Your email includes this version date. Nothing is sent automatically.</small>
+        <p id="beta-feedback-title" class="beta-feedback__title">What would make Biotron better?</p>
+        <p class="text-secondary mb-3">Tell Andrey what worked, what felt confusing, or what you would like to hear.</p>
+        <button ref="feedbackAction" type="button" class="btn btn-primary beta-feedback__action" :aria-expanded="feedbackOpen" aria-controls="feedback-editor" @click="openFeedback">Tell me what to change</button>
+        <form v-if="feedbackOpen" id="feedback-editor" class="mt-3" @submit.prevent="copyFeedback">
+          <label for="feedback-text">Your feedback</label>
+          <textarea ref="feedbackText" id="feedback-text" class="form-control my-2" rows="4" maxlength="2000" v-model="feedbackText"></textarea>
+          <div class="feedback-actions">
+            <button type="submit" class="btn btn-outline-primary" :disabled="!feedbackText.trim()">Copy feedback</button>
+            <a :href="feedbackMailto" class="btn btn-outline-secondary">Open email</a>
+            <button type="button" class="btn btn-outline-secondary" @click="closeFeedback">Close</button>
+          </div>
+          <p role="status" class="mt-2 mb-0">{{ feedbackMessage || 'Your text stays on this page. Copy it to send wherever you prefer.' }}</p>
+        </form>
         <details class="beta-compatibility">
           <summary>Browser &amp; phone compatibility</summary>
           <ul>
@@ -101,6 +108,15 @@
     </div>
     <footer v-if="!firstPlay" class="bottom-panel">
       <SocialLinks/>
+      <div v-if="betaBuild" class="beta-footer">
+        <nav aria-label="Support and privacy">
+          <a href="https://shop.playtronica.com/pages/privacy" target="_blank" rel="noopener">Privacy</a>
+          <a href="https://shop.playtronica.com/pages/terms" target="_blank" rel="noopener">Company &amp; terms</a>
+          <a href="mailto:support@playtronica.com">Contact support</a>
+          <a href="/telemetry.html">What is collected</a>
+        </nav>
+        <small>Playtronica OÜ · Technical events are sent online. Feedback text and copied diagnostics are sent only when you share them.</small>
+      </div>
     </footer>
   </div>
   </div>
@@ -144,6 +160,9 @@ export default {
       installed: runningStandalone(),
       showInstallHelp: false,
       offlineRetrying: false,
+      feedbackOpen: false,
+      feedbackText: '',
+      feedbackMessage: '',
       betaBuild: process.env.VUE_APP_BIOTRON_PWA_BETA === 'true',
       versionLabel: process.env.VUE_APP_VERSION_LABEL || 'Local preview'
     }
@@ -154,6 +173,7 @@ export default {
       if (this.appUpdate.error === 'AUDIO_RELEASE_FAILED') return 'Sound could not stop. Press Stop & release, then retry the app update.'
       if (this.appUpdate.error) return 'The app update did not finish. Check the connection, then try again.'
       if (this.appUpdate.reloadRequired) return 'A new version is active. Update this tab before switching views. Updating stops sound.'
+      if (this.offlineStatus.state === 'update-pending') return 'Update the app to finish offline setup. Updating stops sound and reloads this page.'
       return 'A new app version is ready. Updating stops sound and reloads this page.'
     },
     firstPlay() {
@@ -161,8 +181,11 @@ export default {
     },
     feedbackMailto() {
       const subject = `Biotron Settings beta feedback — ${this.versionLabel}`
-      const body = `What is the one thing you most want me to change or build — a problem, a sound, or even a crazy idea?\n\nVersion date: ${this.versionLabel}\nPage: ${this.$route.path}`
+      const body = this.feedbackReport
       return `mailto:manirko@playtronica.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    },
+    feedbackReport() {
+      return `Biotron feedback\nVersion: ${this.versionLabel}\nPage: ${this.$route.path}\n\n${this.feedbackText.trim()}`
     },
     offlineMessage() {
       if (this.offlineStatus.state === 'update-pending') return 'Update the app to reopen the current version offline.'
@@ -220,6 +243,21 @@ export default {
     window.removeEventListener("appinstalled", this.handleInstalled)
   },
   methods: {
+    closeFeedback() { this.feedbackOpen = false; this.$refs.feedbackAction?.focus() },
+    async openFeedback() {
+      this.feedbackOpen = true
+      await this.$nextTick()
+      this.$refs.feedbackText?.focus()
+    },
+    async copyFeedback() {
+      try {
+        await navigator.clipboard.writeText(this.feedbackReport)
+        this.feedbackMessage = 'Copied. Paste it into your message to Andrey.'
+      } catch {
+        this.feedbackMessage = 'Copy was blocked. Select your text and copy it, or use Open email.'
+        this.$refs.feedbackText?.select()
+      }
+    },
     handleAppUpdate(event) { this.appUpdate = event.detail },
     async updateApp() {
       if (this.appUpdating || this.appUpdate.updating) return
@@ -327,7 +365,10 @@ input:checked + .slider:before { transform:translateX(26px); }
 .wrapper { display:flex; flex-direction:column; min-height:100vh; }
 .route-stage { min-height:100vh; }
 .route-stage--compact { min-height:0; }
-.bottom-panel { height:60px; display:flex; justify-content:center; align-items:center; border-top:1px solid rgba(27,31,40,.1); }
+.bottom-panel { min-height:60px; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; border-top:1px solid rgba(27,31,40,.1); }
+.feedback-actions,.beta-footer nav { display:flex; flex-wrap:wrap; gap:.5rem 1rem; }
+.beta-footer { width:100%; max-width:760px; padding:1rem; font-size:var(--ui-text-small); }
+.beta-footer nav { justify-content:center; margin-bottom:.5rem; }
 input::-webkit-outer-spin-button,input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
 input[type="number"] { -moz-appearance:textfield; }
 @media (max-width:640px) { .offline-actions{display:flex;justify-content:center;margin:.5rem 0 0} }
