@@ -48,6 +48,12 @@ module.exports = {
         : 'src/components/SoundLab/DisabledSoundLab.vue')
     )
     config.resolve.alias.set(
+      '@audio-compare',
+      path.resolve(__dirname, biotronBeta
+        ? 'src/components/SoundLab/AudioCompare.vue'
+        : 'src/components/SoundLab/DisabledSoundLab.vue')
+    )
+    config.resolve.alias.set(
       '@compatibility-gate',
       path.resolve(__dirname, biotronBeta
         ? 'src/components/CompatibilityGate.vue'

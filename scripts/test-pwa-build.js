@@ -74,7 +74,11 @@ assert(!read(path.join('js', biotronBundle)).includes('Update to 1.9.8'),
   'general Biotron beta must not expose the firmware test updater')
 assert(serviceWorker.includes(`js/${biotronBundle}`), 'the lazy Biotron settings chunk is not available offline')
 assert(soundBundle, 'the beta build does not include the lazy sound lab')
-assert(read(path.join('js', soundBundle)).includes('Round Bright'), 'the sound lab does not include the seven sounds')
+const presetBundles = allJavascriptFiles.filter(file => read(path.join('js', file)).includes('Round Bright'))
+assert(presetBundles.length > 0, 'the beta build does not include the seven sound presets')
+for (const file of presetBundles) assert(serviceWorker.includes(`js/${file}`), 'shared sound presets are unavailable offline')
+const comparisonBundle = allJavascriptFiles.find(file => read(path.join('js', file)).includes('tone-reference'))
+assert(comparisonBundle && serviceWorker.includes(`js/${comparisonBundle}`), 'comparison banks are unavailable offline')
 assert(read(path.join('js', soundBundle)).includes('Plant music'), 'the beta build has no Biotron first-play reveal')
 assert(serviceWorker.includes(`js/${soundBundle}`), 'the sound lab chunk is not available offline')
 for (const unrelated of ['touchme', 'playtron', 'scales', 'scala', 'circle']) {

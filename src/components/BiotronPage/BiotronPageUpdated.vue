@@ -182,7 +182,7 @@
           <template v-slot:objects>
             <SliderCommand
                 command-label="Swing note"
-                description="Changes the timing of alternating beats. At 100%, beats are evenly spaced; lower values make one interval shorter and the next longer."
+                description="Changes the timing of alternating beats. At 100%, beats are evenly spaced; lower values make one interval shorter and the next longer. Used with the internal tempo; MIDI Clock sets its own timing."
                 :key="this.forceRerender"
                 :command-object="this.commands_data.swing_first_note_percent"
                 @input-changed="this.sys_ex_changed"

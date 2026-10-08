@@ -27,6 +27,8 @@ assert(!javascript.includes('service-worker.js'), 'service-worker registration l
 assert(!javascript.includes('Release device for DAW'), 'beta MIDI lifecycle leaked into the normal production bundle')
 assert(!javascript.includes('Play your device'), 'beta sound lab leaked into the normal production bundle')
 assert(!javascript.includes('Meet Biotron'), 'beta first-play experience leaked into the normal production bundle')
+assert(!javascript.includes('Three experiments, ten options each.'), 'audition page leaked into the normal production bundle')
+assert(!javascript.includes('tone-reference'), 'audition bank data leaked into the normal production bundle')
 assert(!javascript.includes('Round Bright'), 'beta synth presets leaked into the normal production bundle')
 assert(!javascript.includes('Compatibility check'), 'beta compatibility UI leaked into the normal production bundle')
 assert(!javascript.includes('needs a computer'), 'beta device advice leaked into the normal production bundle')

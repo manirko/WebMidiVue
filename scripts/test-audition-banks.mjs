@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import {readFileSync} from 'node:fs'
+import vm from 'node:vm'
 import {createHash} from 'node:crypto'
 import {AUDITION_BANKS, auditionEvents, auditionDuration} from '../src/audio/auditionBanks.mjs'
 import {SOUNDS, toSound} from '../src/audio/elementary/timbres.mjs'
@@ -55,4 +57,20 @@ test('upper treatments start above the middle register; only declared three-regi
     assert.throws(()=>toSound({...SOUNDS[0],registers:{upper}}),TypeError)
   }
   assert.throws(()=>toSound({...SOUNDS[0],registers:{upper:{startNote:72,endNote:84,voice:bank.variants[1].preset}}}),/Nested/)
+})
+
+
+test('an explicit rejection comment persists without forcing a favourite', () => {
+  const storage = new Map()
+  const source = readFileSync(process.env.AUDITION_COMPONENT_CONTROL_FILE || 'src/components/SoundLab/AudioCompare.vue', 'utf8')
+    .match(/<script>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace('export default', 'module.exports =')
+  const context = {DeviceTaskNav: {}, module: {exports: {}}, process: {env: {VUE_APP_BUILD_ID: 'fixture'}},
+    localStorage: {setItem(key, value) { storage.set(key, JSON.parse(value)) }}}
+  vm.runInNewContext(source, context)
+  const target = {feedback: {}, bankId: 'timbres', variant: {id: 'tone-reed'}, comment: 'Too sharp — no preferred option yet'}
+  for (const [key, method] of Object.entries(context.module.exports.methods)) target[key] = method.bind(target)
+  target.saveComment()
+  assert.equal(target.feedback.timbres.variantId, null)
+  assert.equal(target.feedback.timbres.commentForVariantId, 'tone-reed')
+  assert.equal(storage.get('biotron-audition-feedback-v1-fixture').timbres.comment, target.comment)
 })

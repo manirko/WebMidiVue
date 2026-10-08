@@ -26,7 +26,7 @@ const deviceMeta = productName => ({
 const playMeta = productName => ({...deviceMeta(productName), requiresAudio: true})
 
 const knownDirectRoutes = new Set([
-    '/biotron', '/biotron/play', '/biotron/update', '/touchme', '/touchme/test',
+    '/biotron', '/biotron/play', '/biotron/update', '/biotron/compare', '/touchme', '/touchme/test',
     '/touchme/standalone', '/playtron', '/playtron/test', '/scales',
     '/scales/test', '/scala', '/circle', '/sound'
 ])
@@ -66,7 +66,7 @@ if (betaBuild) {
         meta: {...playMeta('Biotron'), firstPlay: true}
     })
     routes.push({path: '/sound', component: SoundLab, meta: {requiresAudio: true, productName: 'Playtronica Sound'}})
-    routes.push({path: '/biotron/compare', component: () => import(/* webpackChunkName: "biotron-auditions" */ '@/components/SoundLab/AudioCompare.vue'), meta: {requiresAudio: true, productName: 'Biotron sound comparison'}})
+    routes.push({path: '/biotron/compare', component: () => import(/* webpackChunkName: "biotron-auditions" */ '@audio-compare'), meta: {requiresAudio: true, productName: 'Biotron sound comparison'}})
 }
 
 const router = createRouter({

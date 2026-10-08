@@ -119,8 +119,22 @@ export default {
       } catch (error) { this.releaseBlocked = true; this.phase = 'error'; this.status = error.message }
     },
     saveFeedback() { try { localStorage.setItem(feedbackKey, JSON.stringify(this.feedback)) } catch { this.status = 'Your browser could not save these choices. Download them instead.' } },
-    prefer() { this.feedback[this.bankId] = {variantId: this.variant.id, label: this.variant.label, comment: this.comment, settings: {preset: this.variant.preset, level: this.variant.level ?? 1, volume: this.volume, quality: this.lowCpu ? 'safe' : 'standard'}, enteredAt: new Date().toISOString()}; this.saveFeedback() },
-    saveComment() { if (this.feedback[this.bankId]) { this.feedback[this.bankId].comment = this.comment; this.saveFeedback() } },
+    prefer() {
+      this.feedback[this.bankId] = {
+        variantId: this.variant.id, label: this.variant.label, comment: this.comment,
+        commentForVariantId: this.variant.id, enteredAt: new Date().toISOString(),
+        settings: {preset: this.variant.preset, level: this.variant.level ?? 1,
+          volume: this.volume, quality: this.lowCpu ? 'safe' : 'standard'}
+      }
+      this.saveFeedback()
+    },
+    saveComment() {
+      // A listener can reject an option without voting for it.
+      const choice = this.feedback[this.bankId] || {variantId: null, label: 'No preference recorded.'}
+      this.feedback[this.bankId] = {...choice, comment: this.comment,
+        commentForVariantId: this.variant.id, commentEnteredAt: new Date().toISOString()}
+      this.saveFeedback()
+    },
     exportFeedback() {
       const blob = new Blob([JSON.stringify({schema: 'biotron-listening-feedback/v1', buildId, source: 'listener-entered preferences', choices: this.feedback}, null, 2)], {type: 'application/json'})
       const url = URL.createObjectURL(blob), link = document.createElement('a')

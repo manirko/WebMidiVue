@@ -112,7 +112,7 @@ Choices require a listener's explicit Prefer action and optional comment;
 playing is never LISTENED/APPROVED. Export includes buildId, exact preset,
 level/volume/quality and enteredAt. Defaults stay unchanged until human choice.
 The30-option implementation increases the reviewed source budget from67/10300
-to69/10584, adding bank data and a lazy comparison component. No voice-cap,
+to69/10598, adding bank data and a lazy comparison component. No voice-cap,
 firmware ABI, eager-route, dependency-version or largest-component increase.
 
 Fresh Sergey feedback13:00–13:12 UTC: status messages should read as text;
@@ -128,3 +128,12 @@ is not a raw-sample oracle throughout Sleep. Avoid claiming “clips disconnecte
 from silence, a timeout or stale telemetry. A short no-signal diagnostic needs
 raw sample timing/threshold evidence, a bounded state transition and independent
 firmware-owner review; keep valid low/unstable plant inputs and recovery intact.
+
+Full aa72d9f run preserved34PASS/2FAIL/6NOT RUN: a direct comparison import
+leaked presets into normal production; replace it with the existing build alias
+pattern and add a production bank-data oracle. The PWA oracle wrongly required
+shared presets to live in the SoundLab chunk; check their actual emitted chunk
+and precache instead. Real offline comparison already passed on that run.
+An explicit negative listening comment must save even without Prefer; an old-source
+negative control reproduces the discarded comment. Save a comment with no vote,
+then preserve that distinction in export. Machine fixtures remain non-human.
