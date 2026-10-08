@@ -567,3 +567,14 @@ test('audio-only fallback stays usable without Web Locks', async () => {
   lease.release()
   assert.equal(lease.held, false)
 })
+
+test('Stop before a delayed lock callback cannot leave a silent owner holding the lease', async () => {
+  let callback
+  const lease = new ExclusiveTabLease({request(name, options, handler) { callback = handler; return Promise.resolve() }})
+  const acquiring = lease.acquire()
+  lease.release()
+  await callback({name: 'delayed'})
+  assert.equal(await acquiring, false)
+  assert.equal(lease.held, false)
+  assert.equal(lease.releaseHold, null)
+})

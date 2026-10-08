@@ -53,7 +53,7 @@
   },
   "dependencies": {
     "@elemaudio/core": "^4.0.1",
-    "@elemaudio/web-renderer": "^4.0.3",
+    "@elemaudio/web-renderer": "4.0.3",
     "@fortawesome/fontawesome-free": "^6.7.2",
     "@popperjs/core": "^2.11.8",
     "@progress/kendo-file-saver": "^1.1.1",

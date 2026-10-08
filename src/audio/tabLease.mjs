@@ -7,6 +7,7 @@ export class ExclusiveTabLease {
     this.releaseHold = null
     this.acquirePromise = null
     this.task = null
+    this.generation = 0
   }
 
   async acquire() {
@@ -17,6 +18,7 @@ export class ExclusiveTabLease {
     }
     if (this.acquirePromise) return this.acquirePromise
 
+    const generation = this.generation
     this.acquirePromise = new Promise(resolve => {
       let settled = false
       const settle = value => {
@@ -30,7 +32,7 @@ export class ExclusiveTabLease {
           this.name,
           {mode: 'exclusive', ifAvailable: true},
           lock => {
-            if (!lock) {
+            if (!lock || generation !== this.generation) {
               settle(false)
               return false
             }
@@ -57,6 +59,7 @@ export class ExclusiveTabLease {
   }
 
   release() {
+    this.generation++
     if (!this.held) return
     if (!this.protected) {
       this.held = false

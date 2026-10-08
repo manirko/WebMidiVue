@@ -28,6 +28,39 @@ export {DEFAULT_VOLUME, normalizeVolume} from '../core.mjs'
 const REF_SMOOTH_TAU = 0.001
 const cancelledAudioStart = () => Object.assign(new Error('Audio start cancelled.'), {name: 'AbortError'})
 
+// WebRenderer 4.0.3 has no dispose API: its polling timer and module Blob URL
+// survive disconnect/AudioContext.close. Keep the version pinned and this
+// compatibility code here; the browser regressions measure both resources.
+function initializeRenderer(core, context, options, moduleUrls) {
+  const worklet = context.audioWorklet, addModule = worklet?.addModule
+  if (!addModule) return core.initialize(context, options)
+  // initialize calls addModule synchronously before its first await. Intercept
+  // only that call on this context, restore immediately, revoke after loading.
+  worklet.addModule = async function(url, options) {
+    const blob = typeof url === 'string' && url.startsWith('blob:')
+    if (blob) moduleUrls.add(url)
+    try { return await addModule.call(this, url, options) }
+    finally { if (blob) { moduleUrls.delete(url); URL.revokeObjectURL(url) } }
+  }
+  try { return core.initialize(context, options) }
+  finally { worklet.addModule = addModule }
+}
+
+function releaseRenderer(core) {
+  if (!core) return
+  globalThis.clearInterval(core._timer)
+  core._timer = null
+  for (const pending of core._promiseMap?.values() || []) pending.reject(cancelledAudioStart())
+  core._promiseMap?.clear()
+  // Keep the load reply available if Stop interrupts initialization; its late
+  // completion below performs disposal again, without creating an audio graph.
+  if (core._renderer) {
+    core._worklet.port.onmessage = null
+    core._worklet.port.close()
+    core.removeAllListeners?.()
+  }
+}
+
 // Voice slots on top of the victim rules VoiceLedger already has (releasing
 // before active, oldest first, tie by token); only the slot<->key bookkeeping
 // Elementary needs is added. Its declarative graph has no "voice ended"
@@ -90,6 +123,7 @@ export class ElementarySynthEngine {
     this.ready = false
     this.stopped = false
     this._closeTask = null
+    this._moduleUrls = new Set()
     // Сообщать о состоянии контекста обязан движок: интерфейс слушает только его.
     // Без этого страница не узнаёт, что звук пошёл, и остаётся в 'closed'.
     this.onStateChange = typeof options.onStateChange === 'function' ? options.onStateChange : () => {}
@@ -123,11 +157,12 @@ export class ElementarySynthEngine {
       this.core = new WebRenderer()
     }
     onProgress('starting')
-    const node = await this.core.initialize(this.context, {
+    const node = await initializeRenderer(this.core, this.context, {
       numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1]
-    })
+    }, this._moduleUrls).catch(error => { if (this.stopped) releaseRenderer(this.core); throw error })
     if (this.stopped) {
       node?.disconnect?.()
+      releaseRenderer(this.core)
       throw cancelledAudioStart()
     }
     this.node = node
@@ -304,6 +339,10 @@ export class ElementarySynthEngine {
     this.input?.disconnect?.()
     this.output?.disconnect?.()
     this.node?.disconnect?.()
+    for (const url of this._moduleUrls) URL.revokeObjectURL(url)
+    this._moduleUrls.clear()
+    releaseRenderer(this.core)
+    this.ready = false
     if (!this.ownsContext || (!this._closeTask && this.context.state === 'closed')) return
     const task = this._closeTask || Promise.resolve().then(() => this.context.close())
     this._closeTask = task

@@ -149,6 +149,49 @@ test('repeated Stop shares one pending AudioContext close', async () => {
   assert.equal(context.state, 'closed')
 })
 
+test('Stop releases the renderer poller, pending requests and loaded message port', async () => {
+  const engine = new ElementarySynthEngine(startupContext())
+  let ticks = 0, closes = 0
+  const request = deferred()
+  const rejected = assert.rejects(request.promise, {name: 'AbortError'})
+  engine.core = {_timer: setInterval(() => ticks++, 1), _promiseMap: new Map([[0, request]]),
+    _renderer: {}, _worklet: {port: {onmessage() {}, close() { closes++ }}}}
+  await engine.stop()
+  await rejected
+  await new Promise(resolve => setTimeout(resolve, 20))
+  assert.equal(ticks, 0)
+  assert.equal(closes, 1)
+  assert.equal(engine.core._promiseMap.size, 0)
+  assert.equal(engine.core._worklet.port.onmessage, null)
+})
+
+test('Stop during module loading revokes its Blob, restores addModule and disposes late initialization', async () => {
+  const loaded = deferred(), context = startupContext(), revoked = []
+  const originalRevoke = URL.revokeObjectURL
+  URL.revokeObjectURL = url => revoked.push(url)
+  const addModule = async () => { await loaded.promise }
+  context.audioWorklet = {addModule}
+  let closes = 0
+  const node = {disconnect() {}, port: {onmessage() {}, close() { closes++ }}}
+  const engine = new ElementarySynthEngine(context)
+  engine.core = {async initialize(ctx) {
+    await ctx.audioWorklet.addModule('blob:delayed-module')
+    this._renderer = {}; this._worklet = node; this._timer = setInterval(() => {}, 100)
+    return node
+  }}
+  try {
+    const starting = assert.rejects(engine.ensureReady(), {name: 'AbortError'})
+    assert.equal(context.audioWorklet.addModule, addModule)
+    await engine.stop()
+    assert(revoked.includes('blob:delayed-module'))
+    loaded.resolve(); await starting
+    assert.equal(engine.core._timer, null)
+    assert.equal(closes, 1)
+    assert.equal(context.gainCount, 0)
+    assert.equal(engine._moduleUrls.size, 0)
+  } finally { URL.revokeObjectURL = originalRevoke }
+})
+
 function soundStartupFixture(engines) {
   const timers = new Map()
   let nextTimer = 0
@@ -162,7 +205,7 @@ function soundStartupFixture(engines) {
     navigator: {}, soundSessionState: {calibrating: false}, BIOTRON_CALIBRATION: {},
     KEYBOARD_CODE_TO_NOTE,
     trace() {}, recordBiotronEvent() {}, parseBiotronCalibrationState() { return null },
-    updateSoundSession() {}, createRealtimeSynth: () => engines.shift(),
+    updateSoundSession() {}, registerSoundController() {}, createRealtimeSynth: () => engines.shift(),
     MidiInputSession: class {async close() {}}
   }
   const script = readFileSync('src/components/SoundLab/SoundLab.vue', 'utf8')
