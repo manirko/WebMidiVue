@@ -5,6 +5,11 @@ export const KEYBOARD_CODE_TO_NOTE = Object.freeze({
 })
 
 export const noteForKeyboardCode = code => KEYBOARD_CODE_TO_NOTE[String(code)] ?? null
+export function blocksKeyboardNotes(event) {
+  const targets = event.composedPath?.() || [event.target]
+  return event.defaultPrevented || event.repeat || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey ||
+    targets.some(target => target?.isContentEditable || target?.closest?.('input,select,textarea,[role="textbox"],[role="combobox"],[contenteditable]:not([contenteditable="false"]),[inert],dialog,[role="dialog"],.modal.show'))
+}
 
 export function clamp(value, min, max, fallback = min) {
   const number = Number(value)

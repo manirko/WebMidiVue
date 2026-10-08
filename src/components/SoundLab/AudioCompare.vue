@@ -23,6 +23,7 @@
       <p v-else-if="bankId === 'high-notes'">Changes begin above C5. Middle notes stay the same; the three-register option also changes bass notes.</p>
       <label class="compare-volume" for="compare-volume"><span>Volume</span><input id="compare-volume" type="range" min="0" max="100" step="1" :value="player.volume" @input="player.updateVolume"><output>{{ player.volume }}%</output></label>
       <label class="compare-quality"><input type="checkbox" v-model="player.lowCpu" :disabled="Boolean(player.engine)"> Low CPU</label>
+      <KeyboardControls />
       <p role="status" aria-live="polite">{{ storageMessage || player.status }}</p>
     </template>
     <router-link v-if="!embedded" to="/biotron?experiments=1">Back to settings</router-link>
@@ -30,10 +31,11 @@
 </template>
 <script>
 import DeviceTaskNav from '@/components/DeviceTaskNav.vue'
+import KeyboardControls from './KeyboardControls.vue'
 import {AUDITION_BANKS, resolveAudition} from '@/audio/auditionBanks.mjs'
 import {getSoundController, soundSessionState, selectSoundExperiment, restoreSoundExperiment} from '@/audio/sessionState.mjs'
 export default {
-  name: 'AudioCompare', components: {DeviceTaskNav},
+  name: 'AudioCompare', components: {DeviceTaskNav, KeyboardControls},
   props: {embedded: {type: Boolean, default: false}},
   data() { return {banks: AUDITION_BANKS, storageMessage: ''} },
   computed: {

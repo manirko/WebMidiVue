@@ -8,6 +8,7 @@ import {
   midiPitchBendRatio,
   normalizeVolume,
   noteForKeyboardCode,
+  blocksKeyboardNotes,
   parseMidiMessage,
   VoiceLedger
 } from '../src/audio/core.mjs'
@@ -45,6 +46,15 @@ test('sound volume is bounded', () => {
   assert.equal(normalizeVolume(-1), 0)
   assert.equal(normalizeVolume(140), 100)
   assert.equal(normalizeVolume(200), 100)
+})
+
+test('keyboard notes leave typing, IME, shortcuts and handled events alone', () => {
+  assert.equal(Boolean(blocksKeyboardNotes({target: {}})), false)
+  for (const flag of ['defaultPrevented', 'repeat', 'isComposing', 'ctrlKey', 'altKey', 'metaKey', 'shiftKey']) {
+    assert.equal(Boolean(blocksKeyboardNotes({[flag]: true})), true, flag)
+  }
+  assert.equal(Boolean(blocksKeyboardNotes({target: {isContentEditable: true}})), true)
+  assert.equal(Boolean(blocksKeyboardNotes({composedPath: () => [{closest: () => ({})}]})), true, 'shadow-tree editable target')
 })
 
 test('MIDI note-on, velocity-zero note-off and panic are accepted', () => {

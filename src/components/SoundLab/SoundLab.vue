@@ -11,6 +11,7 @@
     :data-tab-lease="tabLeaseState"
     :data-reveal-stage="revealMode ? revealStage : null"
     :data-volume="volume"
+    :data-keyboard="keyboardOn ? 'on' : 'off'"
     :data-audio-capability="capabilities.audio ? 'available' : 'unavailable'"
     :data-midi-capability="capabilities.midi ? 'available' : 'unavailable'"
   >
@@ -162,26 +163,6 @@
       </div>
     </section>
 
-    <section aria-labelledby="sound-keyboard">
-      <div class="sound-lab__heading">
-        <h2 id="sound-keyboard">Keyboard</h2>
-        <small>A–K physical keys · any language</small>
-      </div>
-      <div class="sound-lab__keyboard" aria-label="One octave keyboard">
-        <button
-          v-for="key in keyboard"
-          :key="key.code"
-          type="button"
-          :class="{'sound-lab__black-key': key.black}"
-          :aria-label="key.noteName"
-          @pointerdown="pressScreenKey($event, key.note)"
-          @pointerup="releaseScreenKey(key.note)"
-          @pointercancel="releaseScreenKey(key.note)"
-          @lostpointercapture="releaseScreenKey(key.note)"
-        >{{ key.label }}</button>
-      </div>
-    </section>
-
     <section v-if="capabilities.midi" class="sound-lab__midi" aria-labelledby="sound-device">
       <div>
         <h2 id="sound-device">Playtronica device</h2>
@@ -200,6 +181,7 @@
       </div>
     </section>
     </template>
+    <KeyboardControls />
     </template>
   </section>
 </template>
@@ -208,7 +190,7 @@
 import {markRaw, defineAsyncComponent} from 'vue'
 const GardenVisual = defineAsyncComponent(() => import(/* webpackChunkName: "garden-visual" */ './GardenVisual.vue'))
 const WakeVolume = defineAsyncComponent(() => import(/* webpackChunkName: "garden-visual" */ './WakeVolume.vue'))
-import {KEYBOARD_CODE_TO_NOTE, noteForKeyboardCode} from '@/audio/core.mjs'
+import {noteForKeyboardCode, blocksKeyboardNotes} from '@/audio/core.mjs'
 import {createRealtimeElementarySynth as createRealtimeSynth, DEFAULT_VOLUME, normalizeVolume} from '@/audio/elementary/engine.mjs'
 import {registerSoundController, soundSessionState, unregisterSoundController, updateSoundSession, selectSoundExperiment, restoreSoundExperiment} from '@/audio/sessionState.mjs'
 import {resolveAudition} from '@/audio/auditionBanks.mjs'
@@ -224,23 +206,13 @@ import {detectSoundCapabilities, soundCapabilityMessage} from '@/audio/capabilit
 import DeviceTaskNav from '@/components/DeviceTaskNav.vue'
 import DiagnosticCopy from '@/components/DiagnosticCopy.vue'
 import CompatibilityNotice from '@/components/CompatibilityNotice.vue'
+import KeyboardControls from './KeyboardControls.vue'
 import {biotronFirstSoundFeedbackUrl, buildMidiAdvisory, detectPlatformCapabilities, recordBiotronEvent} from '@/compatibility.mjs'
-
-const noteNames = ['C', 'C sharp', 'D', 'D sharp', 'E', 'F', 'F sharp',
-  'G', 'G sharp', 'A', 'A sharp', 'B', 'C high']
-const keyboard = Object.entries(KEYBOARD_CODE_TO_NOTE).map(([code, note]) => ({
-  code, note, label: code.slice(3), noteName: noteNames[note - 60],
-  black: noteNames[note - 60].includes('sharp')
-}))
 
 const VOLUME_STORAGE_KEY = 'playtronica-sound-volume-v1'
 function loadVolume() {
   try { return normalizeVolume(window.localStorage?.getItem(VOLUME_STORAGE_KEY)) }
   catch (error) { void error; return DEFAULT_VOLUME }
-}
-function saveVolume(volume) {
-  try { window.localStorage?.setItem(VOLUME_STORAGE_KEY, String(volume)) }
-  catch (error) { void error }
 }
 function audioWithin(task, milliseconds, message) {
   let timer
@@ -252,7 +224,7 @@ function audioWithin(task, milliseconds, message) {
 const resumeAudioWithin = engine => audioWithin(engine.resume(), 3500, 'Audio resume timed out.')
 export default {
   name: 'SoundLab',
-  components: {CompatibilityNotice, DeviceTaskNav, DiagnosticCopy, GardenVisual, WakeVolume},
+  components: {CompatibilityNotice, DeviceTaskNav, DiagnosticCopy, GardenVisual, WakeVolume, KeyboardControls},
   props: {
     mode: {type: String, default: 'lab'},
     profileId: {type: String, default: ''},
@@ -262,7 +234,7 @@ export default {
     revealMode() { return this.mode === 'reveal' },
     audition() { return this.profileId === 'biotron' ? soundSessionState.audition : null },
     selectedSound() {
-      const cue = this.examplePlaying || soundSessionState.calibrating
+      const cue = this.examplePlaying || soundSessionState.calibrating || (this.keyboardOn && !this.recognizedInput)
       return this.audition && (this.audition.bankId !== 'calibration' || cue)
         ? this.audition.variant.preset : this.variants[this.currentVariant]
     },
@@ -288,8 +260,9 @@ export default {
       exampleTimers: markRaw(new Set()),
       presetTask: markRaw(Promise.resolve()),
       volume: loadVolume(),
-      keyboard,
-      heldCodes: markRaw(new Set()),
+      keyboardOn: false,
+      keyboardOctave: 4,
+      heldCodes: markRaw(new Map()),
       midiInputs: [],
       selectedInput: '',
       capabilities: markRaw(capabilities),
@@ -313,7 +286,6 @@ export default {
       revealCalibrationNonce: 0,
       explicitCalibration: false,
       voiceFrame: null,
-      pendingVoiceCount: 0,
       listenerScope: null,
       tabLease: null,
       tabLeaseState: 'free',
@@ -334,6 +306,9 @@ export default {
     this.listenerScope.on(window, 'keydown', event => this.handleKeyDown(event))
     this.listenerScope.on(window, 'keyup', event => this.handleKeyUp(event))
     this.listenerScope.on(window, 'blur', () => this.releaseHeldKeyboard())
+    this.listenerScope.on(window, 'pagehide', () => this.releaseHeldKeyboard())
+    this.listenerScope.on(document, 'compositionstart', () => this.releaseHeldKeyboard())
+    this.listenerScope.on(document, 'focusin', event => { if (blocksKeyboardNotes(event)) this.releaseHeldKeyboard() })
     this.listenerScope.on(document, 'visibilitychange', () => this.handleVisibility())
   },
   beforeUnmount() {
@@ -355,24 +330,8 @@ export default {
       tabLease?.release()
     })
   },
-  async beforeRouteLeave(to, from, next) {
-    void from
-    const wasStarting = this.audioStarting || this.midiOpening
-    this.cancelMidiPermission({silent: true})
-    if (this.revealMode && to.path === this.revealProfile.settingsRoute && !wasStarting) {
-      this.releaseHeldKeyboard()
-      next()
-      return
-    }
-    if (!this.engine && !this.midi) {
-      next()
-      return
-    }
-    await this.stop()
-    if (this.releaseBlocked) next(false)
-    else next()
-  },
   watch: {
+    keyboardOctave() { this.releaseHeldKeyboard() },
     selectedSound() { void this.applySelectedSound() },
     audition() { if (this.examplePlaying) void this.stop() },
     revealStage(stage) { trace('stage', stage); if (this.revealMode) recordBiotronEvent('play.stage_changed', {stage}) }
@@ -447,6 +406,7 @@ export default {
       }
     },
     async start() {
+      if (!this.revealMode) this.keyboardOn = true
       if (!this.capabilities.audio) {
         this.status = soundCapabilityMessage(this.capabilities)
         return
@@ -477,6 +437,7 @@ export default {
       } finally { if (attemptId === this.permissionAttemptId) this.starting = false }
     },
     async stop() {
+      this.keyboardOn = false
       this.clearExample()
       this.cancelMidiPermission({silent: true})
       this.midiOpening = false
@@ -518,12 +479,13 @@ export default {
     updateVolume(event) {
       this.volume = normalizeVolume(event?.target?.value)
       this.engine?.setVolume(this.volume)
-      saveVolume(this.volume)
+      try { window.localStorage?.setItem(VOLUME_STORAGE_KEY, String(this.volume)) } catch (error) { void error }
       updateSoundSession({volume: this.volume})
     },
     play(note, source = 'screen') {
       if (this.engine?.state === 'running') {
-        this.engine.noteOn(source, 0, note, 104)
+        const cue = this.audition?.bankId === 'calibration' && this.keyboardOn && !this.recognizedInput
+        this.engine.noteOn(source, 0, note, cue ? 24 : 104, this.engine.context.currentTime, cue ? this.audition.variant.level : 1)
         this.$refs?.garden?.note(true, note, 104)
         this.voiceCount = this.engine.activeVoiceCount
       }
@@ -531,39 +493,45 @@ export default {
     release(note, source = 'screen') {
       this.engine?.noteOff(source, 0, note)
       this.$refs?.garden?.note(false, note)
-      this.voiceRefreshTimer = window.setTimeout(() => {
-        this.voiceCount = this.engine?.activeVoiceCount || 0
-      }, 3100)
+      this.voiceCount = this.engine?.activeVoiceCount || 0
     },
-    pressScreenKey(event, note) {
-      event.preventDefault()
-      event.currentTarget.setPointerCapture?.(event.pointerId)
-      this.play(note)
+    async toggleKeyboard() {
+      if (this.keyboardOn) {
+        this.keyboardOn = false
+        this.releaseHeldKeyboard()
+        if (!this.midi?.input) await this.stop()
+        return
+      }
+      if (this.examplePlaying) await this.stop()
+      if (this.releaseBlocked || this.starting) return
+      this.keyboardOn = true
+      await this.start()
+      if (this.audioState !== 'running') this.keyboardOn = false
     },
-    releaseScreenKey(note) { this.release(note) },
+    holdKey(id, note) {
+      if (!this.keyboardOn || this.audioState !== 'running' || this.heldCodes.has(id)) return
+      this.heldCodes.set(id, note)
+      this.play(note, `keys:${id}`)
+    },
+    releaseKey(id) {
+      if (!this.heldCodes.has(id)) return
+      this.release(this.heldCodes.get(id), `keys:${id}`)
+      this.heldCodes.delete(id)
+    },
     handleKeyDown(event) {
-      const target = event.target
-      if (target?.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target?.tagName)) return
-      const note = noteForKeyboardCode(event.code)
-      if (note === null || event.repeat || this.heldCodes.has(event.code)) return
-      event.preventDefault()
-      this.heldCodes.add(event.code)
-      this.play(note, 'keyboard')
-    },
-    handleKeyUp(event) {
+      if (!this.keyboardOn || this.audioState !== 'running' || blocksKeyboardNotes(event)) return
       const note = noteForKeyboardCode(event.code)
       if (note === null) return
       event.preventDefault()
-      this.heldCodes.delete(event.code)
-      this.release(note, 'keyboard')
+      this.holdKey(event.code, note + 12 * (this.keyboardOctave - 4))
+    },
+    handleKeyUp(event) {
+      if (!this.heldCodes.has(event.code)) return
+      event.preventDefault()
+      this.releaseKey(event.code)
     },
     releaseHeldKeyboard() {
-      const codes = [...this.heldCodes]
-      this.heldCodes.clear()
-      for (const code of codes) {
-        const note = noteForKeyboardCode(code)
-        if (note !== null) this.release(note, 'keyboard')
-      }
+      for (const id of this.heldCodes.keys()) this.releaseKey(id)
     },
     handleMidiState(event) {
       if (this.revealMode && ['connected', 'disconnected', 'release-error'].includes(event.type)) recordBiotronEvent('midi.connection_changed', {midi_state: event.type})
@@ -601,13 +569,12 @@ export default {
         }
         if (event.message?.type === 'note-off') this.$refs?.garden?.note(false, event.message.note)
         if (event.message?.type === 'panic') {
-          window.cancelAnimationFrame(this.voiceFrame); this.voiceFrame = null; this.pendingVoiceCount = this.voiceCount = 0; return
+          window.cancelAnimationFrame(this.voiceFrame); this.voiceFrame = null; this.voiceCount = 0; return
         }
         if (this.revealMode) this.handleRevealMessage(event.message)
-        this.pendingVoiceCount = event.count
         if (this.voiceFrame === null) {
           this.voiceFrame = window.requestAnimationFrame(() => {
-            this.voiceCount = this.pendingVoiceCount
+            this.voiceCount = this.engine?.activeVoiceCount || 0
             this.voiceFrame = null
           })
         }
@@ -709,13 +676,10 @@ export default {
 .sound-lab__task-feedback { max-width:760px; margin:1rem auto 0!important; padding:var(--beta-card-inset,24px); }
 .sound-lab__after-reveal { padding-inline:var(--beta-card-inset,24px); }
 .sound-lab__task-feedback small { color:#625e58; }
-.sound-lab__keyboard { display: grid; grid-template-columns: repeat(13, minmax(44px, 1fr)); gap: 4px; overflow-x: auto; padding-bottom: .5rem; }
-.sound-lab__keyboard button { min-width: 44px; height: 120px; border: 1px solid #cbc6be; border-radius: .6rem; background: #fff; align-content: end; padding-bottom: .7rem; }
-.sound-lab__keyboard .sound-lab__black-key { height: 82px; background: #2b2b30; color: #fff; }
 .sound-lab__midi { display: flex; justify-content: space-between; gap: 1.5rem; align-items: center; border-top: 1px solid #d6d1c8; padding-top: 1.5rem; }
 .sound-lab__midi p { margin: .3rem 0 0; }
 .sound-lab__midi-actions { min-width:0; max-width:100%; }
 .sound-lab__midi-actions .form-select { min-width:0; width:100%; }
-@media (max-width: 640px) { .sound-lab__midi { align-items: flex-start; flex-direction: column; } .sound-lab__keyboard { grid-template-columns: repeat(13, 48px); } .sound-lab__reveal { grid-template-columns: 1fr; text-align: center; } .sound-lab__reveal-actions, .sound-lab__after-reveal { justify-content: center; } .sound-lab__volume { width: 100%; grid-template-columns: auto minmax(0, 1fr) 3.25rem; text-align: left; } }
+@media (max-width: 640px) { .sound-lab__midi { align-items: flex-start; flex-direction: column; } .sound-lab__reveal { grid-template-columns: 1fr; text-align: center; } .sound-lab__reveal-actions, .sound-lab__after-reveal { justify-content: center; } .sound-lab__volume { width: 100%; grid-template-columns: auto minmax(0, 1fr) 3.25rem; text-align: left; } }
 @media (prefers-reduced-motion: reduce) { .sound-lab button { transition: none; } }
 </style>

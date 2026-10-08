@@ -125,7 +125,6 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
       this.heldCodes.clear()
       window.cancelAnimationFrame(this.voiceFrame)
       this.voiceFrame = null
-      this.pendingVoiceCount = 0
       this.voiceCount = 0
     },
     panic() {

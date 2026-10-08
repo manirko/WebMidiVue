@@ -15,6 +15,14 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   const context=await browser.newContext({viewport:{width:1366,height:900}})
   await context.addInitScript(()=>{
    window.__comparisonContexts=[];window.__comparisonMidiRequests=0
+   window.__comparisonValues=[];window.__comparisonProperties=new Map();window.__keyboardRefsByGate=new Map()
+   const post=MessagePort.prototype.postMessage
+   MessagePort.prototype.postMessage=function(message,...args){
+    if(message?.requestType==='renderInstructions')for(const instruction of message.payload.batch){
+     if(instruction[0]===3 && instruction[2]==='value'){window.__comparisonProperties.set(instruction[1],instruction[3]);window.__comparisonValues.push(instruction[1]);if(window.__comparisonValues.length>200)window.__comparisonValues.shift()}
+    }
+    return post.call(this,message,...args)
+   }
    window.__comparisonIntervals=new Set();window.__comparisonBlobs=new Set()
    const interval=window.setInterval,clear=window.clearInterval,create=URL.createObjectURL,revoke=URL.revokeObjectURL
    window.setInterval=(...args)=>{const id=interval(...args);window.__comparisonIntervals.add(id);return id}
@@ -54,9 +62,12 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
    assert(await page.evaluate(()=>window.__comparisonContexts.every(context=>context.state==='closed')),'Stop left an open AudioContext')
    assert.equal(await page.evaluate(()=>window.__comparisonIntervals.size),0,'Stop retained a poller')
    assert.equal(await page.evaluate(()=>window.__comparisonBlobs.size),0,'Stop retained a Blob URL')
-   assert(!(await page.locator('.audio-compare [role=status]').innerText()).includes('[object'),'Status rendered a click event')
+   const status=page.locator('.audio-compare [role=status]')
+   if(await status.count())assert(!(await status.innerText()).includes('[object'),'Status rendered a click event')
   }
   let cases=0
+  const keyboardOnly=process.argv.includes('--keyboard-only')
+  if(!keyboardOnly){
   for(const group of ['Timbres','Calibration sounds','High-note treatments','Handpan']){
    await page.getByRole('button',{name:group,exact:true}).click()
    const options=await page.locator('#compare-variant option').evaluateAll(elements=>elements.map(element=>element.value))
@@ -125,24 +136,13 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   assert.equal(await page.getByRole('button',{name:'Experiments',exact:true}).getAttribute('aria-expanded'),'true')
   await page.evaluate(()=>location.hash='/biotron/compare')
   await page.getByRole('heading',{name:'Compare sounds',exact:true}).waitFor()
-  mark('live Biotron choices through the existing SoundLab session')
-  await page.getByRole('button',{name:'Timbres',exact:true}).click()
-  await page.evaluate(()=>window.__enableComparisonMidi=true)
-  await page.evaluate(()=>window.__delayModule=true)
-  await page.getByRole('button',{name:'Play with Biotron',exact:true}).click()
-  await page.waitForFunction(()=>Boolean(window.__releaseModule))
-  await page.getByLabel('Option',{exact:true}).selectOption('tone-soft')
-  await page.evaluate(()=>{window.__delayModule=false;window.__releaseModule()})
-  await page.getByRole('button',{name:'Stop & release Biotron',exact:true}).waitFor()
-  await page.locator('.sound-lab[data-sound="Soft round"]').waitFor({state:'attached'})
-  const nonce=await page.evaluate(()=>window.__comparisonSent.at(-1)[4])
-  await page.evaluate(nonce=>window.__emitComparisonMidi([0xf0,0x0b,125,nonce,3,0xf7]),nonce)
-  await page.locator('.sound-lab[data-reveal-stage="ready"]').waitFor({state:'attached'})
-  const liveContexts=await page.evaluate(()=>window.__comparisonContexts.length)
-  const actual=async(fundamental=164.81)=>page.evaluate(fundamental=>{
+  }
+  const actual=async(fundamental=164.81)=>page.evaluate(async fundamental=>{
    const node=window.__comparisonOutput
    if(!window.__comparisonAnalyser || window.__comparisonAnalyser.context!==node.context){
     window.__comparisonAnalyser=node.context.createAnalyser();window.__comparisonAnalyser.fftSize=8192;window.__comparisonAnalyser.smoothingTimeConstant=0;node.connect(window.__comparisonAnalyser)
+    // A new analyser has an empty PCM buffer until audio has flowed through it.
+    await new Promise(resolve=>setTimeout(resolve,220))
    }
    const samples=new Float32Array(window.__comparisonAnalyser.fftSize)
    window.__comparisonAnalyser.getFloatTimeDomainData(samples)
@@ -161,8 +161,113 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
     level:window.__biotronTrace.filter(event=>event.kind==='in'&&event.data?.level!==undefined).at(-1)?.data.level,
     rms:Math.sqrt(samples.reduce((sum,value)=>sum+value*value,0)/samples.length)}
   },fundamental)
-  const liveObservations=[]
+  mark('computer keyboard: all 36 variants without MIDI permission')
   const {AUDITION_BANKS}=await import('../src/audio/auditionBanks.mjs')
+  const keyboardObservations=[]
+  const down=async extra=>{await page.evaluate(()=>window.__comparisonValues=[]);await page.dispatchEvent('body','keydown',{code:'KeyA',key:'ф',...extra})}
+  const up=extra=>page.dispatchEvent('body','keyup',{code:'KeyA',key:'a',...extra})
+  const keyboardVoice=()=>page.evaluate(()=>{const changes=window.__comparisonValues;const gate=changes.findLast(id=>window.__comparisonProperties.get(id)===1);if(changes.length>=3)window.__keyboardRefsByGate.set(gate,changes.slice(-3));window.__keyboardRefIds=window.__keyboardRefsByGate.get(gate);const values=window.__keyboardRefIds.map(id=>window.__comparisonProperties.get(id));return {frequency:values[0],velocity:values[1],gate:values[2]}})
+  const voices=count=>page.locator(`.sound-lab[data-active-voices="${count}"]`).waitFor({state:'attached'})
+  await down();await voices(0)
+  const keyboardMidiRequests=await page.evaluate(()=>window.__comparisonMidiRequests)
+  await page.getByRole('button',{name:'Play with keyboard',exact:true}).click()
+  await page.locator('.sound-lab[data-audio-state="running"][data-keyboard="on"]').waitFor({state:'attached'})
+  await page.waitForFunction(()=>window.__comparisonContexts.at(-1).currentTime>.25,null,{timeout:5000})
+  const keyboardContexts=await page.evaluate(()=>window.__comparisonContexts.length)
+  for(const bank of AUDITION_BANKS){
+   await page.getByRole('button',{name:bank.label,exact:true}).click()
+   await page.getByLabel('Keyboard octave',{exact:true}).selectOption(bank.id==='high-notes'?'7':'4')
+   for(const option of bank.variants){
+    await page.getByLabel('Option',{exact:true}).selectOption(option.id)
+    await page.locator(`.sound-lab[data-sound="${option.preset.name}"]`).waitFor({state:'attached'})
+    await down();await voices(1);await page.waitForTimeout(160)
+    const observation=await actual(bank.id==='high-notes'?2093:261.63)
+    assert(observation.rms>1e-8,`keyboard ${option.id} produced no PCM`)
+    const voice=await keyboardVoice()
+    assert.equal(voice.gate,1,'keyboard gate was not sent to the actual worklet')
+    assert(Math.abs(voice.frequency-(bank.id==='high-notes'?2093.004522404789:261.6255653005986))<.001,'keyboard octave did not reach DSP')
+    assert(Math.abs(voice.velocity-(bank.id==='calibration'?24/127*option.level:104/127))<1e-9,'keyboard cue velocity/level changed')
+    keyboardObservations.push({id:option.id,octave:bank.id==='high-notes'?7:4,...observation,...voice})
+    fs.writeFileSync(path.join(artifacts,'keyboard-observations.json'),JSON.stringify(keyboardObservations,null,2))
+    await up({ctrlKey:true});await voices(0)
+   }
+  }
+  assert.equal(await page.evaluate(()=>window.__comparisonContexts.length),keyboardContexts,'keyboard selection made another renderer')
+  assert.equal(await page.evaluate(()=>window.__comparisonMidiRequests),keyboardMidiRequests,'keyboard requested MIDI')
+  await page.getByRole('button',{name:'Timbres',exact:true}).click()
+  await page.getByLabel('Keyboard octave',{exact:true}).selectOption('4')
+  for(const key of ['a','ф','q','ש']){await down({key});await voices(1);await up();await voices(0)}
+  for(const octave of ['2','3','4','5','6','7']){
+   await page.getByLabel('Keyboard octave',{exact:true}).selectOption(octave)
+   await down();await voices(1)
+   const frequency=(await keyboardVoice()).frequency
+   assert(Math.abs(frequency-440*2**((60+12*(Number(octave)-4)-69)/12))<.001)
+   await up();await voices(0)
+  }
+  for(const flag of ['ctrlKey','metaKey','altKey','shiftKey','isComposing','repeat']){await down({[flag]:true});await voices(0)}
+  await page.evaluate(()=>{const event=new KeyboardEvent('keydown',{code:'KeyA',bubbles:true,cancelable:true});event.preventDefault();document.body.dispatchEvent(event)})
+  await voices(0)
+  await page.getByLabel('Option',{exact:true}).dispatchEvent('keydown',{code:'KeyA',key:'a'});await voices(0)
+  for(const tag of ['input','textarea','div']){
+   await page.evaluate(tag=>{const element=document.createElement(tag);element.id='typing-probe';if(tag==='div')element.contentEditable='true';document.body.append(element)},tag)
+   await page.locator('#typing-probe').dispatchEvent('keydown',{code:'KeyA',key:'a'});await voices(0)
+   await down();await voices(1);await page.locator('#typing-probe').focus();await voices(0)
+   await page.locator('#typing-probe').evaluate(element=>element.remove())
+  }
+  await page.evaluate(()=>{const host=document.createElement('div');host.id='shadow-probe';const input=document.createElement('input');host.attachShadow({mode:'open'}).append(input);document.body.append(host);input.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyA',bubbles:true,composed:true}))});await voices(0)
+  await page.locator('#shadow-probe').evaluate(element=>element.remove())
+  for(const attribute of ['role=dialog','role=textbox','inert']){
+   await page.evaluate(attribute=>{const parent=document.createElement('div');parent.id='blocked-probe';const [key,value]=attribute.split('=');parent.setAttribute(key,value||'');const child=document.createElement('button');child.textContent='probe';parent.append(child);document.body.append(parent);child.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyA',bubbles:true}))},attribute);await voices(0)
+   await page.locator('#blocked-probe').evaluate(element=>element.remove())
+  }
+  await down();await down();await down({repeat:true});await voices(1)
+  await page.getByLabel('Keyboard octave',{exact:true}).selectOption('4');await voices(0);await up();await voices(0)
+  await down();await voices(1)
+  await page.evaluate(()=>document.dispatchEvent(new CompositionEvent('compositionstart')));await voices(0)
+  for(const event of ['blur','pagehide']){await down();await voices(1);await page.evaluate(event=>window.dispatchEvent(new Event(event)),event);await voices(0)}
+  await down();await voices(1)
+  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'))});await voices(0)
+  await page.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'))})
+  assert.equal(await page.getByRole('region',{name:'One octave keyboard',exact:true}).count(),0,'Screen keyboard must stay hidden')
+  assert.equal(await page.locator('.keys-notes').count(),0)
+  await down();await voices(1)
+  await page.getByRole('link',{name:'Back to settings',exact:true}).click()
+  await page.getByRole('heading',{name:'Settings',exact:true}).waitFor();await voices(0)
+  assert.equal(await page.evaluate(()=>window.__comparisonContexts.length),keyboardContexts,'Settings lost keyboard renderer ownership')
+  await page.getByRole('navigation',{name:'Biotron tasks'}).getByRole('link',{name:'Play',exact:true}).click()
+  await page.getByRole('button',{name:'Stop keyboard',exact:true}).click();await stopped()
+  await down();await voices(0)
+  await page.getByRole('link',{name:'Sound experiments',exact:true}).click()
+  await page.getByRole('heading',{name:'Settings',exact:true}).waitFor()
+  await page.evaluate(()=>location.hash='/biotron/compare')
+  await page.getByRole('heading',{name:'Compare sounds',exact:true}).waitFor()
+  fs.writeFileSync(path.join(artifacts,'keyboard-observations.json'),JSON.stringify(keyboardObservations,null,2))
+  mark('live Biotron choices through the existing SoundLab session')
+  await page.getByRole('button',{name:'Timbres',exact:true}).click()
+  await page.evaluate(()=>window.__enableComparisonMidi=true)
+  await page.evaluate(()=>window.__delayModule=true)
+  await page.getByRole('button',{name:'Play with Biotron',exact:true}).click()
+  await page.waitForFunction(()=>Boolean(window.__releaseModule))
+  await page.getByLabel('Option',{exact:true}).selectOption('tone-soft')
+  await page.evaluate(()=>{window.__delayModule=false;window.__releaseModule()})
+  await page.getByRole('button',{name:'Stop & release Biotron',exact:true}).waitFor()
+  await page.locator('.sound-lab[data-sound="Soft round"]').waitFor({state:'attached'})
+  const nonce=await page.evaluate(()=>window.__comparisonSent.at(-1)[4])
+  await page.evaluate(nonce=>window.__emitComparisonMidi([0xf0,0x0b,125,nonce,3,0xf7]),nonce)
+  await page.locator('.sound-lab[data-reveal-stage="ready"]').waitFor({state:'attached'})
+  const liveContexts=await page.evaluate(()=>window.__comparisonContexts.length)
+  await page.getByRole('button',{name:'Play with keyboard',exact:true}).click()
+  await page.evaluate(()=>{window.__emitComparisonMidi([0x90,64,100]);document.body.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyD',key:'в',bubbles:true,cancelable:true}))})
+  await voices(2);await page.waitForTimeout(50);await voices(2)
+  await page.dispatchEvent('body','keyup',{code:'KeyD',key:'d'});await voices(1)
+  await page.evaluate(()=>window.__emitComparisonMidi([0x80,64,0]));await voices(0)
+  await page.evaluate(()=>window.__emitComparisonMidi([0x90,64,100]));await voices(1)
+  await page.dispatchEvent('body','keydown',{code:'KeyD',key:'в'});await voices(2)
+  await page.dispatchEvent('body','keyup',{code:'KeyD',key:'d'});await voices(1)
+  await page.getByRole('button',{name:'Stop keyboard',exact:true}).click();await voices(1)
+  assert(await page.evaluate(()=>window.__comparisonPorts[0].connection==='open'),'keyboard Stop released unrelated MIDI')
+  await page.evaluate(()=>window.__emitComparisonMidi([0x80,64,0]));await voices(0)
+  const liveObservations=[]
   for(const bank of AUDITION_BANKS.filter(bank=>bank.id!=='calibration')){
    await page.getByRole('button',{name:bank.label,exact:true}).click()
    await page.evaluate(()=>window.__emitComparisonMidi([0x90,96,100]))
@@ -330,6 +435,15 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   await experimentToggle.click()
   assert.equal(await settings.getByLabel('Option',{exact:true}).inputValue(),'tone-bass','Closing the panel lost the selected sound')
   await offline.close()
+  const cold=await browser.newContext()
+  await cold.addInitScript(()=>{window.__keyboardMidi=0;Object.defineProperty(navigator,'requestMIDIAccess',{configurable:true,value:async()=>{window.__keyboardMidi++;throw new Error('No device for keyboard test')}})})
+  const keyboardPlay=await cold.newPage();await keyboardPlay.goto(`http://127.0.0.1:${server.address().port}/#/biotron/play`)
+  await keyboardPlay.getByRole('button',{name:'Play with keyboard',exact:true}).click()
+  await keyboardPlay.locator('.sound-lab[data-audio-state=running]').waitFor()
+  await keyboardPlay.dispatchEvent('body','keydown',{code:'KeyA',key:'ф'})
+  await keyboardPlay.locator('.sound-lab[data-active-voices="1"]').waitFor()
+  assert.equal(await keyboardPlay.evaluate(()=>window.__keyboardMidi),0,'cold Play keyboard asked for a device')
+  await keyboardPlay.getByRole('button',{name:'Stop keyboard',exact:true}).click();await cold.close()
   for(const profile of [{viewport:{width:320,height:700}},{...devices['iPhone 15'],isMobile:false}]){
    const mobile=await browser.newContext(profile);await mobile.addInitScript(()=>Object.defineProperty(navigator,'requestMIDIAccess',{value:undefined,configurable:true}))
    const tab=await mobile.newPage();await tab.goto(`http://127.0.0.1:${server.address().port}/#/biotron/compare`)
@@ -337,12 +451,17 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
    assert(await tab.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth),'comparison overflows mobile')
    await tab.getByRole('button',{name:'High-note treatments',exact:true}).click();assert.equal(await tab.locator('#compare-variant option').count(),10)
    await tab.getByRole('button',{name:'Handpan',exact:true}).click();assert.equal(await tab.locator('#compare-variant option').count(),6)
+   await tab.getByRole('button',{name:'Play with keyboard',exact:true}).click()
+   await tab.locator('.sound-lab[data-audio-state=running][data-keyboard=on]').waitFor({state:'attached'})
+   await tab.dispatchEvent('body','keydown',{code:'KeyA',key:'ф'})
+   await tab.locator('.sound-lab[data-active-voices="1"]').waitFor({state:'attached'})
+   await tab.getByRole('button',{name:'Stop keyboard',exact:true}).click()
    await mobile.close()
   }
   assert.deepEqual(errors,[])
-  mark('PASS')
+  mark(keyboardOnly?'PASS keyboard development subset':'PASS')
   await context.tracing.stop({path:path.join(artifacts,'trace.zip')})
-  console.log(`Comparison browser: ${cases}/36 real-engine option Play/Stop, 100 repeated starts/closes without timers/Blobs, cancelled module load, failed-close route protection/retry, suspend/background release, four natural completions, switch/route release, reference, no preview MIDI or inferred outcome;36 live MIDI selections, six short-gate handpan modal rings and cue-only calibration changes, persistent selection through Settings/Play/reload, independent inline sections without voting, stock reset and 320/iPhone layout passed.`)
+  console.log(keyboardOnly ? 'Keyboard development subset:36 PCM/DSP choices, C2–C7, layout/edit/IME/release guards, live MIDI and cold device-free Play; full preview/startup gate not rerun.' : `Comparison browser: ${cases}/36 real-engine option Play/Stop, 100 repeated starts/closes without timers/Blobs, cancelled module load, failed-close route protection/retry, suspend/background release, four natural completions, switch/route release, reference, no preview MIDI or inferred outcome;36 live MIDI selections, six short-gate handpan modal rings and cue-only calibration changes, persistent selection through Settings/Play/reload, independent inline sections without voting, stock reset and 320/iPhone layout passed; 36 keyboard PCM/DSP choices, C2–C7, four key layouts, typing/shadow/IME/modifier guards, repeat/focus/blur/background/route/Stop, keyboard/MIDI identity isolation and no screen keys, cold audio-only Play without a MIDI request.`)
  }catch(error){
   const state=await boundedCapture(page?.evaluate(()=>({url:location.href,phase:document.querySelector('.audio-compare')?.dataset,contexts:window.__comparisonContexts.map(context=>({state:context.state,time:context.currentTime})),intervals:window.__comparisonIntervals.size,blobs:window.__comparisonBlobs.size,heap:performance.memory?.usedJSHeapSize})).catch(cause=>({unavailable:cause.message})))
   fs.writeFileSync(path.join(artifacts,'failure.json'),JSON.stringify({stage,starts,error:error.message,state},null,2))

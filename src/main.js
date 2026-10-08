@@ -22,7 +22,6 @@ const deviceMeta = productName => ({
     requiresMidi: true,
     productName
 })
-const playMeta = productName => ({...deviceMeta(productName), requiresAudio: true})
 
 const knownDirectRoutes = new Set([
     '/biotron', '/biotron/play', '/biotron/update', '/biotron/compare', '/touchme', '/touchme/test',
@@ -62,7 +61,7 @@ if (betaBuild) {
         path: '/biotron/play',
         component: SoundLab,
         props: {mode: 'reveal', profileId: 'biotron'},
-        meta: {...playMeta('Biotron'), firstPlay: true}
+        meta: {requiresAudio: true, productName: 'Biotron', firstPlay: true}
     })
     routes.push({path: '/sound', component: SoundLab, meta: {requiresAudio: true, productName: 'Playtronica Sound'}})
     routes.push({path: '/biotron/compare', component: () => import(/* webpackChunkName: "biotron-auditions" */ '@audio-compare'), meta: {requiresAudio: true, productName: 'Biotron sound comparison'}})
@@ -82,7 +81,7 @@ if (betaBuild) {
         const player = getSoundController()
         const biotronRoutes = ['/biotron', '/biotron/play', '/biotron/compare']
         if (biotronRoutes.includes(from.path) && biotronRoutes.includes(to.path) &&
-            !player?.examplePlaying && !player?.starting) {
+            !player?.examplePlaying && !player?.starting && !player?.audioStarting && !player?.midiOpening) {
             player?.releaseHeldKeyboard()
             return true
         }

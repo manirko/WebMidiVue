@@ -1,3 +1,5 @@
+import {createRequire} from 'node:module'
+const runRouteGuard = createRequire(import.meta.url)('./sound-route-fixture.cjs')
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {setImmediate} from 'node:timers/promises'
@@ -197,7 +199,7 @@ function soundStartupFixture(engines) {
   let nextTimer = 0
   let releases = 0
   const context = {
-    module: {exports: {}}, markRaw: value => value, defineAsyncComponent: () => ({}), CompatibilityNotice: {}, DeviceTaskNav: {}, DiagnosticCopy: {}, GardenVisual: {}, WakeVolume: {},
+    module: {exports: {}}, markRaw: value => value, defineAsyncComponent: () => ({}), CompatibilityNotice: {}, DeviceTaskNav: {}, DiagnosticCopy: {}, GardenVisual: {}, WakeVolume: {}, KeyboardControls: {},
     window: {
       setTimeout(callback, delay) { timers.set(++nextTimer, {callback, delay}); return nextTimer },
       clearTimeout(id) { timers.delete(id) }
@@ -352,15 +354,14 @@ test('hung AudioContext close leaves Stop visibly incomplete until a later retry
 
 test('Play to Settings waits for bounded Stop during audio startup', async () => {
   const engine = fakeStartupEngine(async () => {})
-  const {target, sound} = soundStartupFixture([])
+  const {target} = soundStartupFixture([])
   target.engine = engine
   target.audioStarting = true
   let stops = 0
   target.stop = async () => { stops++; target.releaseBlocked = false }
-  let routeResult = 'unset'
-  await sound.beforeRouteLeave.call(target, {path: '/biotron'}, {}, result => { routeResult = result })
+  const routeResult = await runRouteGuard(target, {path: '/biotron'})
   assert.equal(stops, 1, 'route change preserved a still-starting audio engine')
-  assert.equal(routeResult, undefined)
+  assert.equal(routeResult, true)
 })
 
 test('audio-only Start cancelled by Stop cannot claim sound ready after late init', async () => {

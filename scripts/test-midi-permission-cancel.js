@@ -1,3 +1,4 @@
+const runRouteGuard = require('./sound-route-fixture.cjs')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const vm = require('node:vm')
@@ -106,7 +107,7 @@ const bind = (componentOptions, props = {}, withData = true) => {
   const soundContext = {
     soundCapabilityMessage: () => '',
     module: {exports: {}}, markRaw: value => value, defineAsyncComponent: () => ({}), AbortController,
-    CompatibilityNotice: {}, DeviceTaskNav: {}, DiagnosticCopy: {}, GardenVisual: {}, WakeVolume: {}, MIDI_PROMPT_HINT: 'Allow MIDI',
+    CompatibilityNotice: {}, DeviceTaskNav: {}, DiagnosticCopy: {}, GardenVisual: {}, WakeVolume: {}, KeyboardControls: {}, MIDI_PROMPT_HINT: 'Allow MIDI',
     selectRevealInput: inputs => inputs[0], window: {setTimeout, clearTimeout},
     document: {}, trace() {}, recordBiotronEvent() {}
   }
@@ -167,12 +168,11 @@ const bind = (componentOptions, props = {}, withData = true) => {
   }, false)
   routePlay.acquireTabLease = async () => true
   routePlay.ensureEngine = async () => {}
-  routePlay.stop = async () => { routePlay.stopped = true }
+  routePlay.stop = async () => { routePlay.cancelMidiPermission({silent: true}); routePlay.stopped = true }
   const routePlayAttempt = routePlay.startReveal()
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(routePlay.permissionPending, true)
-  let navigated = false
-  await sound.beforeRouteLeave.call(routePlay, {path: '/other'}, {}, () => { navigated = true })
+  const navigated = await runRouteGuard(routePlay, {path: '/other'})
   assert.equal(navigated, true, 'Play route change waited on the browser permission prompt')
   pending.resolve([{id: 'biotron-2', name: 'Biotron'}])
   await bounded(routePlayAttempt)
@@ -225,8 +225,7 @@ const bind = (componentOptions, props = {}, withData = true) => {
   }, false)
   let routeStops = 0
   routeOpening.stop = async () => { routeStops++; routeOpening.releaseBlocked = true }
-  let routeResult = 'unset'
-  await sound.beforeRouteLeave.call(routeOpening, {path: '/biotron'}, {}, result => { routeResult = result })
+  const routeResult = await runRouteGuard(routeOpening, {path: '/biotron'})
   assert.equal(routeStops, 1, 'Route change skipped release during pending MIDI open')
   assert.equal(routeResult, false, 'Route change claimed release after an unresolved MIDI open')
 

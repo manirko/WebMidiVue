@@ -1,6 +1,32 @@
 # WebMidiVue
 
 ## Project setup
+
+The Biotron beta **Play** page and **Settings → Experiments** have **Play with
+keyboard**. White notes use A S D F G H J K; black notes W E T Y U at their
+physical QWERTY positions, independently of the active language. Choose C2–C7
+with **Octave**; changing the octave releases held keys. Screen keys are hidden
+at Andrey’s request (8 October 2026). Keyboard audio needs no device, MIDI permission or new
+library; it uses the existing renderer and its 4/8 voice limits.
+
+Keyboard mode is explicitly switchable. It ignores text fields, editable or
+modal regions, composing text, repeats and modified shortcuts. Blur, background,
+navigation and Stop release held notes, without stopping independent MIDI notes. The
+shared router owns route cleanup; no second component release hook is needed.
+Calibration keyboard preview uses velocity 24 and the selected cue level only
+when Biotron is disconnected; connected plant notes retain their ordinary sound.
+Selecting an experiment keeps using it across Settings/Play in this browser.
+
+The approach follows [UI Events code](https://www.w3.org/TR/uievents/#keys-code)
+and [WCAG character shortcuts](https://www.w3.org/WAI/WCAG22/Understanding/character-key-shortcuts.html)
+(reviewed 8 October 2026). `KeyboardEvent.code` gives physical positions; `key`
+does not. The [Keyboard Map draft](https://wicg.github.io/keyboard-map/) is not a
+required API: adding layout discovery is unnecessary for note positions and
+would add another permission/availability path. Nonstandard or virtual
+keyboards may omit `code`; use the example preview or a supported MIDI device in that case. Hardware key
+rollover limits and physical Windows keyboards need human testing. Automated
+coverage lives in the existing sound-core, sound-browser and audition-browser
+lanes, including every experiment, octave, edit/IME guards and audio-only Play.
 ```
 npm install
 ```
@@ -141,8 +167,8 @@ Beta routes declare their required capabilities in `src/main.js`. One shared
 compatibility gate checks secure context, Web MIDI and Web Audio before mounting
 a device page. Unsupported phones and browsers get one
 plain-language recovery card; permission denial remains a separate retryable
-state. The generic Sound route keeps its on-screen/keyboard audio mode when MIDI
-is unavailable and hides the unusable USB controls.
+state. The Biotron Play and generic Sound routes support computer-keyboard audio
+without MIDI; unusable USB controls are disabled or hidden.
 
 Responsive layout is not evidence that USB control works. Firmware update is
 computer-only and online-only; it must remain unavailable on phones. Each

@@ -106,10 +106,10 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await audioOnly.dispatchEvent('body', 'keyup', {code: 'KeyA', key: 'a'})
   await audioOnly.getByRole('button', {name: 'Stop & release'}).click()
   await audioOnly.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
-  await audioOnly.getByRole('heading', {name: 'No MIDI in this browser'}).waitFor()
-  await audioOnly.getByText(/Use current Chrome or Edge on a computer/i).waitFor()
-  assert.strictEqual(await audioOnly.getByRole('button', {name: 'Start listening'}).count(), 0)
-  assert.strictEqual(await audioOnly.locator('.sound-lab').count(), 0)
+  await audioOnly.getByRole('button', {name: 'Play with keyboard', exact: true}).click()
+  await audioOnly.locator('.sound-lab[data-audio-state="running"][data-keyboard="on"]').waitFor()
+  assert.strictEqual(await audioOnly.getByRole('button', {name: 'Start listening'}).isDisabled(), true)
+  await audioOnly.getByRole('button', {name: 'Stop keyboard', exact: true}).click()
   for (const [route, product] of [
     ['/biotron', 'Biotron'], ['/biotron/update', 'Biotron'],
     ['/touchme', 'TouchMe'], ['/playtron', 'Playtron'],
@@ -207,7 +207,7 @@ async function verifyCapabilityFallbacks(browser, origin) {
   assert.deepStrictEqual(noAudioErrors, [])
   await noAudioContext.close()
 
-  // iPhone Safari profile: Apple ships no Web MIDI — one honest gate; Sound keeps the on-screen keys.
+  // Safari profile without MIDI: Settings still explains USB recovery; Play offers screen/keyboard audio.
   const iphoneContext = await browser.newContext(devices['iPhone 15'])
   iphoneContext.setDefaultTimeout(5000)
   await iphoneContext.addInitScript(() => {
@@ -223,7 +223,8 @@ async function verifyCapabilityFallbacks(browser, origin) {
   assert.strictEqual(await midiWebLink.getAttribute('href'), 'https://apps.apple.com/us/app/midiweb-browser/id6757226617')
   assert.strictEqual(await iphone.getByRole('heading', {name: 'Settings'}).count(), 0)
   await iphone.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
-  assert((await iphone.getByRole('link', {name: 'Tell Andrey where it stopped'}).getAttribute('href')).includes('Reached%3A%20Compatibility%3A%20midi'))
+  await iphone.getByRole('button', {name: 'Play with keyboard', exact: true}).waitFor()
+  assert(await iphone.getByRole('button', {name: 'Start listening'}).isDisabled())
   await iphone.goto(`${origin}/#/sound`, {waitUntil: 'domcontentloaded'})
   await iphone.getByRole('heading', {name: 'USB device connection isn’t available here'}).waitFor()
   await iphone.getByRole('link', {name: 'Get MIDIWeb Browser'}).waitFor()
