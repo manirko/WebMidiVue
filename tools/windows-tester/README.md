@@ -1,21 +1,22 @@
 # Biotron: тестировщик для Windows и Claude Сергея
 
-Самостоятельный внутренний пакет для точного web4bcc0d85c9f7 + firmware1.10.10.
+Самостоятельный внутренний пакет для точного web623f15eedf1d + firmware1.10.10.
 Запускает уже собранный инструмент и сохраняет доказательства. Прошивку не пишет.
 Обычный запуск требует Python3.10+ и установленный Chrome/Edge. Наблюдатель
 дополнительно требует Node.js20+. Playwright-core1.62.1 включён вместе с лицензией:
 `npm install`, Git, WSL, Docker, права администратора и новый браузер не нужны.
 
-Статус8 октября2026: точный веб прошёл37 автоматических проверок на Mac;6
+Статус8 октября2026: точный веб прошёл38 автоматических проверок на Mac;5
 программных/физических направлений оставались NOT RUN. Сам пакет проверяется
 отдельно. Реального Windows/DAW PASS на компьютере Андрея нет. Пакет не является
 подписанным установщиком и не изменяет производственный стенд или firmware latest.
 
 ## Сергею: короткий старт
 
-Распакуй ZIP в локальную папку, например `C:\BiotronTester`. Открой там Claude
+Распакуй ZIP в локальную папку, например `C:\BiotronTester-623f15e`. Открой там Claude
 Code, дай ему прочитать `CLAUDE.md` и попроси: «Проведи доступные тесты по этому
 пакету, сохрани первые ошибки. Физические действия давай по одному».
+Используй новую папку: не смешивай прежние runtime, results и browser profiles.
 Claude Desktop может прочитать инструкции; запуск команд требует его доступного
 локального инструмента или PowerShell. Доступов к компьютеру пакет не создаёт.
 
@@ -84,11 +85,15 @@ py -3 tester.py capture --browser chrome --site live --minutes 10
 BLOCKED, не повод переключаться на производственный сайт. Локальный и live origin
 имеют разные permissions/пресеты/PWA; не переносить выводы между ними молча.
 
+Firmware-review: [точный source2ae1973](https://github.com/manirko/biotron-firmware/pull/1).
+[Отдельный CI-only PR](https://github.com/manirko/biotron-firmware/pull/2) проверяет
+build identity; его зелёный artifact не заменяет вложенный UF2 и owner approval.
+
 ## Что проверить последовательно
 
 | ID | Проверка и ожидаемое доказательство |
 |---|---|
-| W01 | PCB, исходная firmware version/hash если известен, Windows/build, browser version, DAW/version, MAIN/EXTRA, USB adapter и audio output. В диагностиках должен быть web4bcc0d85c9f7. Неизвестное так и записать. |
+| W01 | PCB, исходная firmware version/hash если известен, Windows/build, browser version, DAW/version, MAIN/EXTRA, USB adapter и audio output. В диагностиках должен быть web623f15eedf1d. Неизвестное так и записать. |
 | W02 | Без прибора изменить/сохранить локальный preset. Подключение не затирает draft; Apply отдельно. После изменения вернуть свой исходный preset. |
 | W03 | Plant/light: реальное звучание, короткая/удержанная нота, отпускание. Stop не возобновляет звук от следующих входных нот; повторный Play работает. Проверить аппаратный touch Mute отдельно. |
 | W04 | Chrome и Edge по одному: несколько минут заданного стимула и Start/Stop. При зависании записать время, действие, первое сообщение/trace, звук, recovery; затем отдельная попытка. |
@@ -98,7 +103,7 @@ BLOCKED, не повод переключаться на производств�
 | W08 | Один online load, затем сеть выключить, закрыть и открыть тот же test profile. Настройки/сравнения работают; incomplete cache не выдаётся за ready. На `127.0.0.1` сеть отключена, но локальный сервер должен оставаться включённым. Полностью server-off PWA проверять в браузере отдельно, не через capture, которому нужна metadata. |
 | W09 | Проверка версии/Download & check: exact1.10.10, same/legacy/no-reply flow. Без согласованного W10 не нажимать BOOT/write. Download location выбирает браузер. |
 | W10 | Только совместимая подтверждённая плата, независимое firmware-owner review exact diff, свой backup/settings и штатный rollback: browser flash -> readback/sound ->1.10.9 rollback -> readback/sound ->1.10.10 reflash. Восстановить свои настройки. Никаких erase, power cut или чужого raw sector. |
-| W11 | NEW -> Compare sounds: отдельно все10 тембров,10 cues,10 upper treatments. Одинаковые volume/quality/output; записать выбор или «ни один» и причину в каждой группе, экспортировать feedback. Рендер и Play не присваивают LISTENED/APPROVED. |
+| W11 | NEW -> Compare sounds: отдельно все10 тембров,10 cues,10 upper treatments и6 Handpan. Примеры и Play with Biotron: менять вариант во время реальной игры, включая короткие ноты и Stop/Start. Одинаковые volume/quality/output; записать выбор или «ни один» и причину в каждой группе, экспортировать feedback. Рендер и Play не присваивают LISTENED/APPROVED. |
 | W12 | Слайдеры/курсор, Humanize built-ins1/user0, компактность, feedback Copy/optional mail, exact diagnostic preview. Скопировать диагностику до/после инцидента в results. |
 | W13 | Если есть телефон+USB: отдельная фактическая проверка своего browser/OS/adapter, sound/settings/reconnect. Windows capture или эмулятор её не заменяют. |
 
@@ -135,16 +140,16 @@ diagnostics в соответствующую results-папку; файл мо�
 - `test_tester.py` — проверки целостности, приватных путей, Windows discovery,
   ограничения сервера/экспорта. Локальный запуск: `py -3 test_tester.py`.
 - `CLAUDE.md` — рабочие инструкции Claude Сергея, пределы и first-fault loop.
-- `runtime/` — неизменённая опубликованная web4bcc0d85c9f7 с1.10.10/rollback.
+- `runtime/` — неизменённая опубликованная web623f15eedf1d с1.10.10/rollback.
 - `vendor/playwright-core/` — та же версия1.62.1 и её LICENSE/NOTICE, без browser binary.
 - `packet-manifest.json` — SHA256 каждого поставляемого файла; ZIP SHA отдельно в сообщении.
-- `listening-30.zip` —30 проверенных WAV и параметры, альтернативное прослушивание.
+- `listening-36.zip` —36 проверенных WAV и параметры, альтернативное прослушивание.
 - `results/`, `.tester-profiles/` — локальные данные после запуска; не коммитить.
 
 Production/readiness решаются существующим product-loop после всех platform,
 firmware-owner и human gates. В репозитории только helper source/docs; временные
 данные и vendor/runtime остаются в ProjectData. При доработке — ветка manirko,
-атомарный commit/push; готовый4bcc архив не перезаписывать.
+атомарный commit/push; предыдущий4bcc архив не перезаписывать.
 
 Метод: [Playwright persistent context](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-persistent-context)
 с отдельным user data directory; [Python local HTTP server](https://docs.python.org/3/library/http.server.html)

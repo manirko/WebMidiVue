@@ -39,6 +39,12 @@ class PacketTests(unittest.TestCase):
   self.manifest['web_commit']='another'
   tester.write_json(self.root/'packet-manifest.json',self.manifest)
   with self.assertRaisesRegex(ValueError,'commit'):tester.verify(self.root)
+ def test_stale_runtime_metadata_cannot_pass_rehashed_manifest(self):
+  file=self.root/'runtime/release-evidence.json'
+  file.write_text(json.dumps({'source_commit':'4bcc0d85c9f736a7e4defdc5192081d1d580432a'}))
+  self.manifest['files']['runtime/release-evidence.json']=tester.digest(file)
+  tester.write_json(self.root/'packet-manifest.json',self.manifest)
+  with self.assertRaisesRegex(ValueError,'metadata differs'):tester.verify(self.root)
  def test_altered_rollback_cannot_pass_with_rehashed_manifest(self):
   file=self.root/'runtime/firmware/biotron-1.10.9-clean.uf2';file.write_bytes(b'other image')
   self.manifest['files']['runtime/firmware/biotron-1.10.9-clean.uf2']=tester.digest(file)

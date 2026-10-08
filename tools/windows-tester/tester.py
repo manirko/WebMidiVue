@@ -17,7 +17,7 @@ import urllib.parse
 import uuid
 import zipfile
 
-WEB_COMMIT = '4bcc0d85c9f736a7e4defdc5192081d1d580432a'
+WEB_COMMIT = '623f15eedf1d2aaf32fb8f340e5a7d04e7869b1a'
 ROLLBACK_SHA = '823d044374268462d39b13c0e65dc2676cda2fb3d5162edba78aedccb0a09f3d'
 UF2_SHA = '598d5a084f1eb3274e7c62b7bbeec1701f49d28edad87662e19c084dfc75477d'
 LIVE = 'https://calm-payroll-homeland-conditions.trycloudflare.com'
@@ -32,7 +32,7 @@ CASES = {
  'W08': 'Offline reopen and comparison sound, no false ready state',
  'W09': 'Installed/same/legacy firmware presentation, without BOOT or write',
  'W10': 'Physical flash -> rollback -> reflash; screened board/backup/review first',
- 'W11': 'Human listening: ten timbres, ten cues, ten upper-note treatments',
+ 'W11': 'Human listening: ten timbres, ten cues, ten upper-note treatments, six handpan variants',
  'W12': 'Compact UI, sliders, local feedback, exact copied diagnostics',
  'W13': 'Physical phone USB/MIDI, sound, settings and recovery (separate platform)',
 }

@@ -68,7 +68,7 @@ function observeAudio() {
       viewport: null,
       timeout: 15000,
       // Keep audible output and normal background policies for a physical test.
-      ignoreDefaultArgs: ['--mute-audio', '--disable-background-timer-throttling',
+      ignoreDefaultArgs: config.smoke ? [] : ['--mute-audio', '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding'],
       acceptDownloads: false
     })
@@ -94,7 +94,9 @@ function observeAudio() {
     write('browser.json',{at:new Date().toISOString(),web_commit:config.web_commit,browser:config.browser,version:browserVersion,headless:config.smoke,instrumented:true,physical_result:'NOT_RUN',midi_capture:'NONE; app alone owns its ports',acoustic_capture:'NONE'})
     if (config.smoke) {
       await page.goto(config.origin+'/#/biotron/compare',{waitUntil:'domcontentloaded'})
-      await page.getByRole('button',{name:'Play example',exact:true}).click()
+      await page.getByRole('button',{name:'Handpan',exact:true}).click()
+      if (await page.locator('#compare-variant option').count() !== 6) throw new Error('Exact candidate is missing six Handpan options')
+      await page.getByRole('button',{name:'Listen to example',exact:true}).click()
       await page.getByRole('button',{name:'Stop example',exact:true}).waitFor()
     }
     const duration = config.smoke ? 2000 : config.seconds*1000
