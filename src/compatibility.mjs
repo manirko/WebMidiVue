@@ -6,18 +6,15 @@ export const recordBiotronEvent = (name, input) => void import(/* webpackChunkNa
 export function biotronFirstSoundFeedbackUrl(outcome, issueTitle, versionDate) {
   const result = outcome === 'helped' ? 'I heard Biotron play from the plant.' : 'I did not hear Biotron play from the plant yet.'
   const stops = {
-    'Connect Biotron first': 'Biotron was not found',
-    'Connect the device': 'Biotron was not found',
+    'Connect Biotron first': 'Biotron was not found', 'Connect the device': 'Biotron was not found',
     'Allow access to Biotron': 'MIDI permission',
     'No plant signal yet': 'No plant signal after 15 seconds',
     'Calibration not confirmed': 'Calibration not confirmed',
     'Calibration did not finish': 'Calibration did not finish',
     'Sound is open elsewhere': 'Sound open in another tab',
-    'Biotron disconnected': 'Biotron disconnected before first sound',
-    'Connection lost': 'Biotron disconnected before first sound',
+    'Biotron disconnected': 'Biotron disconnected before first sound', 'Connection lost': 'Biotron disconnected before first sound',
     'Audio stopped unexpectedly': 'Audio stopped before first sound',
-    'Biotron could not start': 'Biotron could not start',
-    'Could not start listening': 'Biotron could not start'
+    'Biotron could not start': 'Biotron could not start', 'Could not start listening': 'Biotron could not start'
   }
   const stoppedAt = outcome === 'helped' ? 'Sound from the plant' : (stops[issueTitle] || 'Before first sound')
   return taskFeedbackUrl(result, stoppedAt, versionDate)
