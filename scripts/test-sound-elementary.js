@@ -67,6 +67,7 @@ const server = http.createServer((request, response) => {
     await page.addScriptTag({url: `http://127.0.0.1:${server.address().port}/scripts/_elem-engine-bundle.js`})
 
     const metrics = await page.evaluate(async () => {
+      // browser-qa:sound-body:start
       const {ElementarySynthEngine} = window.__ElemEngine
       const {SOUNDS} = window.__ElemEngine
       const sampleRate = 48000
@@ -280,10 +281,12 @@ const server = http.createServer((request, response) => {
       }
 
       return {plantNote, dynamics, thdPercent, eightVoices, release, panicClick, sounds}
+      // browser-qa:sound-body:end
     })
 
     console.log('SOUND_LEVEL_METRICS ' + JSON.stringify(metrics))
 
+    // browser-qa:sound-checks:start
     // Plant-note and click thresholds carried over from the previous engine's
     // gates; dynamics and THD specified for this one.
     assert(metrics.plantNote.plantPeak >= 0.8 * metrics.plantNote.heldPeak,
@@ -326,6 +329,7 @@ const server = http.createServer((request, response) => {
     // These are spectra/level measurements, not a verdict on pleasantness.
     console.log('REGISTER_METRICS ' + JSON.stringify(metrics.sounds.map(({name, registers}) => ({name, registers}))))
 
+    // browser-qa:sound-checks:end
     const {sounds, ...gates} = metrics
     console.log('Elementary engine sound levels: ' + JSON.stringify(gates, null, 1))
     console.log('Seven sounds (held note velocity 98): ' + sounds.map(sound =>

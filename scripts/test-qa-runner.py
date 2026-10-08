@@ -1,9 +1,22 @@
 """Prove timeout/failure reporting and immutable evidence without hardware/UI."""
-import hashlib, json, os, pathlib, subprocess, sys, tempfile, signal, time
+import hashlib, json, os, pathlib, subprocess, sys, tempfile, signal, time, shutil
 
 runner = pathlib.Path(__file__).with_name('run-biotron-qa.py')
 with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  root = pathlib.Path(temporary)
+ # The real browser-bench generator must reject stale/ambiguous boundaries,
+ # rather than silently copying the remaining Node launcher into browser JS.
+ marker='// browser-qa:sound-body:start'
+ end='// browser-qa:sound-body:end'
+ sound=(runner.parent/'test-sound-elementary.js').read_text()
+ for name,broken in [('missing',sound.replace(marker,'')),('duplicate',sound.replace(marker,marker+'\n'+marker)),('reversed',sound.replace(marker,'__swap__').replace(end,marker).replace('__swap__',end))]:
+  fixture=root/name/'scripts';fixture.mkdir(parents=True)
+  shutil.copyfile(runner.parent/'build-browser-qa-harness.py',fixture/'build-browser-qa-harness.py')
+  shutil.copyfile(runner.parent/'test-presets-idb.js',fixture/'test-presets-idb.js')
+  (fixture/'test-sound-elementary.js').write_text(broken)
+  checked=subprocess.run([sys.executable,str(fixture/'build-browser-qa-harness.py'),'--output',str(root/name/'output')],capture_output=True,text=True,timeout=5)
+  assert checked.returncode!=0 and 'source boundar' in checked.stderr.lower(),name+checked.stderr
+  assert not (root/name/'output/entry.mjs').exists(),name
  binaries = root/'bin'; binaries.mkdir()
  git = binaries/'git'
  git.write_text('#!/bin/sh\ncase "$1" in rev-parse) echo fixture-head;; status) echo " M fixture";; esac\n')
@@ -25,7 +38,7 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
   assert by_name['test:midi-lifecycle']['result'] == 'TIMEOUT'
   assert by_name['test:presets']['result'] == 'PASS'
   assert by_name['test:sound:levels']['result'] == 'PASS'
-  for name in ['test:mobile:owner','test:pwa:browser','test:firmware:browser','test:firmware:physical-cycle','test:quality:browser','test:windows:daw']:
+  for name in ['test:audio:realtime','test:mobile:owner','test:pwa:browser','test:firmware:browser','test:firmware:physical-cycle','test:quality:browser','test:windows:daw']:
    assert by_name[name]['result'] == 'NOT RUN', name
   for row in rows:
    if 'evidence' in row:
@@ -49,4 +62,4 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  latest = max(output.iterdir(),key=lambda p:p.stat().st_mtime_ns)
  rows = [json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
  assert len(rows) == 1 and rows[0]['result'] == 'INTERRUPTED', rows
- print('QA runner: strict incomplete gate and interruption stop; failure, timeout, skipped coverage and immutable checksummed evidence passed')
+ print('QA runner: three stale/ambiguous source-boundary controls; browser skip, strict incomplete gate, interruption, failure, timeout and immutable checksummed evidence passed')

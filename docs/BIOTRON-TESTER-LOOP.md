@@ -72,11 +72,25 @@ currently Reduce extra notes. Basic tasks stay visible; exact advanced behavior
 is disclosed near the control. Do not erase intentional firmware/music choices
 just to pass a test or hide uncertainty behind a vague label.
 
-Latest source changes are internal and have not updated Sergey's temporary site.
+This paragraph records the earlier602d19c baseline, before later publication.
 Baseline602d19c passed32 software lanes and a600s Mac Chrome synthetic-MIDI soak
 (2892 cycles). That evidence does not attest the later feedback changes or close
 Windows/physical mobile/musical acceptance. Canonical product-loop on8 October
 still has no registered customer candidate and release_ready=false.
+
+Internal web4bcc0d85c9f736a7e4defdc5192081d1d580432a was subsequently published
+8 October14:47 UTC on the existing temporary site. Its immutable release metadata
+was reread16:19 UTC: build4bcc0d85c9f7, firmware1.10.10, customer_release=false.
+Final exact-archive QA37PASS/6NOT RUN remains its dated publication evidence.
+Test/helper-only commits after4bcc do not identify another published runtime.
+
+The existing real-time audio bench is now an executable `test:audio:realtime`
+browser lane, using the same capture/analyzer/production engine. It records
+actual final-gain PCM and proves silence/stuck-note mutations, then rereads WAVs.
+Score v2 checks Note Off release before panic, and repeated capture cleanup.
+Source-boundary, cold-audio-clock, retained bench poller and panic-masked release
+counterexamples are preserved. Full physical output, Windows and mobile gates
+remain separate; this is isolated engine capture, not a running Play UI tap.
 
 
 ## Thirty listening options — 8 October 2026

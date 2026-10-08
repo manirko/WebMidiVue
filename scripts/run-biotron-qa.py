@@ -2,13 +2,13 @@
 """Run repeatable software QA with durable JSONL and separate raw output files."""
 import argparse, datetime, hashlib, json, os, pathlib, signal, subprocess, sys, uuid
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-TESTS = ['test:auditions', 'test:auditions:render', 'test:qa-runner', 'test:audio-qa', 'test:audio:realtime', 'test:audio:system-output', 'test:audio:physical-output', 'test:garden', 'test:firmware', 'test:settings-readback', 'test:midi-lifecycle', 'test:diagnostics', 'test:telemetry', 'test:navigation', 'test:compatibility', 'test:listeners', 'test:midi-timing', 'test:sound', 'test:architecture', 'test:legacy-selector', 'test:playtron-variants', 'test:scales-variants', 'test:touchme-variants', 'test:presets', 'test:service-worker-ready', 'test:midi-permission-cancel', 'test:release-evidence', 'test:preview-guard', 'test:sound:levels']
+TESTS = ['test:auditions', 'test:auditions:render', 'test:qa-runner', 'test:audio-qa', 'test:audio:system-output', 'test:audio:physical-output', 'test:garden', 'test:firmware', 'test:settings-readback', 'test:midi-lifecycle', 'test:diagnostics', 'test:telemetry', 'test:navigation', 'test:compatibility', 'test:listeners', 'test:midi-timing', 'test:sound', 'test:architecture', 'test:legacy-selector', 'test:playtron-variants', 'test:scales-variants', 'test:touchme-variants', 'test:presets', 'test:service-worker-ready', 'test:midi-permission-cancel', 'test:release-evidence', 'test:preview-guard', 'test:sound:levels']
 EXTERNAL_CHECKS = {
  'test:mobile:owner': 'Mandatory before Sergey handoff: Andrey must physically test the exact build and firmware on his phone, including USB/MIDI, calibration, audible sound, Garden touch/fullscreen, Stop/Start, settings and reconnect. A viewport/emulator or unsupported-browser message is not functional mobile PASS.',
  'test:firmware:physical-cycle': 'Rollback, reinstall and settings readback require a compatible physical board and pinned images.',
  'test:windows:daw': 'Windows/Ableton release, actual MIDI-clip recording, physical sound and web reconnect require independent evidence on a real Windows host; a listed port is not PASS.'
 }
-BROWSER_TESTS = ['test:production-isolation', 'test:build-destination', 'test:firmware:browser', 'test:beta-build', 'test:sound:browser', 'test:pwa:browser', 'test:quality:browser', 'test:auditions:browser', 'test:playtron-variants:browser', 'test:scales-variants:browser', 'test:touchme-variants:browser']
+BROWSER_TESTS = ['test:production-isolation', 'test:build-destination', 'test:firmware:browser', 'test:beta-build', 'test:sound:browser', 'test:audio:realtime', 'test:pwa:browser', 'test:quality:browser', 'test:auditions:browser', 'test:playtron-variants:browser', 'test:scales-variants:browser', 'test:touchme-variants:browser']
 TESTS.extend(BROWSER_TESTS)
 TESTS.extend(EXTERNAL_CHECKS)
 p = argparse.ArgumentParser()
@@ -45,7 +45,7 @@ with (a.output/'tests.jsonl').open('x') as journal:
    print(name, record['result'], flush=True)
    counts['NOT RUN'] = counts.get('NOT RUN', 0)+1
    continue
-  process = subprocess.Popen(['npm','run',name],cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,start_new_session=True)
+  process = subprocess.Popen(['npm','run',name],cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,start_new_session=True,env=dict(os.environ,BIOTRON_QA_OUTPUT=str(a.output)))
   timed_out = False
   interrupted = False
   try:

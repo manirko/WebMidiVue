@@ -3,9 +3,16 @@ import json,hashlib,argparse,subprocess
 root=Path(__file__).resolve().parent.parent
 p=argparse.ArgumentParser();p.add_argument('--output',required=True,type=Path);args=p.parse_args();out=args.output.resolve();out.mkdir(parents=True,exist_ok=False)
 sound=(root/'scripts/test-sound-elementary.js').read_text();preset=(root/'scripts/test-presets-idb.js').read_text()
-def between(text,left,right):return text.split(left,1)[1].split(right,1)[0]
-metric=between(sound,'const metrics = await page.evaluate(async () => {','    })\n\n    // Plant-note')
-checks=between(sound,'    // Plant-note','    const {sounds, ...gates} = metrics');checks='// Plant-note'+checks
+def between(text,left,right):
+    if text.count(left)!=1 or text.count(right)!=1:
+        raise ValueError(f'Expected one source boundary: {left!r} / {right!r}')
+    start=text.index(left)+len(left)
+    end=text.find(right,start)
+    if end<0:
+        raise ValueError(f'Source boundaries out of order: {left!r} / {right!r}')
+    return text[start:end]
+metric=between(sound,'// browser-qa:sound-body:start','// browser-qa:sound-body:end')
+checks=between(sound,'// browser-qa:sound-checks:start','// browser-qa:sound-checks:end')
 seed=between(preset,'const result = await page.evaluate(async () => {','    })\n    // A fresh')
 cases=between(preset,'const cases = await page.evaluate(async ({dbName}) => {','    }, result)')
 imports='\n'.join([f'import {{ElementarySynthEngine}} from {json.dumps(str(root/"src/audio/elementary/engine.mjs"))}',f'import {{SOUNDS}} from {json.dumps(str(root/"src/audio/elementary/timbres.mjs"))}',f'import {{BIOTRON_CALIBRATION}} from {json.dumps(str(root/"src/audio/biotronCalibration.mjs"))}',f'import {{Db, withPresetFeedback}} from {json.dumps(str(root/"src/assets/js/PresetsIDB.js"))}'])
@@ -30,7 +37,7 @@ document.getElementById('cases').onclick=()=>run('preset-transactions',async()=>
 (out/'entry.mjs').write_text(entry)
 (out/'index.html').write_text('''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Biotron browser regression bench</title><style>body{background:#f7f8fb;font:16px/1.6 system-ui;color:#111;margin:24px}header{background:linear-gradient(135deg,#5c6bc0,#3949ab);color:white;padding:24px;border-radius:12px}button{font:inherit;padding:16px;margin:16px 8px 16px 0;cursor:pointer;min-height:44px}button:hover{background:#e8edff}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:white;padding:24px;border-radius:12px}</style><header><h1>Browser regression bench</h1><p>Exact source test vectors. Offline audio rendering and isolated IndexedDB fixtures; no hardware commands.</p></header><button id="sound">Run sound levels</button><button id="seed">Seed preset fixture</button><button id="cases">Verify presets after reload</button><button id="audio-normal">Record real-time audio</button><button id="audio-mute">Verify silent-output fault</button><button id="audio-stuck">Verify stuck-note fault</button><button id="load">Run animation + audio load ladder</button><button id="stop-load">Stop load test</button><iframe id="load-scene" title="Garden load test" style="display:block;width:320px;height:320px;border:0"></iframe><div id="artifacts"></div><p id="stage" role="status">READY</p><pre id="result">Results appear here.</pre><script defer src="/bundle.js"></script></html>''')
 (out/'build.cjs').write_text(f'''const webpack=require({json.dumps(str(root/'node_modules/webpack'))});webpack({{mode:'production',entry:{json.dumps(str(out/'entry.mjs'))},output:{{path:{json.dumps(str(out))},filename:'bundle.js',publicPath:'/'}},resolve:{{modules:[{json.dumps(str(root/'node_modules'))},'node_modules']}}}},(err,stats)=>{{if(err||stats.hasErrors()){{console.error(err||stats.toString({{all:false,errors:true}}));process.exitCode=1}}else console.log('Browser QA harness bundled')}});''')
-(out/'source-manifest.json').write_text(json.dumps({'candidate':subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),'generated_from':{f:hashlib.sha256((root/f).read_bytes()).hexdigest() for f in ['scripts/test-sound-elementary.js','scripts/test-presets-idb.js','package-lock.json','scripts/audio-qa/load.mjs','public/garden/scene.html','scripts/audio-qa/browser.mjs','scripts/audio-qa/analyze.mjs','src/assets/js/PresetsIDB.js']+[str(p.relative_to(root)) for p in (root/'src/audio').rglob('*.mjs')]},'method':'Exact page.evaluate test bodies extracted into explicit UI controls; no external browser launcher'},indent=2))
+(out/'source-manifest.json').write_text(json.dumps({'candidate':subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),'generated_from':{f:hashlib.sha256((root/f).read_bytes()).hexdigest() for f in ['scripts/build-browser-qa-harness.py','scripts/test-sound-elementary.js','scripts/test-presets-idb.js','package-lock.json','scripts/audio-qa/load.mjs','public/garden/scene.html','scripts/audio-qa/browser.mjs','scripts/audio-qa/analyze.mjs','src/assets/js/PresetsIDB.js']+[str(p.relative_to(root)) for p in (root/'src/audio').rglob('*.mjs')]},'method':'Exact page.evaluate test bodies extracted into explicit UI controls; no external browser launcher'},indent=2))
 import shutil
 shutil.copytree(root/'public/garden',out/'garden')
 print(out)

@@ -1,19 +1,21 @@
-export const SCORE={id:'biotron-round-v1',seconds:7,noteOn:1,noteOff:2.5,panic:4,signal:[1.4,2.3],tail:[5.8,6.8]}
+export const SCORE={id:'biotron-round-v2',seconds:7,noteOn:1,noteOff:2.5,panic:4,signal:[1.4,2.3],release:[3.4,3.9],tail:[5.8,6.8]}
 export function analyze(channels,sampleRate,{dropped=0,clocksValid=true}={}){
  if(!channels.length||!Number.isFinite(sampleRate)||sampleRate<=0)throw Error('Invalid PCM format')
  const metrics=channels.map(samples=>{
   let peak=0,nonFinite=0,clipped=0,sum=0,squares=0
   for(const x of samples){if(!Number.isFinite(x)){nonFinite++;continue}peak=Math.max(peak,Math.abs(x));clipped+=Math.abs(x)>=.999;sum+=x;squares+=x*x}
   const rmsWindow=([a,b])=>{let n=0,s=0;for(let i=Math.floor(a*sampleRate);i<Math.min(samples.length,Math.floor(b*sampleRate));i++){s+=samples[i]*samples[i];n++}return n?Math.sqrt(s/n):null}
-  return {samples:samples.length,seconds:samples.length/sampleRate,peak,nonFinite,clipped,dc:sum/samples.length,rms:Math.sqrt(squares/samples.length),signalRms:rmsWindow(SCORE.signal),tailRms:rmsWindow(SCORE.tail)}
+  return {samples:samples.length,seconds:samples.length/sampleRate,peak,nonFinite,clipped,dc:sum/samples.length,rms:Math.sqrt(squares/samples.length),signalRms:rmsWindow(SCORE.signal),releaseRms:rmsWindow(SCORE.release),tailRms:rmsWindow(SCORE.tail)}
  })
  // Fixture contract, not general musical quality thresholds. Round preset, volume 70.
  const reasons=[]
  if(metrics.some(m=>m.nonFinite))reasons.push('NON_FINITE')
  if(metrics.some(m=>m.clipped))reasons.push('CLIPPING')
  if(metrics.every(m=>m.signalRms===null||m.signalRms<.001))reasons.push('MISSING_SIGNAL')
+ // Check Note Off before panic; a later panic must not hide a lost release.
+ if(metrics.some(m=>m.releaseRms!==null&&m.releaseRms>.001))reasons.push('UNRELEASED_NOTE')
  if(metrics.some(m=>m.tailRms!==null&&m.tailRms>.001))reasons.push('STUCK_TAIL')
- const incomplete=dropped>0||!clocksValid||metrics.some(m=>m.seconds<SCORE.seconds-.1||m.tailRms===null)
+ const incomplete=dropped>0||!clocksValid||metrics.some(m=>m.seconds<SCORE.seconds-.1||m.releaseRms===null||m.tailRms===null)
  return {result:incomplete?'INCONCLUSIVE':reasons.length?'FAIL':'PASS',reasons,metrics,dropped,scope:'engine final gain PCM; no speaker or system-output claim',score:SCORE.id}
 }
 export function wav(channels,sampleRate){
