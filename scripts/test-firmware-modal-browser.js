@@ -42,7 +42,9 @@ async function check(browser, origin, viewport) {
   }
 
   await action.click()
-  await page.getByText(/Firmware [\d.]+ is checked and held in this page/).waitFor({timeout: 15000})
+  await page.getByText(/Firmware 1\.10\.10 is checked and held in this page/).waitFor({timeout: 15000})
+  assert.strictEqual(await page.locator('#UpdateConf a[download]').getAttribute('href'),
+    '/firmware/biotron-1.10.10-internal.uf2')
   assert.deepStrictEqual(pageErrors, [], `${size}: page errors`)
   await context.close()
   return `${size}: ${footer.length} footer buttons visible and clickable`

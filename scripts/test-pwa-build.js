@@ -11,7 +11,14 @@ for (const file of ['index.html', 'manifest.json', 'service-worker.js', '_header
 }
 const firmwareMode = process.argv.includes('--firmware')
 if (firmwareMode) {
-  assert(fs.existsSync(path.join(root, 'firmware/biotron-1.10.9-clean.uf2')), 'firmware candidate is missing its pinned artifact')
+  assert(fs.existsSync(path.join(root, 'firmware/biotron-1.10.10-internal.uf2')), 'firmware candidate is missing its pinned artifact')
+  assert(fs.existsSync(path.join(root, 'firmware/biotron-1.10.9-clean.uf2')), 'known-good rollback is missing')
+  for (const [name, sha256] of [
+    ['biotron-1.10.10-internal.uf2', '598d5a084f1eb3274e7c62b7bbeec1701f49d28edad87662e19c084dfc75477d'],
+    ['biotron-1.10.9-clean.uf2', '823d044374268462d39b13c0e65dc2676cda2fb3d5162edba78aedccb0a09f3d']
+  ]) assert.strictEqual(require('crypto').createHash('sha256').update(
+    fs.readFileSync(path.join(root, 'firmware', name))).digest('hex'), sha256,
+    `${name}: built firmware differs from the reviewed artifact`)
   assert(!read('service-worker.js').includes('/firmware/'), 'firmware must not enter the offline precache')
 } else assert(!fs.existsSync(path.join(root, 'firmware')), 'general beta must not ship the firmware test artifact')
 
