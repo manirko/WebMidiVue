@@ -51,6 +51,19 @@ function page() {
   return state
 }
 
+// A select commits its displayed value before notifying the parent. A Vue
+// watcher runs later; callers must never receive the previous choice.
+const selectScript = fs.readFileSync(process.env.SELECT_COMMAND_CONTROL_FILE || 'src/components/MidiComponents/SelectCommand.vue', 'utf8')
+  .match(/<script>([\s\S]*?)<\/script>/)[1]
+const selectContext = {module: {exports: {}}, HintComponent: {}, SysExCommand: class {}}
+vm.runInNewContext(selectScript.replace(/import.*$/gm, '').replace('export default', 'module.exports ='), selectContext)
+const selection = {Value: 0, commandObject: {value: 4, set_value(value) {this.value = value}},
+  $emit(name, command) {assert.equal(command.value, this.Value, 'selector emitted the previous scale')}}
+for (const value of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+  selection.Value = value
+  selectContext.module.exports.methods.changed.call(selection)
+}
+
 ;(async () => {
   const legacy = page()
   legacy.firmwareVersion = '1.8.2'

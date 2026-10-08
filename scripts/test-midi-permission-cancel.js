@@ -19,7 +19,7 @@ const component = (file, context) => {
 }
 const bind = (componentOptions, props = {}, withData = true) => {
   const events = []
-  const target = {...(withData ? componentOptions.data() : {}), ...props,
+  const target = {exampleTimers: new Set(), ...(withData ? componentOptions.data() : {}), ...props,
     $emit(name, detail) { events.push([name, detail]) }}
   for (const [name, method] of Object.entries(componentOptions.methods)) target[name] = method.bind(target)
   target.events = events
@@ -116,9 +116,9 @@ const bind = (componentOptions, props = {}, withData = true) => {
   soundContext.updateSoundSession = () => {}
   soundContext.parseBiotronCalibrationState = () => null
   soundContext.BIOTRON_CALIBRATION = {}
-  const effectsContext = {module: {exports: {}}}
+  const effectsContext = {...soundContext, module: {exports: {}}}
   vm.runInNewContext(fs.readFileSync('src/audio/soundSessionEffects.mjs', 'utf8')
-    .replace('export function createSoundSessionEffects', 'function createSoundSessionEffects') +
+    .replace(/^import .*$/gm, '').replace('export function createSoundSessionEffects', 'function createSoundSessionEffects') +
     '\nmodule.exports = createSoundSessionEffects', effectsContext)
   soundContext.createSoundSessionEffects = effectsContext.module.exports
   const sound = component('src/components/SoundLab/SoundLab.vue', soundContext)

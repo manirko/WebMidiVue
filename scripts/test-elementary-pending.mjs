@@ -212,14 +212,14 @@ function soundStartupFixture(engines) {
     .match(/<script>([\s\S]*?)<\/script>/)[1]
     .replace(/^import .*$/gm, '').replace('export default', 'module.exports =')
   const effectsSource = readFileSync('src/audio/soundSessionEffects.mjs', 'utf8')
-    .replace('export function createSoundSessionEffects', 'function createSoundSessionEffects') +
+    .replace(/^import .*$/gm, '').replace('export function createSoundSessionEffects', 'function createSoundSessionEffects') +
     '\nmodule.exports = createSoundSessionEffects'
   const effectsContext = {...context, module: {exports: {}}}
   vm.runInNewContext(effectsSource, effectsContext)
   context.createSoundSessionEffects = effectsContext.module.exports
   vm.runInNewContext(script, context)
   const target = {
-    engine: null, midi: null, variants: [{}], currentVariant: 0, lowCpu: true,
+    exampleTimers: new Set(), engine: null, midi: null, variants: [{}], currentVariant: 0, lowCpu: true,
     volume: 65, revealMode: true, revealProfile: {id: 'biotron', settingsRoute: '/biotron'},
     audioStarting: false, starting: true, midiOpening: false, permissionPending: false,
     permissionAbort: null, permissionAttemptId: 0, audioState: 'closed', releaseBlocked: false,

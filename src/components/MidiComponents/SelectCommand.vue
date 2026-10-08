@@ -29,12 +29,8 @@ export default {
   },
   methods: {
     changed() {
-      this.$emit('InputChanged', this.commandObject)
-    }
-  },
-  watch: {
-    Value() {
       this.commandObject.set_value(this.Value)
+      this.$emit('InputChanged', this.commandObject)
     }
   },
   mounted() {

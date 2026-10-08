@@ -3,6 +3,9 @@
     class="sound-lab"
     :data-audio-state="audioState"
     :data-active-voices="voiceCount"
+    :data-example="examplePlaying ? 'playing' : 'idle'"
+    :data-example-timers="exampleTimers.size"
+    :data-sound="engine ? appliedSoundName : null"
     :data-quality="lowCpu ? 'safe' : 'standard'"
     :data-tab-lease="tabLeaseState"
     :data-reveal-stage="revealMode ? revealStage : null"
@@ -10,7 +13,22 @@
     :data-audio-capability="capabilities.audio ? 'available' : 'unavailable'"
     :data-midi-capability="capabilities.midi ? 'available' : 'unavailable'"
   >
-    <template v-if="revealMode">
+    <template v-if="compareMode">
+      <div class="sound-lab__reveal-actions">
+        <button type="button" class="btn btn-primary"
+          @click="midi?.input || (starting && !examplePlaying) ? stop() : startReveal()"
+          :disabled="releaseBlocked || (!engine && !canStartReveal)">{{ midi?.input ? 'Stop & release Biotron' : starting && !examplePlaying ? 'Cancel connection' : 'Play with Biotron' }}</button>
+        <button type="button" class="btn btn-outline-secondary" @click="toggleExample()" :disabled="releaseBlocked">{{ examplePlaying || audioStarting ? 'Stop example' : 'Listen to example' }}</button>
+        <button v-if="releaseBlocked" type="button" class="btn btn-outline-danger" @click="stop()">Retry release</button>
+      </div>
+      <p v-if="audition.bankId === 'calibration'">The option changes Biotron’s calibration cue. Plant notes keep the reference sound. Stop and start Biotron to recalibrate.</p>
+      <p v-else-if="audition.bankId === 'high-notes'">Changes begin above C5 (MIDI72). Middle notes stay the same; the three-register option also changes bass notes.</p>
+      <p v-else>Change options while playing to compare timbres.</p>
+      <label class="sound-lab__volume" for="compare-volume"><span>Volume</span><input id="compare-volume" type="range" min="0" max="100" step="1" :value="volume" @input="updateVolume"><output>{{ volume }}%</output></label>
+      <label class="sound-lab__quality"><input type="checkbox" v-model="lowCpu" :disabled="Boolean(engine)"> Low CPU</label>
+      <p role="status" aria-live="polite">{{ status }}</p>
+    </template>
+    <template v-else-if="revealMode">
       <DeviceTaskNav
         :device-name="revealProfile.productName"
         active-task="play"
@@ -21,6 +39,7 @@
         <small>{{ revealProfile.eyebrow }}</small>
         <h1>{{ revealProfile.title }}</h1>
         <p>{{ revealProfile.promise }}</p>
+        <router-link v-if="revealProfile.id === 'biotron'" class="btn btn-outline-primary" to="/biotron/compare">Compare sounds · 10 × 3</router-link>
       </header>
 
       <section class="sound-lab__reveal" aria-labelledby="device-reveal-title">
@@ -95,8 +114,6 @@
           ><span>{{ preset.name }}</span></button>
         </div>
       </section>
-
-
     </template>
 
     <template v-else>
@@ -208,6 +225,7 @@ import {createRealtimeElementarySynth as createRealtimeSynth, DEFAULT_VOLUME, no
 import {registerSoundController, soundSessionState, unregisterSoundController, updateSoundSession} from '@/audio/sessionState.mjs'
 import {trace, MidiInputSession} from '@/audio/midi.mjs'
 import {createSoundSessionEffects} from '@/audio/soundSessionEffects.mjs'
+import {createListenerScope} from '@/assets/js/ListenerScope.mjs'
 import {MIDI_PROMPT_HINT} from '@/audio/midiAccess.mjs'
 import {SOUNDS} from '@/audio/elementary/timbres.mjs'
 import {createExclusiveTabLease} from '@/audio/tabLease.mjs'
@@ -248,10 +266,17 @@ export default {
   components: {CompatibilityNotice, DeviceTaskNav, DiagnosticCopy, GardenVisual, WakeVolume},
   props: {
     mode: {type: String, default: 'lab'},
-    profileId: {type: String, default: ''}
+    profileId: {type: String, default: ''},
+    audition: {type: Object, default: null}
   },
   computed: {
-    revealMode() { return this.mode === 'reveal' },
+    compareMode() { return this.mode === 'compare' },
+    revealMode() { return this.mode === 'reveal' || this.compareMode },
+    selectedSound() {
+      const cue = this.examplePlaying || soundSessionState.calibrating
+      return this.audition && (this.audition.bankId !== 'calibration' || cue)
+        ? this.audition.variant.preset : this.variants[this.currentVariant]
+    },
     revealProfile() { return getRevealProfile(this.profileId) },
     revealCopy() {
       const stage = ['intro', 'settling', 'calibrating', 'ready'].includes(this.revealStage)
@@ -269,6 +294,10 @@ export default {
       midi: null,
       variants: SOUNDS,
       currentVariant: 0,
+      appliedSoundName: '',
+      examplePlaying: false,
+      exampleTimers: markRaw(new Set()),
+      presetTask: markRaw(Promise.resolve()),
       volume: loadVolume(),
       keyboard,
       heldCodes: markRaw(new Set()),
@@ -276,7 +305,8 @@ export default {
       selectedInput: '',
       capabilities: markRaw(capabilities),
       platformCapabilities: markRaw(detectPlatformCapabilities()),
-      status: this.mode === 'reveal'
+      status: this.mode === 'compare' ? 'Choose an option. Play Biotron or listen to the example.'
+        : this.mode === 'reveal'
         ? soundCapabilityMessage(capabilities, {requiresMidi: true}) || 'Ready when you are'
         : capabilities.audio ? 'Press Start sound' : soundCapabilityMessage(capabilities),
       audioState: 'closed',
@@ -296,10 +326,7 @@ export default {
       explicitCalibration: false,
       voiceFrame: null,
       pendingVoiceCount: 0,
-      keyDownHandler: null,
-      keyUpHandler: null,
-      blurHandler: null,
-      visibilityHandler: null,
+      listenerScope: null,
       tabLease: null,
       tabLeaseState: 'free',
       revealStage: 'intro',
@@ -314,25 +341,20 @@ export default {
   mounted() {
     registerSoundController(this)
     this.tabLease = markRaw(createExclusiveTabLease('playtronica-settings-sound-lab'))
-    this.keyDownHandler = event => this.handleKeyDown(event)
-    this.keyUpHandler = event => this.handleKeyUp(event)
-    this.blurHandler = () => this.releaseHeldKeyboard()
-    this.visibilityHandler = () => this.handleVisibility()
-    window.addEventListener('keydown', this.keyDownHandler)
-    window.addEventListener('keyup', this.keyUpHandler)
-    window.addEventListener('blur', this.blurHandler)
-    document.addEventListener('visibilitychange', this.visibilityHandler)
+    this.listenerScope = markRaw(createListenerScope())
+    this.listenerScope.on(window, 'keydown', event => this.handleKeyDown(event))
+    this.listenerScope.on(window, 'keyup', event => this.handleKeyUp(event))
+    this.listenerScope.on(window, 'blur', () => this.releaseHeldKeyboard())
+    this.listenerScope.on(document, 'visibilitychange', () => this.handleVisibility())
   },
   beforeUnmount() {
+    this.clearExample()
     window.clearTimeout(this.midiIdleTimer)
     this.cancelMidiPermission({silent: true})
     this.resumeAttemptId++
     unregisterSoundController(this)
     updateSoundSession({running: false, volume: this.volume})
-    window.removeEventListener('keydown', this.keyDownHandler)
-    window.removeEventListener('keyup', this.keyUpHandler)
-    window.removeEventListener('blur', this.blurHandler)
-    document.removeEventListener('visibilitychange', this.visibilityHandler)
+    this.listenerScope?.clear()
     this.clearCalibrationTimers()
     this.resetVoiceUi()
     const midi = this.midi
@@ -361,31 +383,14 @@ export default {
     if (this.releaseBlocked) next(false)
     else next()
   },
-  watch: {revealStage(stage) { trace('stage', stage); if (this.revealMode) recordBiotronEvent('play.stage_changed', {stage}) }},
+  watch: {
+    selectedSound() { void this.applySelectedSound() },
+    audition() { if (this.examplePlaying) void this.stop() },
+    revealStage(stage) { trace('stage', stage); if (this.revealMode) recordBiotronEvent('play.stage_changed', {stage}) }
+  },
   methods: {
     ...createSoundSessionEffects({resumeAudioWithin, trace, updateSoundSession,
       parseBiotronCalibrationState, BIOTRON_CALIBRATION}),
-    async requestMidiPermission() {
-      const controller = markRaw(new AbortController())
-      this.permissionAbort = controller
-      this.permissionPending = true
-      try { return await this.midi.requestAccess(undefined, controller.signal) }
-      finally {
-        if (this.permissionAbort === controller) {
-          this.permissionAbort = null
-          this.permissionPending = false
-        }
-      }
-    },
-    cancelMidiPermission({silent = false} = {}) {
-      if (!this.permissionPending && !this.starting) return
-      this.permissionAttemptId++
-      this.permissionAbort?.abort()
-      this.permissionAbort = null
-      this.permissionPending = false
-      this.starting = false
-      if (!silent) this.status = 'MIDI request cancelled. The browser prompt may remain open; press Start again after answering it.'
-    },
     async acquireTabLease() {
       if (await this.tabLease.acquire()) {
         this.tabLeaseState = this.tabLease.protected ? 'held' : 'unprotected'
@@ -399,15 +404,15 @@ export default {
       registerSoundController(this)
       if (!this.engine || this.engine.state === 'closed') {
         this.engine = markRaw(createRealtimeSynth({
-          preset: this.variants[this.currentVariant],
+          preset: this.selectedSound,
           quality: this.lowCpu ? 'safe' : 'standard',
           volume: this.volume,
           onStateChange: state => this.handleAudioContextState(state)
         }))
         const biotron = this.revealMode && this.revealProfile.id === 'biotron'
         this.midi = markRaw(new MidiInputSession(this.engine, event => this.handleMidiState(event), {
-          sysex: biotron, voiceLevel: biotron ? message => biotronVoiceLevel(message,
-            BIOTRON_CALIBRATION, soundSessionState.calibrating) : undefined
+          sysex: biotron, voiceLevel: biotron ? message => soundSessionState.calibrating && this.audition?.bankId === 'calibration'
+            ? this.audition.variant.level : biotronVoiceLevel(message, BIOTRON_CALIBRATION, soundSessionState.calibrating) : undefined
         }))
         try { if (navigator.audioSession) navigator.audioSession.type = 'playback' } catch (error) { void error }
       }
@@ -425,6 +430,8 @@ export default {
           if (stage === 'starting') this.status = 'Starting sound…'
         }), 12000, 'Sound engine loading timed out.')
         if (this.engine !== engine || engine.stopped) return
+        if (this.audition) await this.applySelectedSound()
+        this.appliedSoundName = engine.sound?.name || ''
         if (await resumeAudioWithin(engine) !== 'running') throw new Error('Audio could not start.')
         if (this.engine !== engine || engine.stopped) return
         this.setAudioState('running', 'Sound ready')
@@ -481,6 +488,7 @@ export default {
       } finally { if (attemptId === this.permissionAttemptId) this.starting = false }
     },
     async stop() {
+      this.clearExample()
       this.cancelMidiPermission({silent: true})
       this.midiOpening = false
       this.audioStarting = false
@@ -513,21 +521,8 @@ export default {
       }
       this.starting = false
     },
-    resetVoiceUi() {
-      this.heldCodes.clear()
-      window.cancelAnimationFrame(this.voiceFrame)
-      this.voiceFrame = null
-      this.pendingVoiceCount = 0
-      this.voiceCount = 0
-    },
-    panic() {
-      this.engine?.panic()
-      this.resetVoiceUi()
-      this.status = 'All notes stopped'
-    },
     chooseVariant(index) {
       this.currentVariant = index
-      this.engine?.applyPreset(this.variants[index])
       this.status = `${this.variants[index].name} selected`
     },
     updateVolume(event) {
@@ -612,6 +607,8 @@ export default {
       }
     },
     async startReveal() {
+      if (this.examplePlaying) await this.stop()
+      if (this.releaseBlocked) return
       if (this.starting) return
       recordBiotronEvent('play.attempted')
       if (!this.canStartReveal) {
@@ -750,6 +747,7 @@ export default {
     },
     handleAudioContextState(state) {
       if (!this.engine) return
+      if (this.examplePlaying && state !== 'running') { void this.stop(); return }
       if (state === 'running') {
         if (!this.starting && !this.releaseBlocked && ['suspended', 'interrupted'].includes(this.audioState))
           this.setAudioState('running', 'Sound ready')
@@ -765,6 +763,7 @@ export default {
       this.setAudioState(state, `Audio paused — press ${this.revealMode ? 'Resume sound' : 'Start sound'}`)
     },
     async handleVisibility() {
+      if (document.hidden && this.examplePlaying) { await this.stop(); return }
       this.releaseHeldKeyboard()
       if (document.hidden || !this.engine || !['suspended', 'interrupted'].includes(this.engine.context.state)) return
       await this.resumeSound({automatic: true})

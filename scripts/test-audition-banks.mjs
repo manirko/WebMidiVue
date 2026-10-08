@@ -64,7 +64,7 @@ test('an explicit rejection comment persists without forcing a favourite', () =>
   const storage = new Map()
   const source = readFileSync(process.env.AUDITION_COMPONENT_CONTROL_FILE || 'src/components/SoundLab/AudioCompare.vue', 'utf8')
     .match(/<script>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace('export default', 'module.exports =')
-  const context = {DeviceTaskNav: {}, module: {exports: {}}, process: {env: {VUE_APP_BUILD_ID: 'fixture'}},
+  const context = {DeviceTaskNav: {}, SoundLab: {}, module: {exports: {}}, process: {env: {VUE_APP_BUILD_ID: 'fixture'}},
     localStorage: {setItem(key, value) { storage.set(key, JSON.parse(value)) }}}
   vm.runInNewContext(source, context)
   const target = {feedback: {}, bankId: 'timbres', variant: {id: 'tone-reed'}, comment: 'Too sharp — no preferred option yet'}

@@ -14,7 +14,7 @@ vm.runInNewContext(fs.readFileSync('src/audio/core.mjs', 'utf8').replace(/^expor
 const {KEYBOARD_CODE_TO_NOTE} = keyboardContext.module.exports
 
 const effectsSource = fs.readFileSync('src/audio/soundSessionEffects.mjs', 'utf8')
-  .replace('export function createSoundSessionEffects', 'function createSoundSessionEffects') +
+  .replace(/^import .*$/gm, '').replace('export function createSoundSessionEffects', 'function createSoundSessionEffects') +
   '\nmodule.exports = createSoundSessionEffects'
 
 function fixture() {

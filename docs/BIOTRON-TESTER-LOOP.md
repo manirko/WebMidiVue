@@ -151,3 +151,23 @@ and precache instead. Real offline comparison already passed on that run.
 An explicit negative listening comment must save even without Prefer; an old-source
 negative control reproduces the discarded comment. Save a comment with no vote,
 then preserve that distinction in export. Machine fixtures remain non-human.
+
+
+8 October, Andrey live feedback FB27–FB31: comparison now reuses SoundLab’s
+existing engine, MIDI session, exclusive tab lease and calibration state. Play
+has a direct30-option link before connection. In Compare, “Play with Biotron”
+uses the selected timbre/upper treatment live; the cue bank changes only explicit
+nonce-confirmed calibration sound and restores the normal plant sound afterward.
+One “Listen to example” button toggles Stop; reference is option1. No settings,
+velocity configuration or firmware bytes are changed by selecting sounds.
+
+Decisive regression: test:auditions:browser covers all30 previews,100 context
+closes,30 live MIDI selections, one engine during switches, held-note release,
+wrong calibration nonce, cue-only levels, restoration of plant velocity, actual
+final-gain PCM and octave-down spectral change. A label-only switch must fail.
+Physical Biotron/listening/platform acceptance remains separate. PWA browser
+checks all13 scale choices against emitted command4 bytes and confirmed readback;
+SelectCommand commits the displayed value before emitting the change event.
+First old-selector control emitted4 while display0; the fixed event emits0.
+That source defect is not proof of the cause of Andrey’s live scale observation.
+Local pending presets still require explicit Apply, preserving the agreed model.
