@@ -74,6 +74,12 @@ function writeSoakEvidence(status, phase, report = latestRealtimeSoak, error = n
 
 const server = createStaticServer(root)
 
+async function openSoundHelp(page) {
+  const summary = page.getByText('No sound? · Help', {exact: true})
+  const details = page.locator('details.play-help').filter({has: summary})
+  if (!(await details.evaluate(element => element.open))) await summary.click()
+}
+
 async function verifyCapabilityFallbacks(browser, origin) {
   const audioOnlyContext = await browser.newContext()
   audioOnlyContext.setDefaultTimeout(5000)
@@ -98,7 +104,7 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await audioOnly.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
   await audioOnly.getByRole('heading', {name: 'No MIDI in this browser'}).waitFor()
   await audioOnly.getByText(/Use current Chrome or Edge on a computer/i).waitFor()
-  assert.strictEqual(await audioOnly.getByRole('button', {name: 'Hear Biotron'}).count(), 0)
+  assert.strictEqual(await audioOnly.getByRole('button', {name: 'Start listening'}).count(), 0)
   assert.strictEqual(await audioOnly.locator('.sound-lab').count(), 0)
   for (const [route, product] of [
     ['/biotron', 'Biotron'], ['/biotron/update', 'Biotron'],
@@ -124,7 +130,7 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await android.getByRole('heading', {name: 'Settings'}).waitFor()
   assert.strictEqual(await android.locator('.compatibility-notice').count(), 0)
   await android.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
-  await android.getByRole('button', {name: 'Hear Biotron'}).waitFor()
+  await android.getByRole('button', {name: 'Start listening'}).waitFor()
   assert.strictEqual(await android.locator('.compatibility-notice').count(), 0)
   await android.goto(`${origin}/#/sound`, {waitUntil: 'domcontentloaded'})
   assert.strictEqual(await android.locator('.compatibility-notice').count(), 0)
@@ -153,7 +159,7 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await denied.getByText(/Allow device access, then try again/i).waitFor()
   await denied.getByRole('button', {name: 'Stop & release'}).click()
   await denied.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
-  await denied.getByRole('button', {name: 'Hear Biotron'}).click()
+  await denied.getByRole('button', {name: 'Start listening'}).click()
   await denied.getByText(/Allow device access, then try again/i).waitFor()
   await denied.locator('.sound-lab[data-audio-state="closed"][data-tab-lease="free"]').waitFor()
   assert.deepStrictEqual(deniedErrors, [])
@@ -169,9 +175,9 @@ async function verifyCapabilityFallbacks(browser, origin) {
   })
   const missing = await missingContext.newPage()
   await missing.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
-  await missing.getByRole('button', {name: 'Hear Biotron'}).click()
-  await missing.getByText('Connect Biotron first', {exact: true}).waitFor()
-  await missing.getByText(/Plug Biotron into this computer with a USB data cable/i).waitFor()
+  await missing.getByRole('button', {name: 'Start listening'}).click()
+  await missing.getByText('Connect the device', {exact: true}).waitFor()
+  await missing.getByText(/Connect the device to this computer with a USB data cable/i).waitFor()
   assert.strictEqual(await missing.getByRole('button', {name: 'Stop notes'}).count(), 0)
   await missing.locator('.sound-lab[data-reveal-stage="intro"][data-audio-state="closed"][data-tab-lease="free"]').waitFor()
   await missingContext.close()
@@ -192,7 +198,7 @@ async function verifyCapabilityFallbacks(browser, origin) {
   assert.strictEqual(await noAudio.locator('.sound-lab').count(), 0)
   await noAudio.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
   await noAudio.getByRole('heading', {name: 'Sound can’t start in this browser'}).waitFor()
-  assert.strictEqual(await noAudio.getByRole('button', {name: 'Hear Biotron'}).count(), 0)
+  assert.strictEqual(await noAudio.getByRole('button', {name: 'Start listening'}).count(), 0)
   assert((await noAudio.getByRole('link', {name: 'Tell Andrey where it stopped'}).getAttribute('href')).includes('Reached%3A%20Compatibility%3A%20audio'))
   assert.deepStrictEqual(noAudioErrors, [])
   await noAudioContext.close()
@@ -457,7 +463,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
     const devtools = await context.newCDPSession(page)
-    await page.goto(`${origin}/#/sound`, {waitUntil: 'networkidle'})
+    await page.goto(`${origin}/#/sound`, {waitUntil: 'domcontentloaded'})
     assert.strictEqual(await page.getByRole('navigation', {name: 'Choose a device'}).count(), 0)
     assert.strictEqual(await page.getByRole('link', {name: 'TouchMe'}).count(), 0)
     assert.strictEqual(await page.locator('.sound-lab__variant').count(), 7)
@@ -472,17 +478,18 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await page.locator('.sound-lab[data-tab-lease="held"]').waitFor()
 
     const secondPage = await context.newPage()
-    await secondPage.goto(`${origin}/#/biotron/play`, {waitUntil: 'networkidle'})
-    await secondPage.getByRole('button', {name: 'Hear Biotron'}).click()
+    await secondPage.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
+    await secondPage.getByRole('button', {name: 'Start listening'}).click()
     await secondPage.locator('.sound-lab[data-tab-lease="blocked"]').waitFor()
     await secondPage.getByText(/already open in another Settings window/i).waitFor()
-    await secondPage.getByRole('heading', {name: 'Did you hear Biotron play from the plant?'}).waitFor()
-    assert((await secondPage.getByRole('link', {name: 'Not yet — open WhatsApp'}).getAttribute('href')).includes('Reached%3A%20Sound%20open%20in%20another%20tab'))
+    await openSoundHelp(secondPage)
+    await secondPage.getByRole('heading', {name: 'Can you hear the notes?'}).waitFor()
+    assert((await secondPage.getByRole('link', {name: 'Not yet — WhatsApp'}).getAttribute('href')).includes('Reached%3A%20Sound%20open%20in%20another%20tab'))
     assert.strictEqual(await secondPage.locator('.sound-lab').getAttribute('data-audio-state'), 'closed')
 
     await page.getByRole('button', {name: 'Stop & release'}).click()
     await page.locator('.sound-lab[data-tab-lease="free"]').waitFor()
-    await secondPage.getByRole('button', {name: 'Hear Biotron'}).click()
+    await secondPage.getByRole('button', {name: 'Start listening'}).click()
     await secondPage.locator('.sound-lab[data-audio-state="running"][data-tab-lease="held"]').waitFor()
     await secondPage.getByRole('button', {name: 'Stop & release'}).click()
     await secondPage.locator('.sound-lab[data-tab-lease="free"]').waitFor()
@@ -714,7 +721,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await page.waitForTimeout(100)
     assert.strictEqual(await page.evaluate(() => window.__soundInput.connection), 'opening')
     await page.evaluate(() => window.__finishSoundOpen())
-    await page.getByRole('heading', {name: 'Meet Biotron'}).waitFor()
+    await page.getByRole('heading', {name: 'Plant music'}).waitFor()
     assert.strictEqual(await page.getByRole('navigation', {name: 'Biotron tasks'}).getByRole('link', {name: 'Play'}).getAttribute('aria-current'), 'page')
     assert.strictEqual(await page.getByRole('link', {name: 'Settings', exact: true}).getAttribute('href'), '#/biotron')
     assert.strictEqual(await page.evaluate(() => window.__soundInput.connection), 'closed')
@@ -725,8 +732,8 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     assert.strictEqual(await page.locator('.offline-status').count(), 0)
     assert.strictEqual(await page.locator('.bottom-panel').count(), 0)
     assert.strictEqual(await page.getByRole('heading', {name: 'Sounds'}).count(), 0)
-    assert.strictEqual(await page.getByRole('heading', {name: 'Did you hear Biotron play from the plant?'}).count(), 0)
-    await page.getByRole('button', {name: 'Hear Biotron'}).click()
+    assert.strictEqual(await page.getByRole('heading', {name: 'Can you hear the notes?'}).count(), 0)
+    await page.getByRole('button', {name: 'Start listening'}).click()
     await page.locator('.sound-lab[data-reveal-stage="settling"][data-audio-state="running"]').waitFor()
     const calibrationRequest = (await page.evaluate(() => window.__soundMidiSent))
       .filter(message => message[0] === 0xf0 && message[3] === 125).at(-1)
@@ -734,8 +741,8 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     assert(calibrationRequest[4] >= 1 && calibrationRequest[4] <= 127)
     assert.strictEqual(calibrationRequest[5], 0xf7)
     assert.strictEqual(await page.getByRole('slider', {name: 'Volume'}).inputValue(), '100')
-    await page.getByRole('heading', {name: 'Step back and keep still'}).waitFor()
-    const recognized = page.getByText('Biotron connected')
+    await page.getByRole('heading', {name: 'Waiting for the device'}).waitFor()
+    const recognized = page.getByText('Device connected')
     await recognized.waitFor()
     assert.strictEqual(await recognized.getAttribute('title'), 'Playtronica — Biotron Port 1')
     assert.deepStrictEqual((await page.evaluate(() => window.__soundMidiRequests)).at(-1), {sysex: true})
@@ -746,16 +753,24 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
       await page.evaluate(value => window.__emitSoundMidi([0x81, value, 0]), note)
       await page.waitForTimeout(70)
     }
-    await page.locator('.sound-lab[data-reveal-stage="calibrating"] .sound-lab__calibration-note').first().waitFor()
-    await page.getByRole('heading', {name: 'Keep your distance'}).waitFor()
-    await page.getByText(/gentle notes and breathing green lights/i).waitFor()
+    await page.locator('.sound-lab[data-reveal-stage="calibrating"]').waitFor()
+    await page.getByRole('heading', {name: 'Calibrating'}).waitFor()
+    await page.getByText('Keep the plant, cables and device still. Wait for the device to confirm it is ready.').waitFor()
+    // A legacy cue is a hint; only a matching firmware nonce confirms readiness.
+    await page.waitForTimeout(1200)
+    assert.strictEqual(await page.locator('.sound-lab').getAttribute('data-reveal-stage'), 'calibrating')
+    await page.evaluate(nonce => window.__emitSoundMidi([0xf0, 0x0b, 125, nonce % 127 + 1, 3, 0xf7]), calibrationRequest[4])
+    assert.strictEqual(await page.locator('.sound-lab').getAttribute('data-reveal-stage'), 'calibrating')
+    await page.evaluate(nonce => window.__emitSoundMidi([0xf0, 0x0b, 125, nonce, 2, 0xf7]), calibrationRequest[4])
+    await page.evaluate(nonce => window.__emitSoundMidi([0xf0, 0x0b, 125, nonce, 3, 0xf7]), calibrationRequest[4])
     await page.locator('.sound-lab[data-reveal-stage="ready"]').waitFor({timeout: 2000})
-    await page.getByRole('heading', {name: 'Biotron is ready'}).waitFor()
+    await page.getByRole('heading', {name: 'Ready to play'}).waitFor()
     await page.evaluate(() => window.__emitSoundMidi([0x91, 64, 100]))
     await page.locator('.sound-lab[data-reveal-stage="revealed"][data-active-voices="1"]').waitFor()
-    await page.getByText(/Notes are reaching this page. Can you hear them/i).waitFor()
-    await page.getByRole('heading', {name: 'Did you hear Biotron play from the plant?'}).waitFor()
-    const helpedFeedback = page.getByRole('link', {name: 'Yes — open WhatsApp'})
+    await page.getByRole('heading', {name: 'Notes arriving', exact: true}).waitFor()
+    await openSoundHelp(page)
+    await page.getByRole('heading', {name: 'Can you hear the notes?'}).waitFor()
+    const helpedFeedback = page.getByRole('link', {name: 'Yes — WhatsApp'})
     assert((await helpedFeedback.getAttribute('href')).includes('wa.me/351937910673'))
     assert((await helpedFeedback.getAttribute('href')).includes('I%20heard%20Biotron%20play%20from%20the%20plant'))
     assert((await helpedFeedback.getAttribute('href')).includes('Reached%3A%20Sound%20from%20the%20plant'))
@@ -833,20 +848,22 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await page.getByRole('link', {name: 'Play', exact: true}).click()
     await page.locator('.sound-lab[data-reveal-stage="intro"][data-audio-state="closed"][data-tab-lease="free"]').waitFor()
     // No-clips watchdog (Sergey, 2026-09-03): with a device that never answers the
-    // calibration request, Hear Biotron must stop pulsing and return to intro within 15 s.
-    await page.getByRole('button', {name: 'Hear Biotron'}).click()
+    // calibration request, Start listening must stop pulsing and return to intro within 15 s.
+    await page.getByRole('button', {name: 'Start listening'}).click()
     await page.locator('.sound-lab[data-reveal-stage="settling"]').waitFor()
     await page.locator('.sound-lab[data-reveal-stage="intro"]').waitFor({timeout: 20000})
-    assert((await page.locator('.sound-lab').innerText()).includes('No plant signal in 15 s'))
-    const stuckFeedback = page.getByRole('link', {name: 'Not yet — open WhatsApp'})
+    assert((await page.locator('.sound-lab').innerText()).includes('The device did not confirm calibration.'))
+    await openSoundHelp(page)
+    const stuckFeedback = page.getByRole('link', {name: 'Not yet — WhatsApp'})
     await stuckFeedback.waitFor()
     assert((await stuckFeedback.getAttribute('href')).includes('I%20did%20not%20hear%20Biotron%20play'))
-    assert((await stuckFeedback.getAttribute('href')).includes('Reached%3A%20No%20plant%20signal%20after%2015%20seconds'))
-    await page.getByRole('button', {name: 'Hear Biotron'}).click()
+    assert((await stuckFeedback.getAttribute('href')).includes('Reached%3A%20Calibration%20not%20confirmed'))
+    await page.getByRole('button', {name: 'Start listening'}).click()
     await page.locator('.sound-lab[data-reveal-stage="settling"]').waitFor()
     await page.evaluate(() => window.__setSoundInputState('disconnected'))
-    await page.getByRole('heading', {name: 'Did you hear Biotron play from the plant?'}).waitFor()
-    const disconnectedFeedback = page.getByRole('link', {name: 'Not yet — open WhatsApp'})
+    await openSoundHelp(page)
+    await page.getByRole('heading', {name: 'Can you hear the notes?'}).waitFor()
+    const disconnectedFeedback = page.getByRole('link', {name: 'Not yet — WhatsApp'})
     assert((await disconnectedFeedback.getAttribute('href')).includes('Reached%3A%20Biotron%20disconnected%20before%20first%20sound'))
     await verifyCapabilityFallbacks(browser, origin)
     assert(telemetryEvents.some(event => event.event_name === 'session.started' && event.service_name === 'biotron'))
@@ -854,6 +871,22 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     assert.deepStrictEqual(errors, [])
     if (realtimeSoak) writeSoakEvidence('PASS', 'suite-complete', realtimeSoak)
     console.log(`Sound browser verified: first-play Biotron reveal, Play → Settings → Speed live-save continuity, permission/audio-only/no-audio fallbacks, 7 variants, 6x-throttled Low CPU start ${constrainedStartMilliseconds} ms and burst ${constrainedBurstMilliseconds.toFixed(1)} ms, exclusive two-tab sound handoff, 100/100 lifecycle cycles in ${cycleMilliseconds} ms, 1000 burst ${burstMilliseconds.toFixed(1)} ms, 20000 soak ${soakMilliseconds.toFixed(1)} ms, optional real-time soak ${realtimeSoak ? `${realtimeSoak.elapsedMilliseconds} ms` : 'not requested'}, heap delta ${heapGrowth}, disconnect/background recovery and retryable release.`)
+  } catch (error) {
+    const evidenceDirectory = process.env.BIOTRON_TEST_EVIDENCE_DIR
+    if (evidenceDirectory) {
+      fs.mkdirSync(evidenceDirectory, {recursive: true})
+      let number = 0
+      for (const context of browser.contexts()) for (const tab of context.pages()) {
+        const prefix = path.join(evidenceDirectory, `sound-fault-${Date.now()}-${++number}`)
+        try {
+          fs.writeFileSync(`${prefix}.txt`, `${tab.url()}\n${await tab.locator('body').innerText()}`)
+          await tab.screenshot({path: `${prefix}.png`, fullPage: true})
+        } catch (captureError) {
+          console.error(`Could not capture failing page: ${captureError.message}`)
+        }
+      }
+    }
+    throw error
   } finally {
     await browser.close()
     await new Promise(resolve => server.close(resolve))

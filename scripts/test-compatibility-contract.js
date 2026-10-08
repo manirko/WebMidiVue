@@ -47,3 +47,24 @@ assert(notice.includes('issue.action.href'), 'the compatibility popup must expos
 assert(app.includes('Browser &amp; phone compatibility'), 'the beta must include a discoverable compatibility guide')
 
 console.log('Compatibility contract verified: every device route fails closed; Sound keeps audio-only fallback; MIDIWeb remains an explicit experimental iOS path.')
+
+;(async () => {
+  const {biotronFirstSoundFeedbackUrl} = await import('../src/compatibility.mjs')
+  for (const [title, expected] of [
+    ['Connect the device', 'Biotron was not found'],
+    ['Calibration not confirmed', 'Calibration not confirmed'],
+    ['Connection lost', 'Biotron disconnected before first sound'],
+    ['Could not start listening', 'Biotron could not start'],
+    ['Biotron disconnected', 'Biotron disconnected before first sound'],
+    ['unknown future issue', 'Before first sound']
+  ]) {
+    const url = new URL(biotronFirstSoundFeedbackUrl('not_yet', title, 'test-version'))
+    const text = url.searchParams.get('text')
+    assert(text.includes(`Reached: ${expected}\n`), `${title}: feedback lost the actual stop point`)
+    assert(text.includes('Version date: test-version'))
+    assert(text.includes('I did not hear Biotron play from the plant yet.'))
+  }
+  assert(new URL(biotronFirstSoundFeedbackUrl('helped', 'Connection lost', 'test-version'))
+    .searchParams.get('text').includes('Reached: Sound from the plant\n'))
+  console.log('First-sound feedback retains current and legacy failure reasons, version and human answer.')
+})().catch(error => { console.error(error); process.exitCode = 1 })

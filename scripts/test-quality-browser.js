@@ -102,11 +102,12 @@ async function auditProfile(browser, origin, profile) {
 
   if (profile.midi) {
     await page.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
-    await page.getByRole('heading', {name: 'Meet Biotron'}).waitFor()
+    await page.getByRole('heading', {name: 'Plant music'}).waitFor()
     assert.strictEqual(await page.locator('.beta-feedback').count(), 0,
       `${profile.name}: first play must not duplicate the generic feedback block`)
-    await page.getByRole('button', {name: 'Hear Biotron'}).click()
-    await page.getByRole('heading', {name: 'Did you hear Biotron play from the plant?'}).waitFor()
+    await page.getByRole('button', {name: 'Start listening'}).click()
+    await page.getByText('No sound? · Help', {exact: true}).click()
+    await page.getByRole('heading', {name: 'Can you hear the notes?'}).waitFor()
     const feedbackGap = await page.evaluate(() => {
       const main = document.querySelector('main')
       const feedback = document.querySelector('.sound-lab__task-feedback')
