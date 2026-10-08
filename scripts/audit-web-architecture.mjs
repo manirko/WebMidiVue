@@ -79,12 +79,15 @@ const report = {
 // 08.10.2026 Sergey feedback: +1 shared diagnostic preview replaces two copy
 // paths; local feedback editor, footer, cache-update race and exact built-in
 // Humanize refresh. +99 lines, no backend, migration or dependency added.
+// 08.10.2026 explicit handpan request: +37 source lines in existing voice/bank
+// files for three bounded modal rings + six native presets. No new engine,
+// dependency, source file or voice pool; retain 25KiB lazy audio and all safety caps.
 const limits = {
   eagerDeviceRouteImports: 0,
   sleepCalls: 0,
   unmanagedListenerFiles: 0,
   sourceFiles: 70,
-  sourceLines: 10697,
+  sourceLines: 10734,
   largestProductFileLines: 850
 }
 const violations = [

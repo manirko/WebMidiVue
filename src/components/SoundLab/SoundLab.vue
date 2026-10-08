@@ -25,7 +25,7 @@
         <small>{{ revealProfile.eyebrow }}</small>
         <h1>{{ revealProfile.title }}</h1>
         <p>{{ revealProfile.promise }}</p>
-        <router-link v-if="revealProfile.id === 'biotron'" class="btn btn-outline-primary" to="/biotron/compare">Compare sounds · 10 × 3</router-link>
+        <router-link v-if="revealProfile.id === 'biotron'" class="btn btn-outline-primary" to="/biotron/compare">Compare sounds</router-link>
       </header>
 
       <section class="sound-lab__reveal" aria-labelledby="device-reveal-title">

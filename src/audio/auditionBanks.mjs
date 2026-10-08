@@ -49,21 +49,34 @@ const highNotes = [
     upper: {startNote: 72, endNote: 84, voice: glass}
   }}))
 ]
+const pan = (name, cv = {}, fx = {}) => toSound({name, timbre: 'pan',
+  cv: {attack: .004, decay: 2.1, release: 1.7, octave: 0, gain: .9, octaveLevel: .46, fifthLevel: .32, detune: .7, strike: .08, ...cv},
+  fx: {cutoff: 6500, resonance: .7, delayTime: .22, delayFeedback: .1, delayWet: 0, reverbWet: .12, ...fx}})
+const handpan = [
+  entry('pan-clear', 'Handpan — reference', 'A rounded steel note with a clear, singing ring.', pan('Handpan'), {role: '01-clear'}),
+  entry('pan-soft', 'Soft fingers', 'A gentler, darker touch with a warm centre.', pan('Soft fingers', {gain: .75, octaveLevel: .26, fifthLevel: .14, strike: .025}, {cutoff: 4200}), {role: '02-soft'}),
+  entry('pan-breath', 'Finger texture', 'A more tactile tap followed by a delicate metal ring.', pan('Finger texture', {strike: .18, octaveLevel: .38, fifthLevel: .24, release: 1.3}, {reverbWet: .08}), {role: '03-breath'}),
+  entry('pan-expressive', 'Singing steel', 'A longer ring with gently moving overtones.', pan('Singing steel', {detune: 3, octaveLevel: .6, fifthLevel: .44, decay: 2.8, release: 2.3}), {role: '04-expressive'}),
+  entry('pan-space', 'Small room', 'A clear handpan ring with a little space around it.', pan('Small room', {release: 1.5}, {reverbWet: .25, delayWet: .08, delayTime: .17}), {role: '05-space'}),
+  entry('pan-bold', 'Deep ding', 'A low, full central note with a slow, warm ring.', pan('Deep ding', {octave: -1, gain: .95, octaveLevel: .24, fifthLevel: .15, decay: 3, release: 2.4, strike: .04}, {cutoff: 4500, reverbWet: .16}), {role: '06-bold'})
+]
 export const AUDITION_BANKS = Object.freeze([
   Object.freeze({id: 'timbres', label: 'Timbres', variants: Object.freeze(timbres)}),
   Object.freeze({id: 'calibration', label: 'Calibration sounds', variants: Object.freeze(calibration)}),
-  Object.freeze({id: 'high-notes', label: 'High-note treatments', variants: Object.freeze(highNotes)})
+  Object.freeze({id: 'high-notes', label: 'High-note treatments', variants: Object.freeze(highNotes)}),
+  Object.freeze({id: 'handpan', label: 'Handpan', variants: Object.freeze(handpan)})
 ])
 // Same inputs for every option in a bank. Firmware1.10.10 src/global.c uses
 // 100ms ticks, eight cue notes and velocity24. Preview never sends MIDI.
-const phrase = pitches => pitches.map((note, index) => ({note, at: 0.15 + index * 0.35, duration: 0.27, velocity: 98}))
+const phrase = (pitches, duration = .27) => pitches.map((note, index) => ({note, at: 0.15 + index * 0.35, duration, velocity: 98}))
 const cueEvents = [[3,64,3],[8,65,3],[13,67,4],[18,72,4],[24,71,3],[29,67,3],[34,62,4],[40,60,9]]
 export function auditionEvents(bankId) {
   const notes = bankId === 'calibration'
     ? cueEvents.map(([tick, note, duration]) => ({note, at: tick / 10, duration: duration / 10, velocity: 24}))
+    : bankId === 'handpan' ? phrase([50,57,60,62,65,69,67,62], .027)
     : phrase(bankId === 'high-notes' ? [48,60,71,72,78,84,90,96] : [48,60,64,67,72,84,60,48])
   return notes.flatMap(({note, at, duration, velocity}) => [
     {at, type: 'on', note, velocity}, {at: +(at + duration).toFixed(3), type: 'off', note}
   ]).sort((a,b) => a.at - b.at || (a.type === 'off' ? -1 : 1))
 }
-export const auditionDuration = bankId => Math.max(...auditionEvents(bankId).map(event => event.at)) + 2
+export const auditionDuration = bankId => Math.max(...auditionEvents(bankId).map(event => event.at)) + (bankId === 'handpan' ? 3 : 2)

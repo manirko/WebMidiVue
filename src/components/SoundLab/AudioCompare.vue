@@ -4,7 +4,7 @@
     <h1>Compare sounds</h1>
     <p>Choose an option and play it with Biotron, or listen to the same example. The first option is the reference.</p>
     <div class="compare-groups" role="group" aria-label="Comparison group">
-      <button v-for="group in banks" :key="group.id" type="button" class="btn btn-outline-primary" :aria-pressed="bankId === group.id" @click="changeBank(group.id)">{{ group.label }}</button>
+      <button v-for="group in banks" :key="group.id" type="button" class="btn btn-outline-primary" :class="{active: bankId === group.id}" :aria-pressed="bankId === group.id" @click="changeBank(group.id)">{{ group.label }}</button>
     </div>
     <label for="compare-variant">Option</label>
     <select id="compare-variant" class="form-select" :value="variantId" @change="changeVariant($event.target.value)">

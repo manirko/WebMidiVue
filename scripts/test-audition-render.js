@@ -10,6 +10,8 @@ const output = path.resolve(process.argv.find(arg=>arg.startsWith('--output='))?
 const prefix=`scripts/_audition-${process.pid}`, entry=path.join(root,prefix+'.mjs'), bundle=path.join(root,prefix+'.js')
 const sourceInputs = Object.fromEntries(['src/audio/auditionBanks.mjs','src/audio/elementary/timbres.mjs','src/audio/elementary/engine.mjs','scripts/test-audition-render.js','package.json','package-lock.json'].map(file=>[file,crypto.createHash('sha256').update(fs.readFileSync(path.join(root,file))).digest('hex')]))
 const selectedCase=process.argv.find(arg=>arg.startsWith('--case='))?.slice(7)
+const handpanControl=process.env.HANDPAN_DSP_CONTROL||null
+if(handpanControl&&(!selectedCase||handpanControl!=='legacy-round'))throw new Error('Handpan negative control requires a selected case and legacy-round')
 const timeoutMs=Number(process.env.AUDITION_TIMEOUT_MS)||30000
 const cleanup=()=>{fs.rmSync(entry,{force:true});fs.rmSync(bundle,{force:true})}
 process.on('exit',cleanup)
@@ -44,22 +46,23 @@ function wav(samples,sampleRate){
   await page.goto(`http://127.0.0.1:${server.address().port}/`)
   await page.addScriptTag({url:`http://127.0.0.1:${server.address().port}/${prefix}.js`})
   }
+  const {AUDITION_BANKS:banks}=await import('../src/audio/auditionBanks.mjs')
   const metrics=[],sampleRate=48000
   for(const quality of ['standard','safe']){
-   for(let bankIndex=0;bankIndex<3;bankIndex++)for(let variantIndex=0;variantIndex<10;variantIndex++){
-    const caseId=`${quality}/${['timbres','calibration','high-notes'][bankIndex]}/${variantIndex+1}`
+   for(let bankIndex=0;bankIndex<banks.length;bankIndex++)for(let variantIndex=0;variantIndex<banks[bankIndex].variants.length;variantIndex++){
+    const caseId=`${quality}/${banks[bankIndex].id}/${variantIndex+1}`
     if(selectedCase&&selectedCase!==caseId)continue
     // OfflineAudioContext cannot be closed. Destroy each bank’s page so native
     // offline contexts do not accumulate; realtime repeated-close is a separate lane.
     if(variantIndex===0||selectedCase)await preparePage()
     let watchdog
-    const running=page.evaluate(async({quality,bankIndex,variantIndex,sampleRate})=>{
+    const running=page.evaluate(async({quality,bankIndex,variantIndex,sampleRate,handpanControl})=>{
      const {ElementarySynthEngine,AUDITION_BANKS,auditionEvents,auditionDuration}=window.__Audition
      const bank=AUDITION_BANKS[bankIndex],option=bank.variants[variantIndex],seconds=auditionDuration(bank.id)
-     const render=async(events,preset=option.preset,duration=seconds,level=option.level??1,volume=70)=>{
-      const context=new OfflineAudioContext(1,Math.ceil(sampleRate*duration),sampleRate), engine=new ElementarySynthEngine(context,{preset,quality,volume})
+     const render=async(events,preset=option.preset,duration=seconds,level=option.level??1,volume=70,rate=sampleRate)=>{
+      const context=new OfflineAudioContext(1,Math.ceil(rate*duration),rate), engine=new ElementarySynthEngine(context,{preset,quality,volume})
       const started=performance.now();window.__auditionPhase='initializing';await engine.ensureReady()
-      const quantum=128/sampleRate,bySample=new Map()
+      const quantum=128/rate,bySample=new Map()
       for(const event of events){const at=Math.max(0,Math.floor(event.at/quantum)*quantum-quantum);if(!bySample.has(at))bySample.set(at,[]);bySample.get(at).push(event)}
       let maximumVoices=0
       const chain=[...bySample].sort((a,b)=>a[0]-b[0]).reduce((next,[at,events])=>next.then(()=>(window.__auditionPhase=`suspend ${at}`,context.suspend(at)).then(async()=>{
@@ -68,7 +71,7 @@ function wav(samples,sampleRate){
       })),Promise.resolve())
       window.__auditionPhase='start rendering';const rendering=context.startRendering();await chain;window.__auditionPhase='finish rendering';const audio=await rendering
       const samples=audio.getChannelData(0),peak=samples.reduce((p,x)=>Math.max(p,Math.abs(x)),0),rms=Math.sqrt(samples.reduce((sum,x)=>sum+x*x,0)/samples.length)
-      const late=samples.slice(-sampleRate/5),tailPeak=late.reduce((p,x)=>Math.max(p,Math.abs(x)),0)
+      const late=samples.slice(-rate/5),tailPeak=late.reduce((p,x)=>Math.max(p,Math.abs(x)),0)
       const voices=engine.activeVoiceCount,poolSize=engine.poolSize
       window.__auditionPhase='release';await engine.stop()
       return {samples,peak,rms,tailPeak,nonFinite:samples.reduce((n,x)=>n+!Number.isFinite(x),0),maximumVoices,voices,poolSize,elapsedMs:performance.now()-started}
@@ -82,9 +85,32 @@ function wav(samples,sampleRate){
       const current=await render(events,option.preset,2,1),control=await render(events,AUDITION_BANKS[2].variants[0].preset,2,1)
       middleDifference=current.samples.reduce((maximum,value,i)=>Math.max(maximum,Math.abs(value-control.samples[i])),0)
      }
+     let handpan=null
+     if(bank.id==='handpan'){
+      const short=[{at:.05,type:'on',note:62,velocity:98},{at:.077,type:'off',note:62}]
+      const ring=await render(short,handpanControl ? AUDITION_BANKS[0].variants[0].preset : option.preset,3.8,1)
+      const amplitude=(samples,hz,rate,start=.10,end=.25)=>{
+       let real=0,imaginary=0;const first=Math.round(start*rate),last=Math.round(end*rate)
+       for(let i=first;i<last;i++){const phase=2*Math.PI*hz*i/rate;real+=samples[i]*Math.cos(phase);imaginary+=samples[i]*Math.sin(phase)}
+       return 2*Math.hypot(real,imaginary)/(last-first)
+      }
+      const f=440*2**((62-69)/12+option.preset.cv.octave),detune=option.preset.cv.detune
+      const modes=[f,2*f*2**(detune/1200),3*f*2**(-detune/1200)].map(hz=>({hz,amplitude:amplitude(ring.samples,hz,sampleRate)}))
+      const extremes=Array.from([0,12,48,72,96,108,120,127],note=>[{at:.05,type:'on',note,velocity:127},{at:.077,type:'off',note}]).flat()
+      const range=await render(extremes,option.preset,4,1,100)
+      const aliasChecks=[]
+      if(variantIndex===0)for(const rate of [44100,48000]){
+       const preset={...option.preset,cv:{...option.preset.cv,strike:0},fx:{...option.preset.fx,cutoff:rate*.45,delayWet:0,reverbWet:0}}
+       const high=await render(short.map(event=>({...event,note:127})),preset,1,1,70,rate),base=440*2**((127-69)/12)
+       const fundamental=amplitude(high.samples,base,rate)
+       const folded=[2*base*2**(detune/1200),3*base*2**(-detune/1200)].map(hz=>amplitude(high.samples,Math.abs(rate-hz),rate)/fundamental)
+       aliasChecks.push({sampleRate:rate,fundamental,foldedRatios:folded,nonFinite:high.nonFinite})
+      }
+      handpan={modes,shortGateSeconds:.027,ringPeak:ring.peak,ringTail:ring.tailPeak,range:{peak:range.peak,tailPeak:range.tailPeak,nonFinite:range.nonFinite,voices:range.voices},aliasChecks}
+     }
      const {samples,...measurements}=phrase
-     return {id:option.id,bank:bank.id,quality,option,measurements,retainedIntervals:window.__auditionIntervals.size,retainedBlobs:window.__auditionBlobs.size,chord:{peak:chord.peak,nonFinite:chord.nonFinite,maximumVoices:chord.maximumVoices,voices:chord.voices,poolSize:chord.poolSize},middleDifference,samples:quality==='standard'?Array.from(samples):null}
-    },{quality,bankIndex,variantIndex,sampleRate})
+     return {id:option.id,bank:bank.id,quality,option,measurements,retainedIntervals:window.__auditionIntervals.size,retainedBlobs:window.__auditionBlobs.size,chord:{peak:chord.peak,nonFinite:chord.nonFinite,maximumVoices:chord.maximumVoices,voices:chord.voices,poolSize:chord.poolSize},middleDifference,handpan,samples:quality==='standard'?Array.from(samples):null}
+    },{quality,bankIndex,variantIndex,sampleRate,handpanControl})
     let result
     try{result=await Promise.race([running,new Promise((_,reject)=>{watchdog=setTimeout(()=>reject(new Error(`Case ${caseId} exceeded ${timeoutMs} ms`)),timeoutMs)})])}
     catch(error){
@@ -106,14 +132,21 @@ function wav(samples,sampleRate){
     assert.equal(result.chord.voices,0,result.id+': panic left voices')
     assert.equal(result.chord.maximumVoices,quality==='safe'?4:8,result.id+': voice cap changed')
     if(result.middleDifference!==null)assert(result.middleDifference<1e-6,result.id+': treatment changed the middle register')
+    if(result.handpan){
+     const {modes,ringTail,range,aliasChecks}=result.handpan
+     assert(modes.every(mode=>mode.amplitude>.001),result.id+': short plant note lost a handpan resonance')
+     assert(ringTail<.001&&range.tailPeak<.001,result.id+': handpan ring did not settle')
+     assert(range.peak>.001&&range.peak<.98&&range.nonFinite===0&&range.voices===0,result.id+': full MIDI range failed')
+     for(const check of aliasChecks)assert(check.nonFinite===0&&check.fundamental>.001&&check.foldedRatios.every(ratio=>ratio<.01),result.id+': upper modes alias at '+check.sampleRate)
+    }
     console.log(`${quality} ${result.id} PASS peak=${result.measurements.peak.toFixed(4)} middleDifference=${result.middleDifference}`)
    }
   }
   const sourceCommit=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim()
   const sourceDirty=Boolean(execFileSync('git',['status','--porcelain','--untracked-files=no'],{cwd:root,encoding:'utf8'}).trim())
-  if(!selectedCase)assert.equal(metrics.length,60,'Incomplete bank coverage')
-  for(const bank of ['timbres','calibration','high-notes']){const hashes=metrics.filter(x=>x.bank===bank&&x.quality==='standard').map(x=>x.wavSha256);assert.equal(new Set(hashes).size,hashes.length,bank+': duplicate rendered options')}
-  fs.writeFileSync(path.join(output,'manifest.json'),JSON.stringify({schema:'biotron-audition-render/v1',sourceCommit,sourceDirty,sourceInputs,bundleSha256:crypto.createHash('sha256').update(fs.readFileSync(bundle)).digest('hex'),sampleRate,masterVolume:70,chordMasterVolume:100,phraseNormalization:false,browser:browser.version(),metrics,status:selectedCase?'PARTIAL':'RENDERED',humanListening:'NOT RUN'},null,2)+'\n')
+  if(!selectedCase)assert.equal(metrics.length,2*banks.reduce((sum,bank)=>sum+bank.variants.length,0),'Incomplete bank coverage')
+  for(const {id:bank} of banks){const hashes=metrics.filter(x=>x.bank===bank&&x.quality==='standard').map(x=>x.wavSha256);assert.equal(new Set(hashes).size,hashes.length,bank+': duplicate rendered options')}
+  fs.writeFileSync(path.join(output,'manifest.json'),JSON.stringify({schema:'biotron-audition-render/v1',sourceCommit,sourceDirty,sourceInputs,handpanControl,bundleSha256:crypto.createHash('sha256').update(fs.readFileSync(bundle)).digest('hex'),sampleRate,masterVolume:70,chordMasterVolume:100,phraseNormalization:false,browser:browser.version(),metrics,status:selectedCase?'PARTIAL':'RENDERED',humanListening:'NOT RUN'},null,2)+'\n')
   console.log(`${metrics.filter(x=>x.wav).length} listening WAVs and ${metrics.length} quality/render cases passed${selectedCase ? " (selected diagnostic case only)" : ""}: ${output}`)
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve));cleanup()}
 })().catch(error=>{if(fs.existsSync(output)&&!fs.existsSync(path.join(output,'failure.json')))fs.writeFileSync(path.join(output,'failure.json'),JSON.stringify({status:'FAIL',error:error.message,sourceInputs},null,2)+'\n');console.error(error);process.exitCode=1})

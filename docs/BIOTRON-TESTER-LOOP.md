@@ -171,3 +171,25 @@ SelectCommand commits the displayed value before emitting the change event.
 First old-selector control emitted4 while display0; the fixed event emits0.
 That source defect is not proof of the cause of Andrey’s live scale observation.
 Local pending presets still require explicit Apply, preserving the agreed model.
+
+## Handpan request —8 October2026, FB33
+
+Three original modal rings (fundamental/octave/fifth) and a brief filtered finger
+strike share the existing Elementary voice pool/master. Native pan envelopes use
+seconds; legacy tempo-scaled voices and seven defaults are unchanged. Six bounded
+options are separate from the existing three banks of ten; all use the existing
+SoundLab MIDI lease/context and explicit Stop. The old two-oscillator prototype
+renderer does not certify this different engine.
+
+Automated acceptance: 36 options × standard/safe =72 real DSP render cases; six
+unaltered-level handpan WAVs; three measured modes after27ms Note Off; full MIDI
+range finite/headroom/settling and44.1/48k upper-mode alias negative control; real
+browser short MIDI rings, six live choices,36 example starts/stops, four natural
+ends and100 repeated closes; existing PWA, voice caps,25KiB lazy chunk and release
+fault lanes. Source size adds37 lines in existing files; no dependency/controller
+or additional context. Acoustics target: Sonores Acoustics handpan research
+https://www.sonoresacoustics.be/portfolio/handpan (consulted8 October2026).
+
+RENDERED does not mean LISTENED/APPROVED or authentic sampled handpan. The six
+roles are clear/soft/finger texture/singing/room/deep; choose with the instrument
+on speakers/headphones. Physical sound and existing customer gates remain open.

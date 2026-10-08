@@ -18,7 +18,7 @@
     </div>
     <details v-if="betaBuild" class="beta-preset-card mb-3">
       <summary>NEW — Experiments</summary>
-      <router-link to="/biotron/compare" class="btn btn-outline-primary my-2">Compare sounds · 10 × 3</router-link>
+      <router-link to="/biotron/compare" class="btn btn-outline-primary my-2">Compare sounds</router-link>
       <p class="mt-2 mb-2">Try a calmer response when Biotron plays too many similar notes.</p>
       <p id="calmer-play-help" class="mb-2">Reduce extra notes changes and saves three settings: turns off Input variation, turns on Manual control to prevent idle pitch drift, and sets Note repeat to 2 — skipping notes less than two semitones apart. It keeps your tempo, scale and note velocity. Save your current preset first if you want to return to it.</p>
       <button type="button" class="btn btn-outline-primary" aria-describedby="calmer-play-help"

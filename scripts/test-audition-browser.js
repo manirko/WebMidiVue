@@ -57,10 +57,10 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
    assert(!(await page.locator('.sound-lab [role=status]').innerText()).includes('[object'),'Status rendered a click event')
   }
   let cases=0
-  for(const group of ['Timbres','Calibration sounds','High-note treatments']){
+  for(const group of ['Timbres','Calibration sounds','High-note treatments','Handpan']){
    await page.getByRole('button',{name:group,exact:true}).click()
    const options=await page.locator('#compare-variant option').evaluateAll(elements=>elements.map(element=>element.value))
-   assert.equal(options.length,10)
+   assert.equal(options.length,group==='Handpan'?6:10)
    for(const id of options){
     mark(`option ${group}/${id}: click Play`)
     await page.getByLabel('Option',{exact:true}).selectOption(id)
@@ -107,7 +107,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   assert.equal(await page.evaluate(()=>window.__comparisonMidiRequests),0,'preview sent a MIDI request')
   assert.equal(await page.evaluate(()=>Object.keys(localStorage).filter(key=>key.startsWith('biotron-audition-feedback-')).length),0,'preview inferred a listening outcome')
   // Natural end of each distinct phrase, not just an early Stop.
-  for(const group of ['Timbres','Calibration sounds','High-note treatments']){
+  for(const group of ['Timbres','Calibration sounds','Handpan','High-note treatments']){
    await page.getByRole('button',{name:group,exact:true}).click()
    await page.getByRole('button',{name:'Listen to example',exact:true}).click()
    await page.locator('.sound-lab[data-example="playing"][data-audio-state="running"]').waitFor();await stopped()
@@ -123,7 +123,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   await page.getByRole('heading',{name:'Settings',exact:true}).waitFor()
   assert(await page.evaluate(()=>window.__comparisonContexts.every(context=>context.state==='closed')),'route leave retained audio')
   await page.getByText('NEW — Experiments',{exact:true}).click()
-  await page.getByRole('link',{name:'Compare sounds · 10 × 3',exact:true}).click()
+  await page.getByRole('link',{name:'Compare sounds',exact:true}).click()
   await page.getByRole('heading',{name:'Compare sounds',exact:true}).waitFor()
   mark('live Biotron choices through the existing SoundLab session')
   await page.evaluate(()=>window.__enableComparisonMidi=true)
@@ -138,10 +138,10 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   await page.evaluate(nonce=>window.__emitComparisonMidi([0xf0,0x0b,125,nonce,3,0xf7]),nonce)
   await page.locator('.sound-lab[data-reveal-stage="ready"]').waitFor()
   const liveContexts=await page.evaluate(()=>window.__comparisonContexts.length)
-  const actual=async()=>page.evaluate(()=>{
+  const actual=async(fundamental=164.81)=>page.evaluate(fundamental=>{
    const node=window.__comparisonOutput
    if(!window.__comparisonAnalyser || window.__comparisonAnalyser.context!==node.context){
-    window.__comparisonAnalyser=node.context.createAnalyser();window.__comparisonAnalyser.fftSize=8192;node.connect(window.__comparisonAnalyser)
+    window.__comparisonAnalyser=node.context.createAnalyser();window.__comparisonAnalyser.fftSize=8192;window.__comparisonAnalyser.smoothingTimeConstant=0;node.connect(window.__comparisonAnalyser)
    }
    const samples=new Float32Array(window.__comparisonAnalyser.fftSize)
    window.__comparisonAnalyser.getFloatTimeDomainData(samples)
@@ -151,11 +151,15 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
     const hz=index*node.context.sampleRate/window.__comparisonAnalyser.fftSize
     return sum+(hz>145&&hz<185 ? 10**(db/10) : 0)
    },0)
-   return {lowBand,sound:document.querySelector('.sound-lab').dataset.sound,
+   const modes=[1,2,3].map(ratio=>Array.from(spectrum).reduce((sum,db,index)=>{
+    const hz=index*node.context.sampleRate/window.__comparisonAnalyser.fftSize
+    return sum+(Math.abs(hz-fundamental*ratio)<20 ? 10**(db/10) : 0)
+   },0))
+   return {lowBand,modes,sound:document.querySelector('.sound-lab').dataset.sound,
     count:Number(document.querySelector('.sound-lab').dataset.activeVoices),
     level:window.__biotronTrace.filter(event=>event.kind==='in'&&event.data?.level!==undefined).at(-1)?.data.level,
     rms:Math.sqrt(samples.reduce((sum,value)=>sum+value*value,0)/samples.length)}
-  })
+  },fundamental)
   const liveObservations=[]
   const {AUDITION_BANKS}=await import('../src/audio/auditionBanks.mjs')
   for(const bank of AUDITION_BANKS.filter(bank=>bank.id!=='calibration')){
@@ -173,9 +177,26 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
    await page.evaluate(()=>window.__emitComparisonMidi([0x80,96,0]))
    await page.waitForFunction(()=>Number(document.querySelector('.sound-lab').dataset.activeVoices)===0)
   }
+  // Hearable renderer output after a real 27ms MIDI gate, not only a new label
+  // or a held voice. All three handpan modes must survive the Note Off.
+  await page.getByRole('button',{name:'Handpan',exact:true}).click()
+  const handpan=[]
+  for(const option of AUDITION_BANKS.find(bank=>bank.id==='handpan').variants){
+   await page.getByLabel('Option',{exact:true}).selectOption(option.id)
+   await page.locator(`.sound-lab[data-sound="${option.preset.name}"]`).waitFor()
+   await page.waitForTimeout(3100) // Previous modal release must not certify the next sound's spectrum.
+   await page.evaluate(async()=>{window.__emitComparisonMidi([0x90,62,98]);await new Promise(resolve=>setTimeout(resolve,27));window.__emitComparisonMidi([0x80,62,0])})
+   await page.waitForTimeout(80)
+   const state=await actual(440*2**((62-69)/12+option.preset.cv.octave))
+   handpan.push({id:option.id,...state})
+   assert.equal(state.count,0,option.id+': short MIDI note remained held')
+   assert(state.rms>.001&&state.modes.every(energy=>energy>1e-7),option.id+': short note did not leave three audible rings')
+  }
+  fs.writeFileSync(path.join(artifacts,'handpan-midi.json'),JSON.stringify(handpan,null,2))
   // Same real MIDI E4 through one existing context: the octave-down option
   // must generate E3 energy (145–185Hz). A label-only switch fails this oracle.
   await page.getByRole('button',{name:'Timbres',exact:true}).click()
+  await page.waitForTimeout(3100) // Settle the deliberate Deep ding ring before the octave-down control.
   const audible=[]
   for(const id of ['tone-reference','tone-bass']){
    await page.getByLabel('Option',{exact:true}).selectOption(id)
@@ -246,12 +267,13 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
    await tab.getByRole('heading',{name:'Compare sounds',exact:true}).waitFor()
    assert(await tab.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth),'comparison overflows mobile')
    await tab.getByRole('button',{name:'High-note treatments',exact:true}).click();assert.equal(await tab.locator('#compare-variant option').count(),10)
+   await tab.getByRole('button',{name:'Handpan',exact:true}).click();assert.equal(await tab.locator('#compare-variant option').count(),6)
    await mobile.close()
   }
   assert.deepEqual(errors,[])
   mark('PASS')
   await context.tracing.stop({path:path.join(artifacts,'trace.zip')})
-  console.log(`Comparison browser: ${cases}/30 real-engine option Play/Stop, 100 repeated starts/closes without timers/Blobs, cancelled module load, failed-close route protection/retry, suspend/background release, three natural completions, switch/route release, reference, no preview MIDI or inferred outcome;30 live MIDI selections and cue-only calibration changes, explicit local feedback/export and 320/iPhone layout passed.`)
+  console.log(`Comparison browser: ${cases}/36 real-engine option Play/Stop, 100 repeated starts/closes without timers/Blobs, cancelled module load, failed-close route protection/retry, suspend/background release, four natural completions, switch/route release, reference, no preview MIDI or inferred outcome;36 live MIDI selections, six short-gate handpan modal rings and cue-only calibration changes, explicit local feedback/export and 320/iPhone layout passed.`)
  }catch(error){
   const state=await boundedCapture(page?.evaluate(()=>({url:location.href,phase:document.querySelector('.audio-compare')?.dataset,contexts:window.__comparisonContexts.map(context=>({state:context.state,time:context.currentTime})),intervals:window.__comparisonIntervals.size,blobs:window.__comparisonBlobs.size,heap:performance.memory?.usedJSHeapSize})).catch(cause=>({unavailable:cause.message})))
   fs.writeFileSync(path.join(artifacts,'failure.json'),JSON.stringify({stage,starts,error:error.message,state},null,2))

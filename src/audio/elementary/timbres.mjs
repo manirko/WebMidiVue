@@ -104,6 +104,29 @@ function noise({gate, freq, vel}, cv) {
   return el.tanh(el.mul(num(cv.gain, 0.8), vel, amp, el.lowpass(cutoff, num(cv.cutq, 1.1), band)))
 }
 
+// Original handpan hypothesis: fundamental/octave/fifth modes (1:2:3), with
+// independently decaying rings and a short finger strike. Unlike the legacy
+// tempo-scaled voices, these envelope times are seconds; a 27ms plant note rings.
+function pan({gate, freq, vel}, cv) {
+  const bounded = (key, fallback, low, high) => Math.max(low, Math.min(high, num(cv[key], fallback)))
+  const f = el.mul(freq, semitones(12 * bounded('octave', 0, -1, 0)))
+  const attack = bounded('attack', .004, .001, .015)
+  const decay = bounded('decay', 2.1, .5, 3), release = bounded('release', 1.7, .5, 3)
+  const second = bounded('octaveLevel', .46, .1, .7), third = bounded('fifthLevel', .32, .05, .55)
+  const detune = bounded('detune', .7, 0, 4), ceiling = el.mul(el.sr(), .45)
+  const mode = (ratio, cents, level, length) => {
+    const hz = el.mul(f, ratio * 2 ** (cents / 1200))
+    // Fade out modes before Nyquist, then clamp their oscillator frequency:
+    // high MIDI notes must not fold upper resonances into unrelated low tones.
+    const fade = el.min(1, el.max(0, el.div(el.sub(ceiling, hz), el.mul(el.sr(), .05))))
+    return el.mul(level, fade, el.adsr(attack, decay * length, 0, release * length, gate), el.cycle(el.min(hz, ceiling)))
+  }
+  const body = el.div(el.add(mode(1, 0, 1, 1), mode(2, detune, second, .6), mode(3, -detune, third, .42)), 1 + second + third)
+  const strike = el.mul(bounded('strike', .08, 0, .2), el.adsr(.001, .025, 0, .025, gate),
+    el.bandpass(el.min(8000, el.max(1200, el.mul(f, 5))), .7, el.noise()))
+  return el.mul(bounded('gain', .9, .5, 1), vel, el.add(body, strike))
+}
+
 // Общая обвязка: наша кривая нажатия и общий уровень голоса — одни и те же
 // для любого тембра, иначе замеренная динамика становится «динамикой тембра».
 const withHouseLevel = timbre => (ctx, cv) =>
@@ -113,7 +136,8 @@ export const TIMBRES = Object.freeze({
   round: withHouseLevel(round),
   fat: withHouseLevel(fat),
   string: withHouseLevel(string),
-  noise: withHouseLevel(noise)
+  noise: withHouseLevel(noise),
+  pan: withHouseLevel(pan)
 })
 
 // Готовые звуки Biotron. Тембры — авторские, из chromatone/elements (см.

@@ -7,14 +7,14 @@ import {AUDITION_BANKS, auditionEvents, auditionDuration} from '../src/audio/aud
 import {SOUNDS, toSound} from '../src/audio/elementary/timbres.mjs'
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
-test('three independent ten-option banks with unique audible settings and a reference first', () => {
-  assert.deepEqual(AUDITION_BANKS.map(bank => bank.variants.length), [10,10,10])
+test('three ten-option banks and six handpan options with unique audible settings and a reference first', () => {
+  assert.deepEqual(AUDITION_BANKS.map(bank => bank.variants.length), [10,10,10,6])
   const ids = AUDITION_BANKS.flatMap(bank => bank.variants.map(option => option.id))
-  assert.equal(new Set(ids).size,30)
+  assert.equal(new Set(ids).size,36)
   for (const bank of AUDITION_BANKS) {
     assert.match(bank.variants[0].label,/reference/i)
     const settings = bank.variants.map(({preset,level}) => digest({timbre:preset.timbre,cv:preset.cv,fx:preset.fx,registers:preset.registers,level}))
-    assert.equal(new Set(settings).size,10,`${bank.id} has duplicated settings`)
+    assert.equal(new Set(settings).size,bank.variants.length,`${bank.id} has duplicated settings`)
     for (const option of bank.variants) {
       const sounds=[option.preset,...Object.values(option.preset.registers || {}).map(register=>register.voice).filter(Boolean)]
       for (const sound of sounds) {
@@ -57,6 +57,21 @@ test('upper treatments start above the middle register; only declared three-regi
     assert.throws(()=>toSound({...SOUNDS[0],registers:{upper}}),TypeError)
   }
   assert.throws(()=>toSound({...SOUNDS[0],registers:{upper:{startNote:72,endNote:84,voice:bank.variants[1].preset}}}),/Nested/)
+})
+
+test('six handpan roles use the native modal voice and a short plant gate; stock sounds stay unchanged', () => {
+  const bank=AUDITION_BANKS.find(bank=>bank.id==='handpan')
+  assert.deepEqual(bank.variants.map(option=>option.role),['01-clear','02-soft','03-breath','04-expressive','05-space','06-bold'])
+  assert.deepEqual(SOUNDS.map(sound=>sound.timbre),['round','round','fat','fat','string','string','noise'])
+  for(const {preset} of bank.variants){
+    assert.equal(preset.timbre,'pan')
+    assert(preset.cv.attack>=.001&&preset.cv.attack<=.015)
+    assert(preset.cv.decay>=.5&&preset.cv.decay<=3&&preset.cv.release>=.5&&preset.cv.release<=3)
+    assert(preset.cv.strike>=0&&preset.cv.strike<=.2&&preset.cv.detune>=0&&preset.cv.detune<=4)
+    assert(preset.cv.octaveLevel>=.1&&preset.cv.octaveLevel<=.7&&preset.cv.fifthLevel>=.05&&preset.cv.fifthLevel<=.55)
+  }
+  const events=auditionEvents('handpan')
+  for(let i=0;i<events.length;i+=2)assert(Math.abs(events[i+1].at-events[i].at-.027)<1e-6)
 })
 
 
