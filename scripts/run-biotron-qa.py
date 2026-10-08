@@ -8,7 +8,7 @@ EXTERNAL_CHECKS = {
  'test:firmware:physical-cycle': 'Rollback, reinstall and settings readback require a compatible physical board and pinned images.',
  'test:windows:daw': 'Windows/Ableton release, actual MIDI-clip recording, physical sound and web reconnect require independent evidence on a real Windows host; a listed port is not PASS.'
 }
-BROWSER_TESTS = ['test:production-isolation', 'test:firmware:browser', 'test:beta-build', 'test:sound:browser', 'test:pwa:browser', 'test:quality:browser', 'test:auditions:browser', 'test:playtron-variants:browser', 'test:scales-variants:browser', 'test:touchme-variants:browser']
+BROWSER_TESTS = ['test:production-isolation', 'test:build-destination', 'test:firmware:browser', 'test:beta-build', 'test:sound:browser', 'test:pwa:browser', 'test:quality:browser', 'test:auditions:browser', 'test:playtron-variants:browser', 'test:scales-variants:browser', 'test:touchme-variants:browser']
 TESTS.extend(BROWSER_TESTS)
 TESTS.extend(EXTERNAL_CHECKS)
 p = argparse.ArgumentParser()

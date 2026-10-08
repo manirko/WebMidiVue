@@ -48,6 +48,14 @@ Prepare an exact release candidate only from a clean checkout with:
 npm run candidate:biotron
 ```
 
+The tester loop also checks custom build destinations with
+`npm run test:build-destination`: beta notices/security files and the exact
+internal UF2 must appear in the chosen output, without modifying another
+build's `dist`. Copy targets stay relative to Webpack's output directory.
+Run the complete fault-preserving loop with
+`python3 scripts/run-biotron-qa.py --browser --timeout 240 --output /absolute/run/path`.
+Its NOT RUN entries remain separate from software passes.
+
 That single command derives the visible build ID from `HEAD`, runs the complete
 Biotron release gate, then atomically creates
 `~/ProjectData/Playtronica/biotron-beta/release-candidates/<build-id>/`. The

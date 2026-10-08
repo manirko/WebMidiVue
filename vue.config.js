@@ -67,20 +67,20 @@ module.exports = {
         if (biotronFirmwareBeta) {
           args[0].patterns.push({
             from: path.resolve(__dirname, 'beta-assets/firmware'),
-            to: path.resolve(__dirname, 'dist/firmware')
+            to: 'firmware'
           })
         }
         args[0].patterns.push({
           from: path.resolve(__dirname, 'beta-assets/_headers'),
-          to: path.resolve(__dirname, 'dist')
+          to: '.'
         })
         args[0].patterns.push({
           from: path.resolve(__dirname, 'beta-assets/telemetry-worker.mjs'),
-          to: path.resolve(__dirname, 'dist/_worker.js')
+          to: '_worker.js'
         })
         args[0].patterns.push({
           from: path.resolve(__dirname, 'beta-assets/telemetry.html'),
-          to: path.resolve(__dirname, 'dist/telemetry.html')
+          to: 'telemetry.html'
         })
         return args
       })
