@@ -55,9 +55,9 @@ const prm = {
   iridIor:    1.55,
   envInt:     1.80,
   bgInt:      1.0,    // background (incl. through-glass) intensity
-  bulgeAmt:   0.15,   // impact → bulge amplitude scale
-  bulgeSharp: 43.30,     // bump localization (higher = tighter)
-  bulgeRel:   2.77,   // bulge relax-back rate (1/s)
+  bulgeAmt:   0.38,   // stronger outward pressure from cell contact
+  bulgeSharp: 26.00,  // wider stretch around the touching cell
+  bulgeRel:   2.25,   // elastic return after contact (1/s)
   attColor:   '#0033ff', // attenuation (glass depth) tint
   attDist:    8.40,      // attenuation distance
   dentAO:     3.20,    // AO-style darkening inside the dent
@@ -498,8 +498,8 @@ function step(dt) {
     if (atWall && !wallPrev[i] && pr > 1e-5) {
       const nx = P[ix] / pr, ny = P[ix + 1] / pr, nz = P[ix + 2] / pr;
       const vn = V[ix] * nx + V[ix + 1] * ny + V[ix + 2] * nz;
-      if (vn > 0.45) {
-        const amp = Math.min(vn, 3.5) * prm.bulgeAmt * (0.4 + R[i] * 2.5);
+      if (vn > 0.18) {
+        const amp = Math.min(0.32, Math.min(vn, 3.5) * prm.bulgeAmt * (0.4 + R[i] * 2.5));
         spawnBulge(nx, ny, nz, amp);
         playHit((R[i] - 0.045) / 0.20, vn, P[ix]);
       }

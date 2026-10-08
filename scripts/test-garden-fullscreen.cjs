@@ -10,7 +10,7 @@ console.log('PASS: immediate close, repeated open/close, Escape, unmount and scr
 
 // Execute the actual scene handler and physics, without a GPU. This proves
 // bounded energy and settling; visual acceptance remains a real-browser task.
-const scene=fs.readFileSync('public/garden/scene.html','utf8');
+const scene=fs.readFileSync(process.argv[2] || 'public/garden/scene.html','utf8');
 const start=scene.lastIndexOf("addEventListener('message', e => {");
 assert(start>=0);
 const end=scene.indexOf('\n});',start)+4;
@@ -50,3 +50,33 @@ const restingY=meanY();
 assert(restingY<playingY-.5,'idle cells did not settle back down');
 assert([...P,...velocity].every(Number.isFinite),'non-finite physics');
 console.log(`PASS: capped MIDI lift, reduced-motion/sender guards; mean Y ${initialY.toFixed(2)} -> playing ${playingY.toFixed(2)} -> resting ${restingY.toFixed(2)}; no idle up-blast`);
+
+// Exercise actual contact detection and elastic envelopes: an old weak-contact
+// scene must fail, while repeated music/strong pointer impacts stay bounded.
+const parameters=scene.slice(scene.indexOf('const prm = {')+'const prm = '.length,scene.indexOf('\n};',scene.indexOf('const prm = {'))+2);
+const pressureContext={...sceneContext,prm:vm.runInNewContext('('+parameters+')'),N_BLOBS:1,
+ P:new Float32Array(3),Pp:new Float32Array(3),V:new Float32Array(3),R:new Float32Array([.2]),
+ touch:new Uint8Array(1),wallPrev:new Uint8Array(1),rushCd:new Float32Array(1),rushPow:new Float32Array(1),
+ N_BULGE:8,bulgeA:new Float32Array(8),bulgeAge:new Float32Array(8),
+ bulgeVecs:Array.from({length:8},()=>({x:0,y:1,z:0,w:0,set(x,y,z,w){Object.assign(this,{x,y,z,w})}})),
+ shell:{quaternion:{}},_bq:{copy(){return this},invert(){return this}},
+ _bv:{set(x,y,z){Object.assign(this,{x,y,z});return this},applyQuaternion(){return this}}};
+for(const name of ['spawnBulge','updateBulges','step']) {
+ const begin=scene.indexOf('function '+name+'('),finish=scene.indexOf('\n}',begin)+2;
+ vm.runInNewContext(scene.slice(begin,finish),pressureContext);
+}
+function pressureAt(speed) {
+ pressureContext.P.set([0,1.3-.04-.2-.001,0]);pressureContext.V.set([0,speed,0]);
+ pressureContext.wallPrev.fill(0);pressureContext.bulgeA.fill(0);pressureContext.bulgeAge.fill(0);
+ pressureContext.step(.01);
+ pressureContext.updateBulges(.15);
+ return Math.max(...pressureContext.bulgeVecs.map(v=>v.w));
+}
+const gentlePressure=pressureAt(.3),playingPressure=pressureAt(.6),strongPressure=pressureAt(4.5);
+assert(gentlePressure>.04,'gentle playing contact did not stretch the shell');
+assert(playingPressure>.12,'normal playing pressure is still visually too weak');
+assert(strongPressure<=.32,'strong contact escaped the deformation bound');
+pressureContext.updateBulges(12);
+assert(Math.max(...pressureContext.bulgeVecs.map(v=>Math.abs(v.w)))<1e-8,'shell did not return to its resting shape');
+assert([...pressureContext.P,...pressureContext.V,...pressureContext.bulgeA,...pressureContext.bulgeAge].every(Number.isFinite));
+console.log(`PASS: real contact/envelope pressure gentle=${gentlePressure.toFixed(4)}, playing=${playingPressure.toFixed(4)}, strong=${strongPressure.toFixed(4)}; bounded and relaxed to rest`);
