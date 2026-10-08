@@ -4,6 +4,17 @@ import hashlib, json, os, pathlib, subprocess, sys, tempfile, signal, time, shut
 runner = pathlib.Path(__file__).with_name('run-biotron-qa.py')
 with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  root = pathlib.Path(temporary)
+ # Required heap measurements must fail closed instead of replacing missing
+ # metrics with zero and reporting a false no-leak result.
+ browser=(runner.parent/'test-sound-browser.js').read_text()
+ start=browser.index('function requiredMetric(list, name) {')
+ end=browser.index('\n}\n',start)+2
+ metric_test="const assert=require('node:assert/strict');\n"+browser[start:end]+r"""
+ assert.equal(requiredMetric([{name:'JSHeapUsedSize',value:1024}],'JSHeapUsedSize'),1024);
+ for(const value of [undefined,0,-1,NaN,Infinity]) assert.throws(()=>requiredMetric(value===undefined?[]:[{name:'JSHeapUsedSize',value}],'JSHeapUsedSize'),/Missing\/invalid/);
+ """
+ checked=subprocess.run(['node','-'],input=metric_test,capture_output=True,text=True,timeout=5)
+ assert checked.returncode==0,checked.stderr
  # The real browser-bench generator must reject stale/ambiguous boundaries,
  # rather than silently copying the remaining Node launcher into browser JS.
  marker='// browser-qa:sound-body:start'
@@ -53,6 +64,30 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  owner_mobile = next(row for row in strict_rows if row['test']=='test:mobile:owner')
  assert owner_mobile['result']=='NOT RUN'
  assert not json.loads((latest/'summary.json').read_text())['coverage_complete']
+ # Soak uses the existing browser lane, records its arguments and reserves
+ # duration + startup time even when the ordinary lane timeout is smaller.
+ soak = subprocess.run([sys.executable,str(runner),'--output',str(output),'--browser','--soak-seconds','600','--timeout','0.2'],env=environment,capture_output=True,text=True,timeout=15)
+ assert soak.returncode == 0, soak.stdout+soak.stderr
+ latest = max(output.iterdir(),key=lambda p:p.stat().st_mtime_ns)
+ rows = [json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
+ row = next(row for row in rows if row['test']=='test:sound:soak')
+ assert row['result']=='PASS' and row['timeout']==780 and row['duration_seconds']>=0
+ assert row['command'][:4]==['npm','run','test:sound:browser','--']
+ assert '--soak-seconds=600' in row['command']
+ assert row['command'][-1]=='--soak-report='+str(latest/'soak.json')
+ assert next(row for row in rows if row['test']=='test:audio:load')['result']=='PASS'
+ assert next(row for row in rows if row['test']=='test:ui-performance')['result']=='PASS'
+ assert next(row for row in rows if row['test']=='test:lint')['result']=='PASS'
+ for arguments in [['--soak-seconds','600'],['--browser','--soak-seconds','-1'],['--browser','--soak-seconds','28801'],['--timeout','nan'],['--timeout','inf']]:
+  invalid = subprocess.run([sys.executable,str(runner),'--output',str(output),*arguments],env=environment,capture_output=True,text=True,timeout=5)
+  assert invalid.returncode==2 and 'error:' in invalid.stderr, arguments
+ npm.write_text('#!/bin/sh\ncase "$2" in test:ui-performance) echo fixture-inconclusive; exit 2;; *) echo fixture-pass;; esac\n')
+ inconclusive = subprocess.run([sys.executable,str(runner),'--output',str(output),'--browser'],env=environment,capture_output=True,text=True,timeout=15)
+ assert inconclusive.returncode == 1, inconclusive.stdout+inconclusive.stderr
+ latest = max(output.iterdir(),key=lambda p:p.stat().st_mtime_ns)
+ rows = [json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
+ assert next(row for row in rows if row['test']=='test:ui-performance')['result']=='INCONCLUSIVE'
+ assert not json.loads((latest/'summary.json').read_text())['software_checks_passed']
  npm.write_text('#!/bin/sh\nsleep 5\n')
  interrupted = subprocess.Popen([sys.executable,str(runner),'--output',str(output)],env=environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
  time.sleep(.25)
@@ -62,4 +97,4 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  latest = max(output.iterdir(),key=lambda p:p.stat().st_mtime_ns)
  rows = [json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
  assert len(rows) == 1 and rows[0]['result'] == 'INTERRUPTED', rows
- print('QA runner: three stale/ambiguous source-boundary controls; browser skip, strict incomplete gate, interruption, failure, timeout and immutable checksummed evidence passed')
+ print('QA runner: source-boundary controls; soak timeout/arguments, invalid options, browser skip, strict incomplete gate, interruption, failure, timeout and immutable checksummed evidence passed')

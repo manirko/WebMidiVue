@@ -234,6 +234,12 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await iphoneContext.close()
 }
 
+function requiredMetric(list, name) {
+  const value = list.find(item => item.name === name)?.value
+  assert(Number.isFinite(value) && value > 0, `Missing/invalid required performance metric: ${name}`)
+  return value
+}
+
 function heapSlopeBytesPerMinute(samples) {
   if (samples.length < 2) return 0
   const meanTime = samples.reduce((sum, sample) => sum + sample.elapsedMilliseconds, 0) / samples.length
@@ -247,10 +253,9 @@ function heapSlopeBytesPerMinute(samples) {
 
 async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
   if (!seconds) return null
-  const metric = (list, name) => list.find(item => item.name === name)?.value || 0
   await devtools.send('Performance.enable')
   await devtools.send('HeapProfiler.collectGarbage')
-  const startHeap = metric((await devtools.send('Performance.getMetrics')).metrics, 'JSHeapUsedSize')
+  const startHeap = requiredMetric((await devtools.send('Performance.getMetrics')).metrics, 'JSHeapUsedSize')
   const startedAt = Date.now()
   const startAudioTime = await page.evaluate(() => window.__soundContext.currentTime)
   const sampleIntervalMilliseconds = Math.min(30000, Math.max(5000, Math.round(seconds * 1000 / 20)))
@@ -274,7 +279,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
       await devtools.send('HeapProfiler.collectGarbage')
       heapSamples.push({
         elapsedMilliseconds: Date.now() - startedAt,
-        heapBytes: metric((await devtools.send('Performance.getMetrics')).metrics, 'JSHeapUsedSize')
+        heapBytes: requiredMetric((await devtools.send('Performance.getMetrics')).metrics, 'JSHeapUsedSize')
       })
       latestRealtimeSoak = {
         browser: browserVersion,
@@ -289,7 +294,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await page.waitForTimeout(200)
   }
   await devtools.send('HeapProfiler.collectGarbage')
-  const endHeap = metric((await devtools.send('Performance.getMetrics')).metrics, 'JSHeapUsedSize')
+  const endHeap = requiredMetric((await devtools.send('Performance.getMetrics')).metrics, 'JSHeapUsedSize')
   const elapsedMilliseconds = Date.now() - startedAt
   if (heapSamples.at(-1).elapsedMilliseconds !== elapsedMilliseconds) {
     heapSamples.push({elapsedMilliseconds, heapBytes: endHeap})
@@ -307,6 +312,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     heapGrowthBytes: endHeap - startHeap,
     heapSlopeBytesPerMinute: Math.round(heapSlope),
     heapSampleCount: heapSamples.length,
+    heapSamples,
     audioTimeAdvancedSeconds: Math.round((endAudioTime - startAudioTime) * 10) / 10,
     finalAudioState: await page.locator('.sound-lab').getAttribute('data-audio-state'),
     finalVoices: Number(await page.locator('.sound-lab').getAttribute('data-active-voices')),
@@ -589,7 +595,6 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
 
     await devtools.send('Performance.enable')
     await devtools.send('HeapProfiler.collectGarbage')
-    const metric = (list, name) => list.find(item => item.name === name)?.value || 0
     const beforeMetrics = (await devtools.send('Performance.getMetrics')).metrics
     const soakMilliseconds = await page.evaluate(() => {
       const started = performance.now()
@@ -605,7 +610,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await page.waitForTimeout(750)
     await devtools.send('HeapProfiler.collectGarbage')
     const afterMetrics = (await devtools.send('Performance.getMetrics')).metrics
-    const heapGrowth = metric(afterMetrics, 'JSHeapUsedSize') - metric(beforeMetrics, 'JSHeapUsedSize')
+    const heapGrowth = requiredMetric(afterMetrics, 'JSHeapUsedSize') - requiredMetric(beforeMetrics, 'JSHeapUsedSize')
     assert(soakMilliseconds < 15000, `20000-message soak blocked the page for ${soakMilliseconds} ms`)
     assert(heapGrowth < 20 * 1024 * 1024, `JS heap grew by ${heapGrowth} bytes`)
     const realtimeSoak = await runRealtimeSoak(page, devtools, realtimeSoakSeconds, await browser.version())

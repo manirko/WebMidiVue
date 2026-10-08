@@ -729,11 +729,12 @@ export default  {
     },
     async sys_ex_changed(object) {
       if (this.betaBuild && this.device && !this.settingsSnapshotKnown) return
-      // A user gesture wins over a late startup read; never overwrite the
-      // control they just changed with an older snapshot.
+      const device = this.device, operationId = this.$refs?.deviceSelector?.operationId
+      const connectionCurrent = () => this.device === device && this.$refs?.deviceSelector?.operationId === operationId && (!this.betaBuild || !device || this.settingsSnapshotKnown)
       this.settingsLoadId++
       this.lastChangedSetting = object.name
       await this.patchChanged();
+      if (!connectionCurrent()) return
       if (this.betaBuild && !this.device) this.markPresetPending()
       if (this.betaBuild && this.presetPending) {
         this.settingsMessage = "Preset edited in browser. Apply preset to Biotron to hear and save it."
@@ -741,15 +742,14 @@ export default  {
         this.patchRerender++;
         return
       }
-      if (this.device) {
-        await object.sendToMidi(this.device)
-      }
+      if (device) await object.sendToMidi(device)
+      if (!connectionCurrent()) return
       if (this.betaBuild) {
         this.settingsState = "changed"
         this.settingsMessage = this.device
             ? "Applied live — saving and checking…"
             : "Connect Biotron to apply this setting."
-        if (this.device) this.scheduleLiveVerification(this.device)
+        if (device) this.scheduleLiveVerification(device)
       }
       this.forceRerender++;
       this.patchRerender++;

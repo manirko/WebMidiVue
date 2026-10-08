@@ -39,7 +39,7 @@ async function testRealtimeCapture() {
   const report = {
     status: 'RUNNING', sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], {cwd: root, encoding: 'utf8'}).trim(),
     workingTree: execFileSync('git', ['status', '--porcelain'], {cwd: root, encoding: 'utf8'}),
-    platform: process.platform, cases: [],
+    platform: process.platform, cases: [], loadOnly: process.argv.includes('--load'),
     scope: 'Isolated production-engine PCM after final gain; no system/speaker, running Play UI, MIDI or human acceptance',
     testSourceSha256: hash(fs.readFileSync(new URL(import.meta.url)))
   }
@@ -65,11 +65,14 @@ async function testRealtimeCapture() {
     context = await browser.newContext()
     await context.tracing.start({screenshots: true, snapshots: true, sources: true})
     await context.addInitScript(() => {
-      const intervals = new Set(), blobs = new Set(), contexts = []
-      window.__captureResources = {intervals, blobs, contexts}
+      const intervals = new Set(), blobs = new Set(), frames = new Set(), contexts = []
+      window.__captureResources = {intervals, blobs, frames, contexts}
       const set = window.setInterval, clear = window.clearInterval
       window.setInterval = (...args) => { const id = set(...args); intervals.add(id); return id }
       window.clearInterval = id => { intervals.delete(id); clear(id) }
+      const request = window.requestAnimationFrame, cancel = window.cancelAnimationFrame
+      window.requestAnimationFrame = callback => { const id = request(time => { frames.delete(id); callback(time) }); frames.add(id); return id }
+      window.cancelAnimationFrame = id => { frames.delete(id); cancel(id) }
       const create = URL.createObjectURL, revoke = URL.revokeObjectURL
       URL.createObjectURL = blob => { const url = create(blob); blobs.add(url); return url }
       URL.revokeObjectURL = url => { blobs.delete(url); revoke(url) }
@@ -83,7 +86,7 @@ async function testRealtimeCapture() {
     page.setDefaultTimeout(30000)
     page.on('pageerror', error => pageErrors.push(String(error)))
     await page.goto(`http://127.0.0.1:${server.address().port}/`)
-    for (const mode of ['normal', 'mute', 'stuck']) {
+    for (const mode of report.loadOnly ? [] : ['normal', 'mute', 'stuck']) {
       await page.locator(`#audio-${mode}`).click()
       await page.waitForFunction(mode => {
         const stage = document.getElementById('stage').textContent
@@ -130,8 +133,35 @@ async function testRealtimeCapture() {
       assert(observed.resources.contextStates.every(state => state === 'closed'), 'capture left an AudioContext open')
       assert.deepEqual(pageErrors, [], 'uncaught browser error')
     }
+    if (report.loadOnly) {
+      await page.locator('#load').click()
+      await page.waitForFunction(() => {
+        const stage = document.getElementById('stage').textContent
+        return stage.startsWith('animation-audio-load ') && !stage.endsWith('RUNNING')
+      }, null, {timeout: 60000})
+      const observed = await page.evaluate(() => ({
+        ui: JSON.parse(document.getElementById('result').textContent),
+        resources: {intervals: window.__captureResources.intervals.size, frames: window.__captureResources.frames.size,
+          blobs: window.__captureResources.blobs.size, contextStates: window.__captureResources.contexts.map(c => c.state)}
+      }))
+      report.load = observed
+      save()
+      assert.equal(observed.ui.result, 'PASS', 'Garden/audio load failed; missing renderer is not PASS')
+      assert.deepEqual(observed.ui.value.rows.map(row => row.syntheticMainThreadBusyMsPer16ms), [0, 4, 10])
+      for (const row of observed.ui.value.rows) {
+        assert.equal(row.audio.result, 'PASS', 'audio oracle failed under contention')
+        assert.equal(row.animationRendered, true)
+        assert(row.uiFrameSamples > 0 && Number.isFinite(row.uiFrameP95Ms))
+      }
+      assert.equal(observed.resources.intervals, 0, 'load retained a timer')
+      assert.equal(observed.resources.frames, 0, 'load retained a host animation frame')
+      assert.equal(observed.resources.blobs, 0, 'load retained a Blob URL')
+      assert.equal(observed.resources.contextStates.length, 3, 'one capture per requested load level')
+      assert(observed.resources.contextStates.every(state => state === 'closed'))
+      assert.deepEqual(pageErrors, [], 'uncaught browser error')
+    }
     report.status = 'PASS'
-    console.log('PASS: actual real-time PCM, silence/stuck-note mutations, downloaded WAV and repeated capture cleanup')
+    console.log(report.loadOnly ? 'PASS: Garden renderer, audio oracles at 0/4/10ms contention, host frame metrics and cleanup' : 'PASS: actual real-time PCM, silence/stuck-note mutations, downloaded WAV and repeated capture cleanup')
   } catch (error) {
     report.status = 'FAIL'
     report.error = {message: String(error), stack: error.stack, pageErrors}

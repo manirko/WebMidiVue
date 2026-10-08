@@ -31,3 +31,9 @@ Store downloaded evidence under ProjectData, with the generated source-manifest.
 Run animation + audio load ladder loads the current tracked Garden scene, waits for its renderer handshake, drives its ready/note animation and runs the same audio score at synthetic busy-loop budgets of 0, 4 and 10 ms per 16 ms timer interval. These are requested contention budgets, NOT measured CPU utilization or hardware throttle factors. The test records audio failure/continuity, host requestAnimationFrame p95/max and optional JS heap samples. Frame measurements describe the host page, not GPU render timing. Heap snapshots do not prove absence of leaks. Animation readability, low-end hardware acceptance and long soak remain NOT RUN.
 
 Stop load test aborts capture, sends animation waiting/paused, clears all load/scene timers and frame measurement, and releases its audio context. Cancelled run reports INTERRUPTED, not PASS. The audio fault oracles remain the acceptance gate; visual responsiveness metrics are observations until calibrated criteria exist. Garden requires its external Three CDN resources and WebGPU support: a missing renderer handshake fails after a bounded wait rather than silently testing an empty frame.
+
+The full QA runner now executes this existing ladder via `npm run test:audio:load`.
+Its immutable run folder includes the source manifest, structured per-level
+audio/frame report and browser trace. Missing Garden renderer, failed audio
+oracles, uncaught errors, or retained host timers/frames/audio contexts fail
+the lane. This is isolated production-engine PCM, not running Play output.

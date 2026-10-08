@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Run repeatable software QA with durable JSONL and separate raw output files."""
-import argparse, datetime, hashlib, json, os, pathlib, signal, subprocess, sys, uuid
+import argparse, datetime, hashlib, json, math, os, pathlib, signal, subprocess, sys, time, uuid
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TESTS = ['test:auditions', 'test:auditions:render', 'test:qa-runner', 'test:audio-qa', 'test:audio:system-output', 'test:audio:physical-output', 'test:garden', 'test:firmware', 'test:settings-readback', 'test:midi-lifecycle', 'test:diagnostics', 'test:telemetry', 'test:navigation', 'test:compatibility', 'test:listeners', 'test:midi-timing', 'test:sound', 'test:architecture', 'test:legacy-selector', 'test:playtron-variants', 'test:scales-variants', 'test:touchme-variants', 'test:presets', 'test:service-worker-ready', 'test:midi-permission-cancel', 'test:release-evidence', 'test:preview-guard', 'test:sound:levels']
 EXTERNAL_CHECKS = {
@@ -9,15 +9,21 @@ EXTERNAL_CHECKS = {
  'test:windows:daw': 'Windows/Ableton release, actual MIDI-clip recording, physical sound and web reconnect require independent evidence on a real Windows host; a listed port is not PASS.'
 }
 BROWSER_TESTS = ['test:production-isolation', 'test:build-destination', 'test:firmware:browser', 'test:beta-build', 'test:sound:browser', 'test:audio:realtime', 'test:pwa:browser', 'test:quality:browser', 'test:auditions:browser', 'test:playtron-variants:browser', 'test:scales-variants:browser', 'test:touchme-variants:browser']
-TESTS.extend(BROWSER_TESTS)
-TESTS.extend(EXTERNAL_CHECKS)
+BROWSER_TESTS.extend(['test:audio:load', 'test:ui-performance'])
+TESTS.insert(0, 'test:lint')
 p = argparse.ArgumentParser()
 p.add_argument('--output', required=True, type=pathlib.Path)
 p.add_argument('--timeout', type=float, default=180)
 p.add_argument('--browser', action='store_true', help='Run isolated browser lanes with the required firmware/general-beta build order; no physical flashing')
+p.add_argument('--soak-seconds', type=int, default=0, help='Optional real-time soak, 1–28800 seconds; requires --browser')
 p.add_argument('--require-complete', action='store_true', help='Exit nonzero when required browser coverage is absent')
 a = p.parse_args()
-if a.timeout <= 0: p.error('--timeout must be positive')
+if not math.isfinite(a.timeout) or a.timeout <= 0: p.error('--timeout must be finite and positive')
+if not 0 <= a.soak_seconds <= 28800: p.error('--soak-seconds must be from 0 to 28800')
+if a.soak_seconds and not a.browser: p.error('--soak-seconds requires --browser')
+TESTS.extend(BROWSER_TESTS)
+if a.soak_seconds: TESTS.append('test:sound:soak')
+TESTS.extend(EXTERNAL_CHECKS)
 run_id = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+uuid.uuid4().hex[:8]
 a.output = a.output/run_id
 a.output.mkdir(parents=True, exist_ok=False)
@@ -29,7 +35,7 @@ for directory in ('src', 'public', 'beta-assets', 'scripts'):
 inputs.extend(path for pattern in ('package*.json', '*config*', '.env*') for path in ROOT.glob(pattern) if path.is_file())
 input_hashes = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(set(inputs))}
 (a.output/'inputs.json').write_text(json.dumps(input_hashes,indent=2))
-(a.output/'run.json').write_text(json.dumps(dict(run_id=run_id,head=head,working_tree=status,timeout=a.timeout),indent=2))
+(a.output/'run.json').write_text(json.dumps(dict(run_id=run_id,head=head,working_tree=status,timeout=a.timeout,soak_seconds=a.soak_seconds),indent=2))
 print('Evidence:', a.output, flush=True)
 failed = False
 interrupted = False
@@ -45,11 +51,17 @@ with (a.output/'tests.jsonl').open('x') as journal:
    print(name, record['result'], flush=True)
    counts['NOT RUN'] = counts.get('NOT RUN', 0)+1
    continue
-  process = subprocess.Popen(['npm','run',name],cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,start_new_session=True,env=dict(os.environ,BIOTRON_QA_OUTPUT=str(a.output)))
+  command = ['npm','run',name]
+  lane_timeout = a.timeout
+  if name == 'test:sound:soak':
+   command = ['npm','run','test:sound:browser','--',f'--soak-seconds={a.soak_seconds}',f'--soak-report={a.output / "soak.json"}']
+   lane_timeout = max(a.timeout, a.soak_seconds + 180)
+  started = time.monotonic()
+  process = subprocess.Popen(command,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,start_new_session=True,env=dict(os.environ,BIOTRON_QA_OUTPUT=str(a.output)))
   timed_out = False
   interrupted = False
   try:
-   output, _ = process.communicate(timeout=a.timeout)
+   output, _ = process.communicate(timeout=lane_timeout)
   except (subprocess.TimeoutExpired, KeyboardInterrupt) as error:
    timed_out = isinstance(error, subprocess.TimeoutExpired)
    interrupted = isinstance(error, KeyboardInterrupt)
@@ -58,7 +70,8 @@ with (a.output/'tests.jsonl').open('x') as journal:
    output += '\n'+type(error).__name__+'\n'
   filename = name.replace(':','-')+'.log'
   (a.output/filename).write_text(output)
-  record = dict(at=at,run_id=run_id,head=head,test=name,result='INTERRUPTED' if interrupted else 'TIMEOUT' if timed_out else ('PASS' if process.returncode == 0 else 'FAIL'),exit_code=process.returncode,evidence=filename,sha256=hashlib.sha256((a.output/filename).read_bytes()).hexdigest())
+  result = 'INTERRUPTED' if interrupted else 'TIMEOUT' if timed_out else 'INCONCLUSIVE' if name == 'test:ui-performance' and process.returncode == 2 else 'PASS' if process.returncode == 0 else 'FAIL'
+  record = dict(at=at,run_id=run_id,head=head,test=name,result=result,exit_code=process.returncode,command=command,timeout=lane_timeout,duration_seconds=round(time.monotonic()-started,3),evidence=filename,sha256=hashlib.sha256((a.output/filename).read_bytes()).hexdigest())
   journal.write(json.dumps(record)+'\n'); journal.flush()
   print(name, record['result'], flush=True); failed |= interrupted or timed_out or process.returncode != 0
   counts[record['result']] = counts.get(record['result'], 0)+1

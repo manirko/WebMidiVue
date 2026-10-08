@@ -2,7 +2,7 @@ const assert = require('assert')
 const fs = require('fs')
 const vm = require('vm')
 
-const source = fs.readFileSync('src/components/BiotronPage/BiotronPageUpdated.vue', 'utf8')
+const source = fs.readFileSync(process.env.BIOTRON_SETTINGS_CONTROL_FILE || 'src/components/BiotronPage/BiotronPageUpdated.vue', 'utf8')
 const script = source.match(/<script>([\s\S]*?)<\/script>/)[1]
 const context = {
   module: {exports: {}},
@@ -10,6 +10,7 @@ const context = {
   defineAsyncComponent: () => ({}),
   applySettingsVector() {},
   soundSessionState: {running: false},
+  recordBiotronEvent() {},
   BiotronCommandsData: [],
   BiotronDb: class {},
 }
@@ -42,11 +43,14 @@ function page() {
     settingsState: 'connecting',
     settingsSnapshotKnown: false,
     settingsLoadId: 0,
+    liveVerifyId: 0,
+    liveVerifyTimer: null,
+    calibrationBusy: false,
     settingsMessage: '',
     firmwareVersion: '1.9.8',
     commands_data: {},
     forceRerender: 0,
-    $refs: {deviceSelector: {requestFirmwareVersion() { return true }}},
+    $refs: {deviceSelector: {operationId: 0, requestFirmwareVersion() { return true }}},
   }
   for (const [name, method] of Object.entries(component.methods)) state[name] = method.bind(state)
   return state
@@ -65,7 +69,7 @@ for (const value of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
   selectContext.module.exports.methods.changed.call(selection)
 }
 
-;(async () => {
+(async () => {
   const legacy = page()
   legacy.firmwareVersion = '1.8.2'
   legacy.legacyFirmware = component.computed.legacyFirmware.call(legacy)
@@ -150,5 +154,86 @@ for (const value of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
   assert.equal(local.presetPending, true, 'reconnect must preserve unapplied local edits')
   assert.equal(loadedDeviceVector, 0, 'device readback overwrote the local preset')
   assert.match(local.settingsMessage, /local preset is unchanged/)
-  console.log('Biotron Settings initial-read gate and retry: PASS')
+
+  const deferred = () => {
+    let resolve
+    const promise = new Promise(done => { resolve = done })
+    return {promise, resolve}
+  }
+  const editable = () => {
+    const state = page()
+    state.settingsSnapshotKnown = true
+    state.settingsState = 'loaded'
+    state.page_is_inited = true
+    return state
+  }
+  const reconnect = async (state, device) => {
+    state.$refs.deviceSelector.operationId++
+    await state.handleDeviceChanged(device)
+  }
+  const changedDuringSave = async (name, change) => {
+    const state = editable(), initial = state.device, replacement = {id: 'replacement'}
+    const save = deferred(), writes = [], verified = []
+    state.patchChanged = () => save.promise
+    state.scheduleLiveVerification = device => verified.push(device.id)
+    const gesture = state.sys_ex_changed({name: 'firstValue', sendToMidi: device => writes.push(device.id)})
+    await change(state, initial, replacement)
+    save.resolve()
+    await gesture
+    assert.deepEqual(writes, [], `${name}: old gesture reached a stale or replacement connection`)
+    assert.deepEqual(verified, [], `${name}: old gesture verified a stale or replacement connection`)
+    assert.notEqual(state.settingsState, 'changed', `${name}: old gesture claimed a live change`)
+  }
+  await changedDuringSave('A to B', (state, initial, replacement) => reconnect(state, replacement))
+  await changedDuringSave('disconnect', state => reconnect(state, null))
+  await changedDuringSave('A to B to A', async (state, initial, replacement) => {
+    await reconnect(state, replacement)
+    await reconnect(state, initial)
+    state.settingsSnapshotKnown = true
+  })
+  await changedDuringSave('same-object reconnect', async (state, initial) => {
+    await reconnect(state, initial)
+    state.settingsSnapshotKnown = true
+  })
+  await changedDuringSave('readback became unknown', state => { state.settingsSnapshotKnown = false })
+
+  const sending = editable(), sendDevice = sending.device, sendEntered = deferred(), sendFinished = deferred()
+  const sent = [], verifiedAfterSend = []
+  sending.patchChanged = async () => {}
+  sending.scheduleLiveVerification = device => verifiedAfterSend.push(device.id)
+  const sendGesture = sending.sys_ex_changed({name: 'scale', sendToMidi: async device => {
+    sent.push(device.id)
+    sendEntered.resolve()
+    await sendFinished.promise
+  }})
+  await sendEntered.promise
+  await reconnect(sending, {id: 'replacement-during-send'})
+  sending.settingsSnapshotKnown = true
+  sendFinished.resolve()
+  await sendGesture
+  assert.deepEqual(sent, [sendDevice.id], 'send used the replacement instead of its captured target')
+  assert.deepEqual(verifiedAfterSend, [], 'completion of an old send verified the replacement')
+  assert.equal(sending.settingsState, 'connecting', 'completion of an old send changed replacement status')
+
+  const independent = editable(), firstSave = deferred(), secondSave = deferred(), independentWrites = [], independentVerifications = []
+  let saveIndex = 0
+  independent.patchChanged = () => [firstSave.promise, secondSave.promise][saveIndex++]
+  independent.scheduleLiveVerification = device => independentVerifications.push(device.id)
+  const firstGesture = independent.sys_ex_changed({name: 'scale', sendToMidi: device => independentWrites.push(['scale', device.id])})
+  const secondGesture = independent.sys_ex_changed({name: 'lightBpm', sendToMidi: device => independentWrites.push(['lightBpm', device.id])})
+  secondSave.resolve()
+  await secondGesture
+  firstSave.resolve()
+  await firstGesture
+  assert.equal(independent.settingsLoadId, 2)
+  assert.deepEqual(independentWrites, [['lightBpm', independent.device.id], ['scale', independent.device.id]],
+    'independent gestures on one connection cancelled each other')
+  assert.deepEqual(independentVerifications, [independent.device.id, independent.device.id])
+
+  const rejected = editable(), rejectedWrites = []
+  rejected.patchChanged = async () => { throw new Error('local preset save failed') }
+  rejected.scheduleLiveVerification = () => { throw new Error('failed local save must not verify') }
+  await assert.rejects(rejected.sys_ex_changed({name: 'scale', sendToMidi: device => rejectedWrites.push(device.id)}), /local preset save failed/)
+  assert.deepEqual(rejectedWrites, [], 'failed local persistence still wrote MIDI')
+  console.log('Biotron Settings initial-read, retry and eight stale-gesture/independent-edit cases: PASS')
 })().catch(error => { console.error(error); process.exitCode = 1 })

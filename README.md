@@ -80,7 +80,17 @@ internal UF2 must appear in the chosen output, without modifying another
 build's `dist`. Copy targets stay relative to Webpack's output directory.
 Run the complete fault-preserving loop with
 `python3 scripts/run-biotron-qa.py --browser --timeout 240 --output /absolute/run/path`.
-Its NOT RUN entries remain separate from software passes.
+Its NOT RUN entries remain separate from software passes. Lint uses `--no-fix`;
+the run records each command, duration, timeout and checksummed raw log.
+For a bounded ten-minute audio/MIDI soak add `--soak-seconds 600`; its lane
+gets the requested duration plus 180 seconds for startup, independently of
+shorter ordinary timeouts. The browser loop also runs actual Garden plus
+isolated production audio at 0/4/10 ms synthetic main-thread contention.
+`test:ui-performance` also records actual Play final-gain PCM/WAV, twenty
+Settings/Play route transitions (first visit/warm p50/p95), keyboard startup,
+frame/long-task observations and load0/4/10. Audio/cleanup oracles are gates;
+dropped/truncated/drifting capture exits inconclusive. These measurements
+do not certify physical output or weak computers.
 
 That single command derives the visible build ID from `HEAD`, runs the complete
 Biotron release gate, including all 36 audition variants, their standard/safe DSP
@@ -122,7 +132,7 @@ The hardware-confirmed firmware research build is separate:
 npm run build:biotron-firmware-beta
 ```
 
-Only that build copies the pinned 1.10.9 clean artifact and shows the Biotron updater.
+Only that build copies the pinned internal 1.10.10 artifact (with 1.10.9 rollback) and shows the Biotron updater.
 It must not be sent to an unscreened customer segment. Firmware installation is
 desktop Chrome/Edge plus internet only, and each board revision must be
 confirmed before receiving its link.
@@ -148,11 +158,11 @@ passes the same physical evidence gate. Deploy this build only on a dedicated be
 never under the production service-worker scope.
 
 The beta shell deliberately exposes only Biotron's `Play` and `Settings`
-tasks. The normal production device navigation remains unchanged. Settings,
-presets and live controls stay hidden until the selected Biotron answers with
-its saved state; firmware recovery remains reachable when the device is
-already mounted as `RPI-RP2`. This prevents a tester from editing an
-unverified placeholder state.
+tasks. The normal production device navigation remains unchanged. Settings
+can be inspected and edited as a local draft without hardware. Writes to a
+connected Biotron require its confirmed saved state; applying a local preset
+is an explicit action. Firmware recovery remains reachable when the device
+is already mounted as `RPI-RP2`.
 
 The beta sends small, structured technical events while online: connection,
 calibration, audio, saved-settings state and the tester's explicit first-sound

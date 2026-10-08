@@ -54,7 +54,10 @@
     "test:qa-runner": "PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3 scripts/test-qa-runner.py",
     "test:auditions": "node --test scripts/test-audition-banks.mjs",
     "test:auditions:render": "node scripts/test-audition-render.js",
-    "test:auditions:browser": "node scripts/test-audition-browser.js"
+    "test:auditions:browser": "node scripts/test-audition-browser.js",
+    "test:lint": "vue-cli-service lint --no-fix",
+    "test:audio:load": "node scripts/audio-qa/test-analyze.mjs --browser --load",
+    "test:ui-performance": "node scripts/test-ui-performance.cjs"
   },
   "dependencies": {
     "@elemaudio/core": "^4.0.1",
