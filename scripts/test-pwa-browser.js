@@ -166,9 +166,11 @@ async function controllerVersion(page) {
     'the visible beta version must use a calendar date')
   assert.doesNotMatch(versionStamp, /\b[0-9a-f]{12}\b/i,
     'the visible beta version must not expose a commit hash')
-  const feedbackLink = decodeURIComponent(await page.locator('.beta-feedback__action').getAttribute('href'))
-  assert(feedbackLink.includes(`Version date: ${versionStamp.split(' · ')[1]}`),
+  await page.getByRole('button', {name: 'Tell me what to change', exact: true}).click()
+  const feedbackLink = decodeURIComponent(await page.getByRole('link', {name: 'Open email', exact: true}).getAttribute('href'))
+  assert(feedbackLink.includes(`Version: ${versionStamp.split(' · ')[1]}`),
     'feedback should carry the same version date shown to the user')
+  await page.getByRole('button', {name: 'Close', exact: true}).click()
   assert.strictEqual(await controllerVersion(page), 1)
   await page.getByText(/MIDI access was blocked/i).waitFor({state: 'visible', timeout: 5000})
   await page.getByRole('button', {name: /Retry connection/i}).click()
