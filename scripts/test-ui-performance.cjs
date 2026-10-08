@@ -296,13 +296,13 @@ async function cleanup() {
   if (page && !page.isClosed()) await page.screenshot({path: path.join(output, 'first-fault.png')}).catch(() => {})
   process.exitCode = report.status === 'INCONCLUSIVE' ? 2 : 1
 }).finally(async () => {
-  try { await cleanup() } catch (error) { report.cleanupError = String(error); if (report.status === 'PASS') report.status = 'FAIL'; process.exitCode = process.exitCode || 1 }
+  try { await cleanup() } catch (error) { report.cleanupError = String(error); report.status = 'FAIL'; process.exitCode = 1 }
   if (report.cleanup && report.midiBaseline !== undefined && report.cleanup.midiRequests !== report.midiBaseline) {
     report.midiCleanupError = 'Cleanup or audio introduced an additional synthetic MIDI access call'
     report.status = 'FAIL'; process.exitCode = 1
   }
-  if (context) await context.tracing.stop({path: path.join(output, 'trace.zip')}).catch(error => { report.traceError = String(error); if (report.status === 'PASS') report.status = 'FAIL'; process.exitCode = process.exitCode || 1 })
-  if (browser) await browser.close().catch(error => { report.browserCloseError = String(error); if (report.status === 'PASS') report.status = 'FAIL'; process.exitCode = process.exitCode || 1 })
+  if (context) await context.tracing.stop({path: path.join(output, 'trace.zip')}).catch(error => { report.traceError = String(error); report.status = 'FAIL'; process.exitCode = 1 })
+  if (browser) await browser.close().catch(error => { report.browserCloseError = String(error); report.status = 'FAIL'; process.exitCode = 1 })
   if (server?.listening) await new Promise(resolve => server.close(resolve))
   save()
 })
