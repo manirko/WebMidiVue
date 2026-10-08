@@ -119,5 +119,22 @@ function page() {
   target.settingsSnapshotKnown = true
   target.settingsState = 'error'
   assert.match(status(), /not confirmed/)
+  const local = page()
+  local.device = null
+  let localSaves = 0, midiWrites = 0, loadedDeviceVector = 0
+  local.patchChanged = async () => { localSaves++ }
+  local.clearLiveVerification = () => {}
+  await local.sys_ex_changed({name: 'scale', sendToMidi: async () => { midiWrites++ }})
+  assert.equal(localSaves, 1, 'disconnected edit must save the local preset')
+  assert.equal(midiWrites, 0, 'disconnected edit must not send MIDI')
+  assert.equal(local.presetPending, true)
+  context.applySettingsVector = () => { loadedDeviceVector++ }
+  local.device = {id: 'reconnected'}
+  local.readPersistedSettingsWithRetry = async () => ({values: []})
+  await local.loadPersistedSettings(local.device)
+  assert.equal(local.settingsSnapshotKnown, true)
+  assert.equal(local.presetPending, true, 'reconnect must preserve unapplied local edits')
+  assert.equal(loadedDeviceVector, 0, 'device readback overwrote the local preset')
+  assert.match(local.settingsMessage, /local preset is unchanged/)
   console.log('Biotron Settings initial-read gate and retry: PASS')
 })().catch(error => { console.error(error); process.exitCode = 1 })

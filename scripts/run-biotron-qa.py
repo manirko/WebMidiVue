@@ -5,16 +5,16 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 TESTS = ['test:audio-qa', 'test:audio:realtime', 'test:audio:system-output', 'test:audio:physical-output', 'test:garden', 'test:firmware', 'test:settings-readback', 'test:midi-lifecycle', 'test:diagnostics', 'test:telemetry', 'test:navigation', 'test:compatibility', 'test:listeners', 'test:midi-timing', 'test:sound', 'test:architecture', 'test:legacy-selector', 'test:playtron-variants', 'test:scales-variants', 'test:touchme-variants', 'test:presets', 'test:service-worker-ready', 'test:midi-permission-cancel', 'test:release-evidence', 'test:preview-guard', 'test:sound:levels']
 EXTERNAL_CHECKS = {
  'test:mobile:owner': 'Mandatory before Sergey handoff: Andrey must physically test the exact build and firmware on his phone, including USB/MIDI, calibration, audible sound, Garden touch/fullscreen, Stop/Start, settings and reconnect. A viewport/emulator or unsupported-browser message is not functional mobile PASS.',
- 'test:pwa:browser': 'Production PWA install/update/rollback and offline launch require independent browser evidence.',
- 'test:firmware:browser': 'Full directory-picker write and reconnect verification require browser and physical-device evidence.',
  'test:firmware:physical-cycle': 'Rollback, reinstall and settings readback require a compatible physical board and pinned images.',
- 'test:quality:browser': 'Layout, animation, keyboard and reduced-motion checks require independent browser evidence.',
  'test:windows:daw': 'Windows/Ableton release, actual MIDI-clip recording, physical sound and web reconnect require independent evidence on a real Windows host; a listed port is not PASS.'
 }
+BROWSER_TESTS = ['test:production-isolation', 'test:firmware:browser', 'test:beta-build', 'test:sound:browser', 'test:pwa:browser', 'test:quality:browser', 'test:playtron-variants:browser', 'test:scales-variants:browser', 'test:touchme-variants:browser']
+TESTS.extend(BROWSER_TESTS)
 TESTS.extend(EXTERNAL_CHECKS)
 p = argparse.ArgumentParser()
 p.add_argument('--output', required=True, type=pathlib.Path)
 p.add_argument('--timeout', type=float, default=180)
+p.add_argument('--browser', action='store_true', help='Run isolated browser lanes with the required firmware/general-beta build order; no physical flashing')
 p.add_argument('--require-complete', action='store_true', help='Exit nonzero when required browser coverage is absent')
 a = p.parse_args()
 if a.timeout <= 0: p.error('--timeout must be positive')
@@ -34,11 +34,13 @@ print('Evidence:', a.output, flush=True)
 failed = False
 interrupted = False
 counts = {}
+package_scripts = json.loads((ROOT/'package.json').read_text())['scripts']
+(a.output/'coverage.json').write_text(json.dumps({'planned': TESTS, 'available_scripts': sorted(package_scripts), 'unplanned_scripts': sorted(set(package_scripts)-set(TESTS)), 'physical_checks': EXTERNAL_CHECKS, 'browser_enabled': a.browser}, indent=2))
 with (a.output/'tests.jsonl').open('x') as journal:
  for name in TESTS:
   at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-  if name in EXTERNAL_CHECKS or name in ('test:presets', 'test:sound:levels', 'test:audio:realtime', 'test:audio:system-output', 'test:audio:physical-output'):
-   record = dict(at=at,run_id=run_id,head=head,test=name,result='NOT RUN',reason=EXTERNAL_CHECKS.get(name,'Requires independent browser/capture evidence; this software runner cannot establish physical audio output.'))
+  if name in EXTERNAL_CHECKS or (name in BROWSER_TESTS and not a.browser) or name not in package_scripts:
+   record = dict(at=at,run_id=run_id,head=head,test=name,result='NOT RUN',reason=EXTERNAL_CHECKS.get(name, 'Use --browser for isolated browser evidence.' if name in BROWSER_TESTS else 'No executable npm script exists for this proposed lane; never count as PASS.'))
    journal.write(json.dumps(record)+'\n'); journal.flush()
    print(name, record['result'], flush=True)
    counts['NOT RUN'] = counts.get('NOT RUN', 0)+1

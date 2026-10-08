@@ -387,9 +387,14 @@ async function controllerVersion(page) {
   const spectator = await context.newPage()
   await spectator.goto(`${origin}/#/biotron/play`, {waitUntil: 'load'})
   await spectator.evaluate(() => { window.__pwaSpectator = 'still-open' })
-  await page.getByRole('button', {name: 'Update app', exact: true}).click()
+  await Promise.all([
+    page.waitForNavigation({waitUntil: 'domcontentloaded'}),
+    page.getByRole('button', {name: 'Update app', exact: true}).click()
+  ])
   await waitFor(async () => await controllerVersion(page) === 2, 'explicit update did not activate the new worker')
-  await page.getByText(/Offline mode is ready/i).waitFor({state: 'visible'})
+  // First-play intentionally hides readiness. Verify it on Settings after the explicit reload.
+  await page.goto(`${origin}/#/biotron`, {waitUntil: 'domcontentloaded'})
+  await page.getByText(/Offline mode.*Settings.*without internet/i).waitFor({state: 'visible'})
   await spectator.getByRole('button', {name: 'Update app', exact: true}).waitFor()
   assert.strictEqual(await spectator.evaluate(() => window.__pwaSpectator), 'still-open',
     'an update accepted in another tab reloaded the spectator')
@@ -397,7 +402,10 @@ async function controllerVersion(page) {
   assert(spectator.url().endsWith('/#/biotron/play'), 'Old tab navigated toward a removed route chunk')
   assert.strictEqual(await spectator.evaluate(() => document.activeElement?.textContent.trim()), 'Update app',
     'Blocked route did not focus the explicit update action')
-  await spectator.getByRole('button', {name: 'Update app', exact: true}).click()
+  await Promise.all([
+    spectator.waitForNavigation({waitUntil: 'domcontentloaded'}),
+    spectator.getByRole('button', {name: 'Update app', exact: true}).click()
+  ])
   await spectator.getByRole('heading', {name: 'Plant music', exact: true}).waitFor()
   assert.strictEqual(await spectator.evaluate(() => window.__pwaSpectator), undefined,
     'spectator explicit update did not reload its page')

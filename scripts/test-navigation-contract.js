@@ -43,8 +43,8 @@ assert(biotron.includes("betaBuild ? 'preset-actions'"),
 assert(biotron.includes('play-route="/biotron/play"'), 'Biotron settings must link directly to Play')
 assert(biotron.includes('Calibrate plant again'), 'Biotron settings must expose explicit recalibration')
 assert(biotron.includes('Connect Biotron to unlock its settings.') &&
-  biotron.includes('v-if="!betaBuild || settingsReady"'),
-  'beta controls must stay locked until Biotron answers with its saved settings')
+  biotron.includes('v-if="!betaBuild || settingsReady || (page_is_inited && !device)"'),
+  'connected beta controls require confirmed settings; disconnected controls edit a local preset')
 assert(biotron.includes('Already see RPI-RP2?') ||
   read('src/components/MidiComponents/UpdateFirmwareComponent.vue').includes('Already see RPI-RP2?'),
   'firmware recovery must remain available before MIDI settings are loaded')

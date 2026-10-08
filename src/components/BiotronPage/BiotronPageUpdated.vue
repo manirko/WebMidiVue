@@ -64,7 +64,8 @@
     </details>
     <UpdateFirmwareComponent v-if="betaBuild && firmwareTestEnabled" class="w-100 mt-3" text="Update firmware" repo="Playtronica/biotron-firmware" :device="device" :current-version="firmwareVersion" version-aware @check_firmware="checkFirmware"/>
     </section>
-    <template v-if="!betaBuild || settingsReady">
+    <template v-if="!betaBuild || settingsReady || (page_is_inited && !device)">
+    <p v-if="betaBuild && !device" role="status">Local preset — changes stay in this browser. Connect Biotron, then choose Apply preset to Biotron.</p>
     <section :class="{'beta-preset-card': betaBuild}" :inert="betaBuild && is_loading" aria-label="Preset and saved settings">
     <PatchSelector :patches="this.patches" :key="this.forceRerender + this.patchRerender" :page_id="this.id"  text_label="Preset"/>
     <div :class="betaBuild ? 'preset-actions' : 'row row-cols-1 row-cols-sm-2 row-cols-lg-4 g-2 mb-5'">
@@ -528,12 +529,11 @@ export default  {
       try {
         const snapshot = await this.readPersistedSettingsWithRetry(device)
         if (this.device !== device || loadId !== this.settingsLoadId) return
-        applySettingsVector(this.commands_data, snapshot.values)
+        if (!this.presetPending) applySettingsVector(this.commands_data, snapshot.values)
         this.settingsSnapshotKnown = true
-        this.presetPending = false
         this.forceRerender++
         this.settingsState = "loaded"
-        this.settingsMessage = "Settings loaded. Individual changes apply live; presets need Apply preset to Biotron."
+        this.settingsMessage = this.presetPending ? "Device checked. Your local preset is unchanged; choose Apply preset to Biotron." : "Settings loaded. Individual changes apply live; presets need Apply preset to Biotron."
       } catch (error) {
         if (this.device !== device || loadId !== this.settingsLoadId) return
         this.settingsState = "error"
@@ -701,7 +701,7 @@ export default  {
       saveAs(myFile, "biotron-preset.txt");
     },
     async loadDataFromPreset(e) {
-      if (this.betaBuild && !this.settingsSnapshotKnown) return
+      if (this.betaBuild && this.device && !this.settingsSnapshotKnown) return
       await this.patchChanged();
       for (let item of JSON.parse(e).commands) {
         this.commands_data[item.name].set_value(item.value);
@@ -721,12 +721,13 @@ export default  {
       await this.saveData();
     },
     async sys_ex_changed(object) {
-      if (this.betaBuild && !this.settingsSnapshotKnown) return
+      if (this.betaBuild && this.device && !this.settingsSnapshotKnown) return
       // A user gesture wins over a late startup read; never overwrite the
       // control they just changed with an older snapshot.
       this.settingsLoadId++
       this.lastChangedSetting = object.name
       await this.patchChanged();
+      if (this.betaBuild && !this.device) this.markPresetPending()
       if (this.betaBuild && this.presetPending) {
         this.settingsMessage = "Preset edited in browser. Apply preset to Biotron to hear and save it."
         this.forceRerender++;
@@ -774,7 +775,6 @@ export default  {
         type: BiotronDb
       },
       patches: [],
-      patch_id: 0,
       is_loading: false,
       calibrationState: "idle",
       calibrationMessage: "",
@@ -800,7 +800,6 @@ export default  {
     await this.db.ready;
 
     this.patches = await this.db.getPatch();
-    this.patch_id = parseInt(localStorage.getItem(this.id));
 
     await this.loadData()
     this.forceRerender++;
