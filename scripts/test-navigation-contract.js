@@ -48,7 +48,7 @@ assert(biotron.includes('Connect Biotron to unlock its settings.') &&
 assert(biotron.includes('Already see RPI-RP2?') ||
   read('src/components/MidiComponents/UpdateFirmwareComponent.vue').includes('Already see RPI-RP2?'),
   'firmware recovery must remain available before MIDI settings are loaded')
-assert(biotron.includes('Input variation (experimental)') &&
+assert(biotron.includes('📡 Input variation') && !biotron.includes('Input variation (experimental)') &&
   biotron.includes("It does not increase the sensor's measured sensitivity or control velocity."),
   'CC15 must describe the exact firmware behavior without a sensitivity claim')
 assert(biotron.includes('Reduce extra notes') &&
