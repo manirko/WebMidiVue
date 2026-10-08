@@ -104,6 +104,7 @@ const bind = (componentOptions, props = {}, withData = true) => {
   midiAccess.resetSharedMidiAccessForTests()
   pending = deferred()
   const soundContext = {
+    soundCapabilityMessage: () => '',
     module: {exports: {}}, markRaw: value => value, defineAsyncComponent: () => ({}), AbortController,
     CompatibilityNotice: {}, DeviceTaskNav: {}, DiagnosticCopy: {}, GardenVisual: {}, WakeVolume: {}, MIDI_PROMPT_HINT: 'Allow MIDI',
     selectRevealInput: inputs => inputs[0], window: {setTimeout, clearTimeout},

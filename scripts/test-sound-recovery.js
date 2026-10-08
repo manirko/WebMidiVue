@@ -28,7 +28,7 @@ function fixture() {
     trace: (kind, data) => events.push([kind, data]), recordBiotronEvent() {},
     CompatibilityNotice: {}, DeviceTaskNav: {}, DiagnosticCopy: {}, GardenVisual: {}, WakeVolume: {},
     parseBiotronCalibrationState: message => message.calibration || null,
-    selectRevealInput: inputs => inputs[0], MIDI_PROMPT_HINT: 'Allow MIDI',
+    selectRevealInput: inputs => inputs[0], soundCapabilityMessage: () => '', MIDI_PROMPT_HINT: 'Allow MIDI',
     BIOTRON_CALIBRATION: {quietCompletionMs: 1100}, performance: {now: () => 100},
     updateSoundSession: patch => Object.assign(session, patch),
   }

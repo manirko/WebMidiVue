@@ -204,6 +204,7 @@ function soundStartupFixture(engines) {
     },
     navigator: {}, soundSessionState: {calibrating: false}, BIOTRON_CALIBRATION: {},
     KEYBOARD_CODE_TO_NOTE,
+    soundCapabilityMessage: () => '', MIDI_PROMPT_HINT: 'Allow MIDI', selectRevealInput: inputs => inputs[0],
     trace() {}, recordBiotronEvent() {}, parseBiotronCalibrationState() { return null },
     updateSoundSession() {}, registerSoundController() {}, createRealtimeSynth: () => engines.shift(),
     MidiInputSession: class {async close() {}}

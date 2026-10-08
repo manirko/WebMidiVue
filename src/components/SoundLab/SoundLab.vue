@@ -13,21 +13,7 @@
     :data-audio-capability="capabilities.audio ? 'available' : 'unavailable'"
     :data-midi-capability="capabilities.midi ? 'available' : 'unavailable'"
   >
-    <template v-if="compareMode">
-      <div class="sound-lab__reveal-actions">
-        <button type="button" class="btn btn-primary"
-          @click="midi?.input || (starting && !examplePlaying) ? stop() : startReveal()"
-          :disabled="releaseBlocked || (!engine && !canStartReveal)">{{ midi?.input ? 'Stop & release Biotron' : starting && !examplePlaying ? 'Cancel connection' : 'Play with Biotron' }}</button>
-        <button type="button" class="btn btn-outline-secondary" @click="toggleExample()" :disabled="releaseBlocked">{{ examplePlaying || audioStarting ? 'Stop example' : 'Listen to example' }}</button>
-        <button v-if="releaseBlocked" type="button" class="btn btn-outline-danger" @click="stop()">Retry release</button>
-      </div>
-      <p v-if="audition.bankId === 'calibration'">The option changes Biotron’s calibration cue. Plant notes keep the reference sound. Stop and start Biotron to recalibrate.</p>
-      <p v-else-if="audition.bankId === 'high-notes'">Changes begin above C5 (MIDI72). Middle notes stay the same; the three-register option also changes bass notes.</p>
-      <p v-else>Change options while playing to compare timbres.</p>
-      <label class="sound-lab__volume" for="compare-volume"><span>Volume</span><input id="compare-volume" type="range" min="0" max="100" step="1" :value="volume" @input="updateVolume"><output>{{ volume }}%</output></label>
-      <label class="sound-lab__quality"><input type="checkbox" v-model="lowCpu" :disabled="Boolean(engine)"> Low CPU</label>
-      <p role="status" aria-live="polite">{{ status }}</p>
-    </template>
+    <slot v-if="compareMode" :player="this" />
     <template v-else-if="revealMode">
       <DeviceTaskNav
         :device-name="revealProfile.productName"
@@ -115,7 +101,6 @@
         </div>
       </section>
     </template>
-
     <template v-else>
     <header class="sound-lab__intro">
       <small>Beta sound lab</small>
@@ -389,8 +374,8 @@ export default {
     revealStage(stage) { trace('stage', stage); if (this.revealMode) recordBiotronEvent('play.stage_changed', {stage}) }
   },
   methods: {
-    ...createSoundSessionEffects({resumeAudioWithin, trace, updateSoundSession,
-      parseBiotronCalibrationState, BIOTRON_CALIBRATION}),
+    ...createSoundSessionEffects({resumeAudioWithin, trace, updateSoundSession, parseBiotronCalibrationState,
+      MIDI_PROMPT_HINT, selectRevealInput, recordBiotronEvent, soundCapabilityMessage}),
     async acquireTabLease() {
       if (await this.tabLease.acquire()) {
         this.tabLeaseState = this.tabLease.protected ? 'held' : 'unprotected'
@@ -573,102 +558,6 @@ export default {
       for (const code of codes) {
         const note = noteForKeyboardCode(code)
         if (note !== null) this.release(note, 'keyboard')
-      }
-    },
-    async connectMidi() {
-      if (this.starting) return
-      if (!this.capabilities.audio || !this.capabilities.midi) {
-        this.status = soundCapabilityMessage(this.capabilities, {requiresMidi: true})
-        return
-      }
-      const attemptId = ++this.permissionAttemptId
-      this.starting = true
-      try {
-        if (!await this.acquireTabLease()) return
-        if (attemptId !== this.permissionAttemptId) return
-        await this.ensureEngine()
-        if (attemptId !== this.permissionAttemptId) return
-        if (!this.midiInputs.length) {
-          const inputs = await this.requestMidiPermission()
-          if (attemptId !== this.permissionAttemptId) return
-          this.midiInputs = inputs
-          this.selectedInput = inputs[0]?.id || ''
-          if (!this.selectedInput) throw new Error('No MIDI inputs found.')
-        }
-        this.midiOpening = true
-        await this.midi.connect(this.selectedInput)
-      } catch (error) {
-        if (attemptId === this.permissionAttemptId && error?.name !== 'AbortError') this.status = error.message
-      } finally {
-        if (attemptId === this.permissionAttemptId) {
-          this.midiOpening = false
-          this.starting = false
-        }
-      }
-    },
-    async startReveal() {
-      if (this.examplePlaying) await this.stop()
-      if (this.releaseBlocked) return
-      if (this.starting) return
-      recordBiotronEvent('play.attempted')
-      if (!this.canStartReveal) {
-        this.status = soundCapabilityMessage(this.capabilities, {requiresMidi: true})
-        return
-      }
-      const attemptId = ++this.permissionAttemptId
-      this.starting = true
-      this.revealIssue = null
-      this.firstSoundOutcome = ''
-      this.resumeOutcome = 'not_attempted'
-      let failure = ''
-      try {
-        if (!await this.acquireTabLease()) { Object.assign(this, {revealIssue: {title: 'Sound is open elsewhere', body: 'Close or stop sound in the other Settings window, then try again.'}, firstSoundOutcome: 'not_yet'}); return }
-        if (attemptId !== this.permissionAttemptId) return
-        await this.ensureEngine()
-        if (attemptId !== this.permissionAttemptId) return
-        this.status = MIDI_PROMPT_HINT
-        const inputs = await this.requestMidiPermission()
-        if (attemptId !== this.permissionAttemptId) return
-        const input = selectRevealInput(inputs, this.revealProfile)
-        this.midiInputs = [input]
-        this.selectedInput = input.id
-        this.midiOpening = true
-        await this.midi.connect(input.id)
-        if (attemptId !== this.permissionAttemptId) return
-        this.recognizedInput = [input.manufacturer, input.name].filter(Boolean).join(' — ')
-        this.resetCalibration()
-        this.revealStage = 'settling'
-        this.status = this.revealProfile.settlingStatus
-        if (this.revealProfile.id === 'biotron') {
-          const nonce = this.revealCalibrationNonce = this.revealCalibrationNonce % 127 + 1
-          // A missing confirmation is not proof of absent plant signal; legacy cues cannot confirm readiness.
-          window.clearTimeout(this.revealWatchdog)
-          this.revealWatchdog = window.setTimeout(() => {
-            if (this.revealCalibrationNonce === nonce && !this.explicitCalibration && ['settling', 'calibrating'].includes(this.revealStage)) Object.assign(this, {revealStage: 'intro', status: 'The device did not confirm calibration. Check the contacts and firmware version in Settings.',
-              revealIssue: {title: 'Calibration not confirmed', body: 'Check both plant contacts. Open Settings to check the firmware, then try again.'}, firstSoundOutcome: 'not_yet'})
-          }, 15000)
-          await this.midi.sendToPairedOutput([0xf0, 0x14, 0x0d, 125, nonce, 0xf7])
-          if (attemptId !== this.permissionAttemptId) return
-        }
-      } catch (error) {
-        if (attemptId !== this.permissionAttemptId || error?.name === 'AbortError') return
-        failure = error.message || `${this.revealProfile.productName} could not start.`
-        const missingDevice = /was not found|No MIDI inputs found/i.test(failure)
-        const denied = /permission was not allowed/i.test(failure)
-        recordBiotronEvent('midi.connection_changed', {result: 'failed', error_type: denied ? 'permission_denied' : missingDevice ? 'device_missing' : 'connection_failed'})
-        await this.stop()
-        if (!this.releaseBlocked) {
-          this.status = missingDevice ? 'Device not connected.' : 'Could not start listening.'
-          this.revealIssue = missingDevice
-            ? {title: 'Connect the device', body: 'Connect the device to this computer with a USB data cable, then press Start listening again.'}
-            : {title: denied ? 'Allow access to Biotron' : 'Could not start listening', body: failure}
-          this.firstSoundOutcome = 'not_yet'
-        }
-      } finally {
-        if (attemptId === this.permissionAttemptId) {
-          this.midiOpening = false
-          this.starting = false
-        }
       }
     },
     handleMidiState(event) {
