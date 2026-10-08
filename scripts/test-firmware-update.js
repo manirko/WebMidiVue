@@ -93,7 +93,7 @@ const arrayBuffer = buffer => buffer.buffer.slice(buffer.byteOffset, buffer.byte
   assert.match(updateComponent, /is checked and held in this page — nothing was saved to your computer/)
   assert.match(updateComponent, /<a :href="latest\.url" :download="latest\.name">save \{\{ latest\.name \}\}<\/a>/)
   assert.match(updateComponent, /copy the saved file onto the disk named RPI-RP2/)
-  assert.match(updateComponent, /<p v-if="recovery">🔌 No Biotron over MIDI\. 💾 Drive <strong>RPI-RP2<\/strong> on your computer\?/)
+  assert(updateComponent.includes("'Biotron did not report its firmware version.' : 'No Biotron over MIDI.'"))
   assert.doesNotMatch(updateComponent, /public updater is intentionally disabled/i)
   await testComponentStateMachine(updateComponent)
 
@@ -393,6 +393,13 @@ async function testComponentStateMachine(componentSource) {
   assert.strictEqual(legacyBoot.phase, 'select-drive')
   assert.deepStrictEqual(calls.map(call => call[0]), ['prepare'])
   assert.match(legacyBoot.message, /hardware BOOT/)
+  calls.length = 0
+  const unknownVersion = build({device: 'no-version-response', currentVersion: ''})
+  await unknownVersion.runStep()
+  assert.strictEqual(unknownVersion.actionText, 'Continue with manual BOOT')
+  await unknownVersion.runStep()
+  assert.strictEqual(unknownVersion.phase, 'select-drive')
+  assert.deepStrictEqual(calls.map(call => call[0]), ['prepare'], 'unknown firmware received software BOOT')
   const newer = build({device: 'newer-output', currentVersion: '1.10.8'})
   assert.strictEqual(newer.available, false)
   assert.strictEqual(newer.ready, false)

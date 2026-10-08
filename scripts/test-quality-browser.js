@@ -106,6 +106,14 @@ async function auditProfile(browser, origin, profile) {
     assert.strictEqual(await page.locator('.beta-feedback').count(), 0,
       `${profile.name}: first play must not duplicate the generic feedback block`)
     await page.getByRole('button', {name: 'Start listening'}).click()
+    // Wait for the async attempt's outcome before opening its disclosure.
+    try {
+      await page.getByRole('heading', {name: 'Can you hear the notes?', includeHidden: true}).waitFor({state: 'attached', timeout: 15000})
+    } catch (error) {
+      console.error('QUALITY_FIRST_FAULT', profile.name, await page.locator('body').innerText(), pageErrors)
+      await page.screenshot({path: path.join(require('os').tmpdir(), `biotron-quality-${profile.name}-${Date.now()}.png`), fullPage: true})
+      throw error
+    }
     await page.getByText('No sound? · Help', {exact: true}).click()
     await page.getByRole('heading', {name: 'Can you hear the notes?'}).waitFor()
     const feedbackGap = await page.evaluate(() => {

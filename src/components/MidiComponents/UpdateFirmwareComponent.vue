@@ -18,7 +18,7 @@ export default {
     available() { return Boolean(this.currentVersion && this.latest?.version && compareFirmwareVersions(this.latest.version, this.currentVersion) > 0) },
     current() { return Boolean(this.currentVersion && this.latest?.version && !this.available) },
     internal() { return Boolean(this.latest?.internal) },
-    manualBoot() { return Boolean(this.currentVersion && compareFirmwareVersions(this.currentVersion, '1.7.4') < 0) },
+    manualBoot() { return Boolean(this.device && (!this.currentVersion || compareFirmwareVersions(this.currentVersion, '1.7.4') < 0)) },
     canInstall() { return Boolean(window.showDirectoryPicker) },
     // No MIDI answer: Biotron may already sit in update mode as the RPI-RP2 drive (page reloaded or USB replugged mid-update).
     recovery() { return this.internal && this.versionAware && !this.currentVersion },
@@ -125,8 +125,8 @@ export default {
       <div class="modal-body">
         <p v-if="available" class="firmware-version">Installed <strong>{{ currentVersion }}</strong> <span aria-hidden="true">→</span> Beta update <strong>{{ latest.version }}</strong></p>
         <ol v-if="internal && ready" class="firmware-steps"><li>Download and verify the file.</li><li>Restart into update mode.</li><li>Choose RPI-RP2 and wait for the version check.</li></ol>
-        <p v-if="manualBoot" class="alert alert-warning">This older firmware needs the hardware BOOT procedure for your model. Export your preset first; saved settings may be reset. No software BOOT command will be sent.</p>
-        <p v-if="recovery">🔌 No Biotron over MIDI. 💾 Drive <strong>RPI-RP2</strong> on your computer? → Install {{ latest.version }} now.</p>
+        <p v-if="manualBoot" class="alert alert-warning">Unknown or older firmware needs the hardware BOOT procedure for your model. Export your preset first; saved settings may be reset. No software BOOT command will be sent.</p>
+        <p v-if="recovery">🔌 {{ device ? 'Biotron did not report its firmware version.' : 'No Biotron over MIDI.' }} 💾 Drive <strong>RPI-RP2</strong> on your computer? → Install {{ latest.version }} now.</p>
         <p v-if="internal && ready && !canInstall">{{ desktopOnly }}</p>
         <p v-if="internal && ready && canInstall">✅ File is checked first. 💾 Then you choose drive RPI-RP2.</p>
         <p v-if="internal && ready && canInstall" class="small text-muted">{{ pick }} 🍎 Tip: ⌘⇧G → /Volumes/RPI-RP2</p>
