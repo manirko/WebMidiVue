@@ -57,7 +57,8 @@ Run the complete fault-preserving loop with
 Its NOT RUN entries remain separate from software passes.
 
 That single command derives the visible build ID from `HEAD`, runs the complete
-Biotron release gate, then atomically creates
+Biotron release gate, including all 36 audition variants, their standard/safe DSP
+renders and live MIDI/Stop lifecycle, then atomically creates
 `~/ProjectData/Playtronica/biotron-beta/release-candidates/<build-id>/`. The
 directory contains the immutable `dist` archive and checksum, release and test
 evidence, and the short hardware checklist. The command refuses to overwrite an

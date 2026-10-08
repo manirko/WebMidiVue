@@ -63,6 +63,9 @@ export function createTestEvidence({commit, buildId, testedAt, environment}) {
       "telemetry_contract_and_privacy",
       "first_use_plant_connection_prerequisite_visible",
       "sound_core_and_seven_sound_levels",
+      "four_audition_banks_and_36_native_variants",
+      "audition_dsp_72_standard_safe_cases_and_handpan_controls",
+      "live_audition_midi_and_audio_release_lifecycle",
       "audio_interruption_state_and_foreground_recovery",
       "production_isolation",
       "biotron_beta_build",
@@ -71,7 +74,7 @@ export function createTestEvidence({commit, buildId, testedAt, environment}) {
       "task_specific_first_sound_feedback_for_success_and_failure",
     ],
     notes: [
-      "No physical Biotron was attached. Hardware acceptance remains a separate gate.",
+      "This gate validates software only. Physical Biotron acceptance remains a separate gate.",
       "The candidate keeps customer firmware updates disabled.",
       "The archive is created only after the full release gate passes and is verified before use.",
     ],
