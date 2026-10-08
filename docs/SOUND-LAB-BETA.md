@@ -41,8 +41,10 @@ The engine caps active voices at 8 (4 in safe mode), caps retiring voices, suspe
 ## Files
 
 - `src/components/SoundLab/SoundLab.vue` — beta UI and lifecycle.
-- `src/components/SoundLab/DeviceFirstPlay.vue` — profile-driven first-play route
-  with awaited route teardown.
+- `src/App.vue` — one persistent Biotron player across Play, Settings and
+  experiments; `src/main.js` awaits release when leaving that session.
+- `src/components/SoundLab/AudioCompare.vue` — inline experiment controls only.
+- `src/audio/sessionState.mjs` — shared controller and bounded local sound choice.
 - `src/audio/revealProfiles.mjs` — validated product meaning/copy and
   deterministic music-input selection; future devices add a profile, not a
   second MIDI/audio lifecycle.

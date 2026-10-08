@@ -73,9 +73,9 @@
       <main :class="{'route-stage': betaBuild && !firstPlay, 'route-stage--compact': betaBuild && firstPlay}">
         <CompatibilityGate :route="$route">
           <router-view v-slot="{ Component }">
-            <KeepAlive include="DeviceFirstPlay">
-              <component :is="Component" />
-            </KeepAlive>
+            <!-- One Biotron player stays mounted while its settings change. -->
+            <SoundLab v-if="betaBuild && biotronSoundRoute" mode="reveal" profile-id="biotron" :controls-visible="firstPlay" />
+            <component v-if="!firstPlay" :is="Component" />
           </router-view>
         </CompatibilityGate>
       </main>
@@ -124,6 +124,8 @@
 
 
 <script>
+import {defineAsyncComponent} from 'vue';
+const SoundLab = defineAsyncComponent(() => import(/* webpackChunkName: "sound-lab" */ '@sound-lab'));
 import SocialLinks from "@/components/SocialLinks.vue";
 import CompatibilityGate from "@compatibility-gate";
 import {
@@ -149,7 +151,7 @@ const runningStandalone = () => window.matchMedia('(display-mode: standalone)').
 
 export default {
   name: 'App',
-  components: {CompatibilityGate, SocialLinks},
+  components: {CompatibilityGate, SocialLinks, SoundLab},
   data() {
     return {
       offlineStatus: getOfflineStatus(),
@@ -168,6 +170,7 @@ export default {
     }
   },
   computed: {
+    biotronSoundRoute() { return ['/biotron', '/biotron/play', '/biotron/compare'].includes(this.$route.path) },
     appUpdateMessage() {
       if (this.appUpdate.error === 'SW_UPDATE_BLOCKED') return 'Finish the firmware update before reloading the app.'
       if (this.appUpdate.error === 'AUDIO_RELEASE_FAILED') return 'Sound could not stop. Press Stop & release, then retry the app update.'

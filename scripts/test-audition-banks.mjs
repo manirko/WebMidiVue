@@ -1,9 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {readFileSync} from 'node:fs'
-import vm from 'node:vm'
 import {createHash} from 'node:crypto'
-import {AUDITION_BANKS, auditionEvents, auditionDuration} from '../src/audio/auditionBanks.mjs'
+import {AUDITION_BANKS, auditionEvents, auditionDuration, resolveAudition} from '../src/audio/auditionBanks.mjs'
+import {selectSoundExperiment, restoreSoundExperiment, soundSessionState} from '../src/audio/sessionState.mjs'
 import {SOUNDS, toSound} from '../src/audio/elementary/timbres.mjs'
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -75,17 +74,32 @@ test('six handpan roles use the native modal voice and a short plant gate; stock
 })
 
 
-test('an explicit rejection comment persists without forcing a favourite', () => {
+test('a selected sound survives reopening; only known bank/variant IDs can restore a preset', () => {
   const storage = new Map()
-  const source = readFileSync(process.env.AUDITION_COMPONENT_CONTROL_FILE || 'src/components/SoundLab/AudioCompare.vue', 'utf8')
-    .match(/<script>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace('export default', 'module.exports =')
-  const context = {DeviceTaskNav: {}, defineAsyncComponent: () => ({}), module: {exports: {}}, process: {env: {VUE_APP_BUILD_ID: 'fixture'}},
-    localStorage: {setItem(key, value) { storage.set(key, JSON.parse(value)) }}}
-  vm.runInNewContext(source, context)
-  const target = {feedback: {}, bankId: 'timbres', variant: {id: 'tone-reed'}, comment: 'Too sharp — no preferred option yet'}
-  for (const [key, method] of Object.entries(context.module.exports.methods)) target[key] = method.bind(target)
-  target.saveComment()
-  assert.equal(target.feedback.timbres.variantId, null)
-  assert.equal(target.feedback.timbres.commentForVariantId, 'tone-reed')
-  assert.equal(storage.get('biotron-audition-feedback-v1-fixture').timbres.comment, target.comment)
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  const key = 'biotron-sound-experiment-v1'
+  Object.defineProperty(globalThis, 'localStorage', {configurable: true, value: {
+    getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key)
+  }})
+  try {
+    assert(selectSoundExperiment(resolveAudition('handpan', 'pan-bold')))
+    assert.deepEqual(JSON.parse(storage.get(key)), {bankId: 'handpan', variantId: 'pan-bold'})
+    soundSessionState.audition = null // A fresh page, with browser storage retained.
+    assert.equal(restoreSoundExperiment(resolveAudition).variant.preset.timbre, 'pan')
+    for (const saved of ['broken JSON', '{"bankId":"unknown","variantId":"pan-bold"}', '{"bankId":"handpan","variantId":"tone-bass"}']) {
+      soundSessionState.audition = null; storage.set(key, saved)
+      assert.equal(restoreSoundExperiment(resolveAudition), null)
+    }
+    storage.set(key, JSON.stringify({bankId: 'handpan', variantId: 'pan-bold', preset: {cv: {release: Infinity}}}))
+    assert.equal(restoreSoundExperiment(resolveAudition).variant.preset.cv.release, resolveAudition('handpan', 'pan-bold').variant.preset.cv.release)
+    selectSoundExperiment(null)
+    assert.equal(storage.has(key), false, 'Choosing a stock sound must clear the experiment')
+    Object.defineProperty(globalThis, 'localStorage', {configurable: true, get() { throw new Error('Storage denied') }})
+    assert.equal(selectSoundExperiment(resolveAudition('timbres', 'tone-bass')), false)
+    assert.equal(soundSessionState.audition.variant.id, 'tone-bass', 'Storage denial must not discard the live sound')
+  } finally {
+    soundSessionState.audition = null
+    if (previous) Object.defineProperty(globalThis, 'localStorage', previous)
+    else delete globalThis.localStorage
+  }
 })

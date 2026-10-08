@@ -6,7 +6,7 @@ import "bootstrap/js/dist/modal"
 import "bootstrap/dist/css/bootstrap.min.css"
 import HomeComponent from "@/components/HomeComponent.vue";
 import '@pwa-entry'
-import {soundSessionState, stopPersistentSound} from '@/audio/sessionState.mjs'
+import {getSoundController, stopPersistentSound} from '@/audio/sessionState.mjs'
 
 const betaBuild = process.env.VUE_APP_BIOTRON_PWA_BETA === 'true'
 const ScalaPage = () => import(/* webpackChunkName: "scala" */ '@/components/ExtraPage/ScalaPage.vue')
@@ -18,7 +18,6 @@ const TouchMePageStandalone = () => import(/* webpackChunkName: "touchme" */ '@/
 const PlaytronPage = () => import(/* webpackChunkName: "playtron" */ '@/components/PlaytronPage/PlaytronPage.vue')
 const CirclePage = () => import(/* webpackChunkName: "circle" */ '@/components/CirclePage/CirclePage.vue')
 const SoundLab = () => import(/* webpackChunkName: "sound-lab" */ '@sound-lab')
-const DeviceFirstPlay = () => import(/* webpackChunkName: "sound-lab" */ '@/components/SoundLab/DeviceFirstPlay.vue')
 const deviceMeta = productName => ({
     requiresMidi: true,
     productName
@@ -61,8 +60,8 @@ const routes = [
 if (betaBuild) {
     routes.push({
         path: '/biotron/play',
-        component: DeviceFirstPlay,
-        props: {profileId: 'biotron'},
+        component: SoundLab,
+        props: {mode: 'reveal', profileId: 'biotron'},
         meta: {...playMeta('Biotron'), firstPlay: true}
     })
     routes.push({path: '/sound', component: SoundLab, meta: {requiresAudio: true, productName: 'Playtronica Sound'}})
@@ -80,7 +79,13 @@ if (betaBuild) {
         if (to.path.startsWith('/biotron')) void import(/* webpackChunkName: 'biotron-telemetry' */ '@/biotron/telemetry.mjs').then(module => module.recordBiotronEvent('session.started')).catch(() => {})
     })
     router.beforeEach(async (to, from) => {
-        if (from.path !== '/biotron' || to.path === '/biotron/play' || !soundSessionState.running) return true
+        const player = getSoundController()
+        const biotronRoutes = ['/biotron', '/biotron/play', '/biotron/compare']
+        if (biotronRoutes.includes(from.path) && biotronRoutes.includes(to.path) &&
+            !player?.examplePlaying && !player?.starting) {
+            player?.releaseHeldKeyboard()
+            return true
+        }
         return await stopPersistentSound()
     })
 }

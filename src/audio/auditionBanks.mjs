@@ -80,3 +80,7 @@ export function auditionEvents(bankId) {
   ]).sort((a,b) => a.at - b.at || (a.type === 'off' ? -1 : 1))
 }
 export const auditionDuration = bankId => Math.max(...auditionEvents(bankId).map(event => event.at)) + (bankId === 'handpan' ? 3 : 2)
+export function resolveAudition(bankId, variantId) {
+  const variant = AUDITION_BANKS.find(bank => bank.id === bankId)?.variants.find(option => option.id === variantId)
+  return variant ? {bankId, variant, events: auditionEvents(bankId), duration: auditionDuration(bankId)} : null
+}

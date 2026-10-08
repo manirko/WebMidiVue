@@ -33,8 +33,9 @@ microphone/system/physical audio are distinct unavailable lanes.
 | Help disclosure moves the sphere | Browser checks sphere document position before/after disclosure | Visual review on Windows/mobile |
 | Calibration cue is too quiet | Render all seven sounds with old-level control; gain band and finite output | Listen through actual device/output |
 | Cells stay at the ceiling and pulse | Actual physics/handler: capped lift and idle settling, negative old-source control | Human living/natural motion acceptance |
-| Reduce extra notes has no explanation | Browser opens NEW disclosure with exact three changes before click | Human comprehension and preset restoration |
+| Reduce extra notes has no explanation | Browser opens Experiments with exact three changes before click | Human comprehension and preset restoration |
 | High notes are unpleasant | Spectra/level/non-finite measurements at pitches36/60/84/96 | Listening comparison; no pleasantness PASS from a spectrum |
+| Chosen experiment stops on return to Settings | Actual native audio PCM/held MIDI through Settings → Play → Settings; independent collapses, reload restoration and stock reset | Real Biotron sound and reporter clarity |
 | Fixture hides a protocol defect | Frozen actual readback vectors/real encoder frames | Native both-cable comparison |
 
 ## Manufacturing boundary, verified 8 October 2026
@@ -122,9 +123,10 @@ must dispose again and cannot build a graph. Browser checks cover all30 options,
 suspension, background release and local feedback. Do not identify this leak as
 the cause of Sergey's Windows freeze without reproducing his environment.
 
-Choices require a listener's explicit Prefer action and optional comment;
-playing is never LISTENED/APPROVED. Export includes buildId, exact preset,
-level/volume/quality and enteredAt. Defaults stay unchanged until human choice.
+8 October FB34 removes the former Prefer/comment/export workflow. Choosing a
+known experiment immediately controls the same live session and saves only its
+bank/variant IDs locally. Playing or selecting is never LISTENED/APPROVED.
+Calibration choices still affect only the nonce-confirmed cue, not plant notes.
 The30-option implementation increases the reviewed source budget from67/10300
 to69/10598, adding bank data and a lazy comparison component. No voice-cap,
 firmware ABI, eager-route, dependency-version or largest-component increase.
@@ -193,3 +195,25 @@ https://www.sonoresacoustics.be/portfolio/handpan (consulted8 October2026).
 RENDERED does not mean LISTENED/APPROVED or authentic sampled handpan. The six
 roles are clear/soft/finger texture/singing/room/deep; choose with the instrument
 on speakers/headphones. Physical sound and existing customer gates remain open.
+
+## Inline experiments —8 October2026, FB34
+
+Experiments is an independent BootstrapCollapse in Settings, alongside Plant
+sensor, More fun and Light sensor. Its controls remain available without a device
+or confirmed settings; hardware writes retain their existing connection/readback
+guards. App owns one Biotron SoundLab across Settings/Play/comparison. The old
+DeviceFirstPlay wrapper and comparison voting UI are removed. AudioCompare is
+only controls; sessionState stores bounded bank/variant IDs, never a serialized
+preset. Selecting a stock sound clears that experiment. No new audio engine,
+voice pool, dependency or higher source/chunk cap.
+
+The original clean c4d source fails the retained actual-browser regression:
+returning from live Deep ding to Settings closes its AudioContext. The new
+regression measures actual PCM and one retained context/held MIDI note through
+Settings/Play and panel close, checks all ordinary sections stay independently
+open, nonce calibration survives route changes, and restores the choice after
+reload without starting audio automatically. Storage denial keeps the live
+selection; invalid stored IDs cannot inject a preset. Read-only Settings queries
+123/126 are allowed; selecting sounds cannot write settings/firmware. First
+failures remain private evidence. Windows/mobile/human musical acceptance stay
+open.

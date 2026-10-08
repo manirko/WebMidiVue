@@ -1,6 +1,7 @@
 <template>
   <section
     class="sound-lab"
+    v-show="controlsVisible"
     :data-audio-state="audioState"
     :data-active-voices="voiceCount"
     :data-example="examplePlaying ? 'playing' : 'idle'"
@@ -13,8 +14,8 @@
     :data-audio-capability="capabilities.audio ? 'available' : 'unavailable'"
     :data-midi-capability="capabilities.midi ? 'available' : 'unavailable'"
   >
-    <slot v-if="compareMode" :player="this" />
-    <template v-else-if="revealMode">
+    <template v-if="controlsVisible">
+    <template v-if="revealMode">
       <DeviceTaskNav
         :device-name="revealProfile.productName"
         active-task="play"
@@ -25,7 +26,8 @@
         <small>{{ revealProfile.eyebrow }}</small>
         <h1>{{ revealProfile.title }}</h1>
         <p>{{ revealProfile.promise }}</p>
-        <router-link v-if="revealProfile.id === 'biotron'" class="btn btn-outline-primary" to="/biotron/compare">Compare sounds</router-link>
+        <router-link v-if="revealProfile.id === 'biotron'" class="btn btn-outline-primary" to="/biotron?experiments=1">Sound experiments</router-link>
+        <small v-if="audition" class="d-block mt-2">Selected: {{ audition.variant.label }}</small>
       </header>
 
       <section class="sound-lab__reveal" aria-labelledby="device-reveal-title">
@@ -93,8 +95,8 @@
             :key="preset.name"
             type="button"
             class="sound-lab__variant"
-            :class="{'sound-lab__variant--active': index === currentVariant}"
-            :aria-pressed="index === currentVariant"
+            :class="{'sound-lab__variant--active': !audition && index === currentVariant}"
+            :aria-pressed="!audition && index === currentVariant"
             :aria-label="preset.name"
             @click="chooseVariant(index)"
           ><span>{{ preset.name }}</span></button>
@@ -198,6 +200,7 @@
       </div>
     </section>
     </template>
+    </template>
   </section>
 </template>
 
@@ -207,7 +210,8 @@ const GardenVisual = defineAsyncComponent(() => import(/* webpackChunkName: "gar
 const WakeVolume = defineAsyncComponent(() => import(/* webpackChunkName: "garden-visual" */ './WakeVolume.vue'))
 import {KEYBOARD_CODE_TO_NOTE, noteForKeyboardCode} from '@/audio/core.mjs'
 import {createRealtimeElementarySynth as createRealtimeSynth, DEFAULT_VOLUME, normalizeVolume} from '@/audio/elementary/engine.mjs'
-import {registerSoundController, soundSessionState, unregisterSoundController, updateSoundSession} from '@/audio/sessionState.mjs'
+import {registerSoundController, soundSessionState, unregisterSoundController, updateSoundSession, selectSoundExperiment, restoreSoundExperiment} from '@/audio/sessionState.mjs'
+import {resolveAudition} from '@/audio/auditionBanks.mjs'
 import {trace, MidiInputSession} from '@/audio/midi.mjs'
 import {createSoundSessionEffects} from '@/audio/soundSessionEffects.mjs'
 import {createListenerScope} from '@/assets/js/ListenerScope.mjs'
@@ -252,11 +256,11 @@ export default {
   props: {
     mode: {type: String, default: 'lab'},
     profileId: {type: String, default: ''},
-    audition: {type: Object, default: null}
+    controlsVisible: {type: Boolean, default: true}
   },
   computed: {
-    compareMode() { return this.mode === 'compare' },
-    revealMode() { return this.mode === 'reveal' || this.compareMode },
+    revealMode() { return this.mode === 'reveal' },
+    audition() { return this.profileId === 'biotron' ? soundSessionState.audition : null },
     selectedSound() {
       const cue = this.examplePlaying || soundSessionState.calibrating
       return this.audition && (this.audition.bankId !== 'calibration' || cue)
@@ -290,8 +294,7 @@ export default {
       selectedInput: '',
       capabilities: markRaw(capabilities),
       platformCapabilities: markRaw(detectPlatformCapabilities()),
-      status: this.mode === 'compare' ? 'Choose an option. Play Biotron or listen to the example.'
-        : this.mode === 'reveal'
+      status: this.mode === 'reveal'
         ? soundCapabilityMessage(capabilities, {requiresMidi: true}) || 'Ready when you are'
         : capabilities.audio ? 'Press Start sound' : soundCapabilityMessage(capabilities),
       audioState: 'closed',
@@ -324,6 +327,7 @@ export default {
     }
   },
   mounted() {
+    if (this.profileId === 'biotron') restoreSoundExperiment(resolveAudition)
     registerSoundController(this)
     this.tabLease = markRaw(createExclusiveTabLease('playtronica-settings-sound-lab'))
     this.listenerScope = markRaw(createListenerScope())
@@ -507,6 +511,7 @@ export default {
       this.starting = false
     },
     chooseVariant(index) {
+      if (this.profileId === 'biotron') selectSoundExperiment(null)
       this.currentVariant = index
       this.status = `${this.variants[index].name} selected`
     },

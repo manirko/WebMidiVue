@@ -16,15 +16,6 @@
       🔊 Sound stays on while you adjust settings. Listen as you adjust each setting.
       <router-link to="/biotron/play" class="alert-link ms-1">Sound &amp; volume</router-link>
     </div>
-    <details v-if="betaBuild" class="beta-preset-card mb-3">
-      <summary>NEW — Experiments</summary>
-      <router-link to="/biotron/compare" class="btn btn-outline-primary my-2">Compare sounds</router-link>
-      <p class="mt-2 mb-2">Try a calmer response when Biotron plays too many similar notes.</p>
-      <p id="calmer-play-help" class="mb-2">Reduce extra notes changes and saves three settings: turns off Input variation, turns on Manual control to prevent idle pitch drift, and sets Note repeat to 2 — skipping notes less than two semitones apart. It keeps your tempo, scale and note velocity. Save your current preset first if you want to return to it.</p>
-      <button type="button" class="btn btn-outline-primary" aria-describedby="calmer-play-help"
-              @click="reduceExtraNotes" :disabled="!device || calibrationBusy || is_loading || !settingsSnapshotKnown">Reduce extra notes</button>
-      <small v-if="!device" class="d-block mt-1">Connect Biotron to try this experiment.</small>
-    </details>
     <section :class="{'beta-connect-card': betaBuild}" aria-label="Connect Biotron">
     <DeviceSelector
         ref="deviceSelector"
@@ -64,6 +55,21 @@
     </details>
     <UpdateFirmwareComponent v-if="betaBuild && firmwareTestEnabled" class="w-100 mt-3" text="Update firmware" repo="Playtronica/biotron-firmware" :device="device" :current-version="firmwareVersion" version-aware @check_firmware="checkFirmware"/>
     </section>
+    <BootstrapCollapse v-if="betaBuild" name_of_collapse="Experiments" :open_by_default="$route.query.experiments === '1'">
+      <template v-slot:objects>
+        <GroupOfCommands name-of-group="Sound experiments">
+          <template v-slot:objects><AudioCompare embedded /></template>
+        </GroupOfCommands>
+        <GroupOfCommands name-of-group="Calmer plant response">
+          <template v-slot:objects>
+            <p id="calmer-play-help">Reduce extra notes changes and saves three settings: turns off Input variation, turns on Manual control to prevent idle pitch drift, and sets Note repeat to 2 — skipping notes less than two semitones apart. It keeps your tempo, scale and note velocity. Save your current preset first if you want to return to it.</p>
+            <button type="button" class="btn btn-outline-primary" aria-describedby="calmer-play-help"
+                    @click="reduceExtraNotes" :disabled="!device || calibrationBusy || is_loading || !settingsSnapshotKnown">Reduce extra notes</button>
+            <small v-if="!device" class="d-block mt-1">Connect Biotron to try this experiment.</small>
+          </template>
+        </GroupOfCommands>
+      </template>
+    </BootstrapCollapse>
     <template v-if="!betaBuild || settingsReady || (page_is_inited && !device)">
     <p v-if="betaBuild && !device" role="status">Local preset — changes stay in this browser. Connect Biotron, then choose Apply preset to Biotron.</p>
     <section :class="{'beta-preset-card': betaBuild}" :inert="betaBuild && is_loading" aria-label="Preset and saved settings">
@@ -399,6 +405,8 @@ import {createSettingsConnectionMethods} from '@/biotron/settingsConnection.mjs'
 import {recordBiotronEvent, recordSettingsState} from '@/biotron/telemetry.mjs'
 import {withMidiWriteSession} from "@/assets/js/timing.mjs"
 import { saveAs } from '@progress/kendo-file-saver';
+import {defineAsyncComponent} from 'vue';
+const AudioCompare = defineAsyncComponent(() => import(/* webpackChunkName: "biotron-auditions" */ '@audio-compare'));
 import {BiotronCommandsData, BiotronDb} from "@/components/BiotronPage/BiotronIDB"
 import FileDropArea from "@/components/MidiComponents/FileDropArea.vue";
 import GroupOfCommands from "@/components/MidiComponents/GroupOfCommands.vue";
@@ -415,7 +423,7 @@ import DeviceTaskNav from "@/components/DeviceTaskNav.vue";
 import DiagnosticCopy from "@/components/DiagnosticCopy.vue";
 import {createListenerScope} from "@/assets/js/ListenerScope.mjs";
 import {withPresetFeedback} from "@/assets/js/PresetsIDB.js";
-import {soundSessionState, stopPersistentSound, updateSoundSession} from "@/audio/sessionState.mjs";
+import {getSoundController, soundSessionState, updateSoundSession} from "@/audio/sessionState.mjs";
 import {
   applySettingsVector,
   applyCalmerPlay,
@@ -427,6 +435,7 @@ import {
 } from "@/biotron/settingsReadback.mjs";
 export default  {
   components: {
+    AudioCompare,
     DiagnosticCopy,
     DeviceTaskNav,
     BootstrapCollapse,
@@ -444,10 +453,6 @@ export default  {
     id: {
       type: String,
       required: true,
-    },
-    test: {
-      type: Boolean,
-      default: false
     },
   },
   computed: {
@@ -750,10 +755,6 @@ export default  {
       this.patchRerender++;
     },
   },
-  async beforeRouteLeave(to) {
-    if (!this.betaBuild || to.path === "/biotron/play" || !soundSessionState.running) return true
-    return await stopPersistentSound()
-  },
   data() {
     return {
       betaBuild: process.env.VUE_APP_BIOTRON_PWA_BETA === 'true',
@@ -838,7 +839,7 @@ export default  {
   },
   beforeUnmount() {
     this.clearLiveVerification()
-    updateSoundSession({calibrating: false})
+    if (!['settling', 'calibrating'].includes(getSoundController()?.revealStage)) updateSoundSession({calibrating: false})
     this.settingsLoadId++
     this.device = null
     this.listenerScope?.clear()
