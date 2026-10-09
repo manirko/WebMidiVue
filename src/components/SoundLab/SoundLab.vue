@@ -35,13 +35,13 @@
           <small v-if="recognizedInput && revealStage !== 'intro'" class="sound-lab__recognized" :title="recognizedInput">Device connected</small>
           <h2 id="device-reveal-title">{{ revealStage === 'revealed' ? (midiActive ? 'Notes arriving' : 'Ready for the next note') : revealCopy.heading }}</h2>
           <p>{{ revealCopy.instruction }}</p>
-          <details v-if="revealStage === 'intro'" class="play-help"><summary>Connection steps</summary><ol><li>Push both contact cables onto the device’s CONTACT PINS.</li><li>Clip them to two separate points on the same plant.</li><li>Connect USB with a data cable, then press Start listening.</li></ol></details>
+          <details v-if="revealStage === 'intro'" class="play-help"><summary>Connection steps</summary><ol><li>Push both contact cables onto the device’s CONTACT PINS.</li><li>Clip them to two separate points on the same plant.</li><li>Connect USB with a data cable, then press Start listening.</li></ol><a href="/midi-access.html" target="_blank" rel="noopener">Browser permission help</a></details>
 
           <div v-if="revealIssue" class="sound-lab__connect-notice" role="status" aria-live="polite">
             <strong>{{ revealIssue.title }}</strong>
             <span>{{ revealIssue.body }}</span>
+            <a v-if="revealIssue.title === 'Allow access to Biotron'" href="/midi-access.html" target="_blank" rel="noopener">How to allow MIDI access</a>
           </div>
-
           <div class="sound-lab__reveal-actions">
             <button
               v-if="revealStage === 'intro' || (engine && ['suspended', 'interrupted'].includes(audioState) && !releaseBlocked)"

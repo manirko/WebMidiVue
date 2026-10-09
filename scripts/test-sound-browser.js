@@ -152,7 +152,11 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await deniedContext.addInitScript(() => {
     Object.defineProperty(navigator, 'requestMIDIAccess', {
       configurable: true,
-      value: async () => { throw new DOMException('Permission denied', 'NotAllowedError') }
+      value: async () => {
+        window.__permissionRequests = (window.__permissionRequests || 0) + 1
+        if (!window.__permissionNowAllowed) throw new DOMException('Permission denied', 'NotAllowedError')
+        return {inputs: new Map(), outputs: new Map(), addEventListener() {}, removeEventListener() {}}
+      }
     })
   })
   const denied = await deniedContext.newPage()
@@ -168,6 +172,20 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await denied.getByRole('button', {name: 'Start listening'}).click()
   await denied.getByText(/Allow device access, then try again/i).waitFor()
   await denied.locator('.sound-lab[data-audio-state="closed"][data-tab-lease="free"]').waitFor()
+  const permissionHelp = denied.getByRole('link', {name: 'How to allow MIDI access', exact: true})
+  assert.equal(await permissionHelp.getAttribute('href'), '/midi-access.html')
+  const helpPopup = denied.waitForEvent('popup')
+  await permissionHelp.click()
+  const help = await helpPopup
+  await help.getByRole('heading', {name: 'Allow instrument access'}).waitFor()
+  assert.equal(await help.locator('details').count(), 8)
+  await help.close()
+  const requestCount = await denied.evaluate(() => window.__permissionRequests)
+  await denied.evaluate(() => { window.__permissionNowAllowed = true })
+  await denied.getByRole('button', {name: 'Start listening'}).click()
+  await denied.getByText('Device not connected.', {exact: true}).waitFor()
+  assert((await denied.evaluate(() => window.__permissionRequests)) > requestCount, 'Permission retry reused a rejected access promise')
+  assert.equal(await denied.getByRole('link', {name: 'How to allow MIDI access', exact: true}).count(), 0)
   assert.deepStrictEqual(deniedErrors, [])
   await deniedContext.close()
 
