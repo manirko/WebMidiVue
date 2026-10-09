@@ -379,6 +379,14 @@ async function verifyAllSettings(page, origin) {
 }
 
 async function verifyGardenStates(page, origin) {
+  const captionBelowSphere = async () => {
+    const bounds = await page.locator('.garden-visual').evaluate(element => {
+      const box = selector => { const b = element.querySelector(selector).getBoundingClientRect(); return {top: b.top, bottom: b.bottom} }
+      return {frame: box('iframe'), caption: box('.garden-state'), hint: box('.garden-drag-hint')}
+    })
+    assert(bounds.caption.top >= bounds.frame.bottom, `Status text overlaps sphere: ${JSON.stringify(bounds)}`)
+    assert(bounds.hint.top >= bounds.caption.bottom, `Drag hint overlaps status: ${JSON.stringify(bounds)}`)
+  }
   await page.addInitScript(() => {
     document.addEventListener('click', event => {
       if (event.target.closest('button')?.textContent.trim() !== 'Start listening') return
@@ -402,6 +410,7 @@ async function verifyGardenStates(page, origin) {
   const milliseconds = await page.evaluate(() => window.__visualStartMs)
   assert(milliseconds >= 0 && milliseconds < 250, `Visual start feedback took ${milliseconds}ms`)
   assert.equal(await visual.locator('.garden-state').innerText(), 'Starting…')
+  await captionBelowSphere()
   assert.notEqual(await visual.evaluate(element => getComputedStyle(element, '::before').animationName), 'none')
   const evidence = process.env.BIOTRON_TEST_EVIDENCE_DIR
   if (evidence) await page.screenshot({path: path.join(evidence, 'garden-connecting.png'), timeout: 2000})
@@ -450,9 +459,18 @@ async function verifyGardenStates(page, origin) {
   assert.equal(await visual.evaluate(element => getComputedStyle(element, '::before').animationName), 'none')
   await page.getByRole('button', {name: 'Open visual fullscreen', exact: true}).click()
   await page.getByRole('dialog', {name: 'Biotron visual fullscreen'}).waitFor()
+  await captionBelowSphere()
   await page.getByRole('button', {name: 'Exit fullscreen', exact: true}).click()
   assert.equal(await page.getByRole('dialog', {name: 'Biotron visual fullscreen'}).count(), 0)
   assert.notEqual(await page.evaluate(() => document.body.style.overflow), 'hidden')
+  for (const size of [{width: 844, height: 390}, {width: 1440, height: 900}]) {
+    await page.setViewportSize(size)
+    await captionBelowSphere()
+    await page.getByRole('button', {name: 'Open visual fullscreen', exact: true}).click()
+    await captionBelowSphere()
+    if (evidence) await page.screenshot({path: path.join(evidence, `garden-caption-${size.width}.png`), timeout: 2000})
+    await page.getByRole('button', {name: 'Exit fullscreen', exact: true}).click()
+  }
   await page.evaluate(() => window.__finishSoundOpen())
   await page.locator('.sound-lab[data-reveal-stage="settling"]').waitFor()
   await page.getByRole('button', {name: 'Stop & release', exact: true}).click()
