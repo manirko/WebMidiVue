@@ -286,6 +286,7 @@ test('plant sensor slow open/close cannot overlap or send after Stop; release wa
   finishOpen(); await Promise.resolve(); await Promise.resolve()
   assert.equal(sent.length, 0, 'late open after Stop must not send')
   assert.equal(output.closes, 1); assert.equal(released, false)
+  assert(!events.some(event => event.type === 'released'), 'input close alone is not release while its sensor output remains pending')
   finishClose(); await release
   assert.equal(released, true)
   t.mock.timers.tick(10000); assert.equal(output.opens, 1)

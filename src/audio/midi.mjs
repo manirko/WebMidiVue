@@ -164,7 +164,7 @@ export class MidiInputSession {
   }
 
   startPlantSignalWatch() {
-    if (this.signalWatch || this.pendingSignalRead || this.closed || !this.enabled || !this.sysex || !this.input) return
+    if (this.signalWatch || this.pendingSignalRead || this.pendingRelease || this.closed || !this.enabled || !this.sysex || !this.input) return
     const watch = this.signalWatch = {timer: null, nonce: null}
     const input = this.input
     const isCurrent = () => this.signalWatch === watch && this.input === input && this.enabled && !this.closed
@@ -205,8 +205,7 @@ export class MidiInputSession {
     const connection = pending?.catch(error => {
       if (error?.name !== 'AbortError') throw error
     })
-    const sensorRead = this.pendingSignalRead?.catch(error => { if (error?.name !== 'AbortError') throw error })
-    await releaseDeadline(Promise.all([this.releaseCurrent(), connection, sensorRead]), this.cleanupTimeoutMs)
+    await releaseDeadline(Promise.all([this.releaseCurrent(), connection]), this.cleanupTimeoutMs)
   }
 
   async releaseCurrent() {
@@ -218,8 +217,9 @@ export class MidiInputSession {
       input?.removeEventListener('midimessage', this.boundMessage)
       this.engine.panic()
       try {
-        if (this.failedOutputClose) { await this.failedOutputClose.close(); this.failedOutputClose = null }
         await input?.close()
+        await this.pendingSignalRead?.catch(error => { if (error?.name !== 'AbortError') throw error })
+        if (this.failedOutputClose) { await this.failedOutputClose.close(); this.failedOutputClose = null }
       }
       catch (error) {
         this.onState({type: 'release-error', input: input?.name || 'MIDI port', error})
