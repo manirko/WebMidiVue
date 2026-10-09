@@ -130,7 +130,8 @@ const cases=[
   [{revealStage:'settling',engine:{},audioState:'suspended'},'paused'],
   [{revealStage:'revealed',starting:true,engine:{},audioState:'running'},'paused'],
   [{starting:true,revealIssue:{title:'Connection lost'}},'attention'],
-  [{releaseBlocked:true},'attention'],[{audioState:'error'},'attention']
+  [{releaseBlocked:true},'attention'],[{audioState:'error'},'attention'],
+  [{keyboardOn:true,engine:{},audioState:'running',revealIssue:{title:'Connection lost'}},'ready']
 ];
 for(const [changes,expected] of cases) {
   const session=Object.freeze({revealStage:'intro',audioState:'closed',...changes});
@@ -139,4 +140,4 @@ for(const [changes,expected] of cases) {
   component.methods.sync.call({stage:expected,send:value=>delivered.push(value)});
   assert.equal(delivered[0].state,expected,'scene received a different presentation state');
 }
-console.log('PASS:11 existing session-state combinations derive presentation only; scene receives the same state');
+console.log('PASS:12 existing session-state combinations derive presentation only; scene receives the same state');
