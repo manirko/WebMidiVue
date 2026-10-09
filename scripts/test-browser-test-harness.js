@@ -58,6 +58,8 @@ function readHttp(url, options = {}) {
   const fake = new EventEmitter()
   fake.isConnected = () => true
   assert.equal(await browserCall(fake, () => 42, 'resolved'), 42)
+  assert.equal(await browserCall(fake, () => new Promise(resolve => setTimeout(() => resolve('export finished'), 20)), 'trace export', 100), 'export finished',
+    'Cleanup must wait for an export that is still within its deadline')
   await assert.rejects(browserCall(fake, () => {throw new Error('original fault')}, 'rejected'), /original fault/)
   const pending = browserCall(fake, () => new Promise(() => {}), 'newPage')
   fake.emit('disconnected')

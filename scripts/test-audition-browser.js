@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs')
 const {devices}=require('playwright-core')
-const {launchBrowser,contextOptions,createStaticServer}=require('./browser-test-harness')
+const {launchBrowser,browserCall,contextOptions,createStaticServer}=require('./browser-test-harness')
 const server=createStaticServer(path.resolve(process.env.BIOTRON_QA_DIST_ROOT||path.join(__dirname,'..','dist')))
 const artifacts=process.env.AUDITION_BROWSER_OUTPUT||`/private/tmp/biotron-audition-browser-${Date.now()}`
 fs.mkdirSync(artifacts,{recursive:true})
@@ -487,10 +487,18 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
    await selection().selectOption(option.id)
    await page.locator(`.sound-lab[data-sound="${option.preset.name}"]`).waitFor({state:'attached'})
    await page.waitForTimeout(3100) // Previous modal release must not certify the next sound's spectrum.
-   await page.evaluate(async()=>{window.__emitComparisonMidi([0x90,62,98]);await new Promise(resolve=>setTimeout(resolve,27));window.__emitComparisonMidi([0x80,62,0])})
+   const timing=await page.evaluate(async()=>{
+    const context=window.__comparisonContexts.at(-1),wall=performance.now(),on=context.currentTime
+    window.__emitComparisonMidi([0x90,62,98])
+    await new Promise(resolve=>setTimeout(resolve,27))
+    const off=context.currentTime,wallGate=performance.now()-wall
+    window.__emitComparisonMidi([0x80,62,0])
+    return {on,off,wallGate,sampleRate:context.sampleRate} // Audio seconds; wallGate milliseconds.
+   })
    await page.waitForTimeout(80)
    const state=await actual(440*2**((62-69)/12+option.preset.cv.octave))
-   handpan.push({id:option.id,...state})
+   const sampledAt=await page.evaluate(()=>window.__comparisonContexts.at(-1).currentTime)
+   handpan.push({id:option.id,...state,timing,sampledAt})
    fs.writeFileSync(path.join(artifacts,'handpan-midi.json'),JSON.stringify(handpan,null,2))
    assert.equal(state.count,0,option.id+': short MIDI note remained held')
    assert(state.rms>.001&&state.modes.every(energy=>energy>1e-7),option.id+': short note did not leave three audible rings '+JSON.stringify(state))
@@ -690,7 +698,11 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   const state=await boundedCapture(page?.evaluate(()=>({url:location.href,phase:document.querySelector('.audio-compare')?.dataset,player:document.querySelector('.sound-lab')?.dataset,contexts:window.__comparisonContexts.map(context=>({state:context.state,time:context.currentTime})),intervals:window.__comparisonIntervals.size,blobs:window.__comparisonBlobs.size,heap:performance.memory?.usedJSHeapSize})).catch(cause=>({unavailable:cause.message})))
   if(!fs.existsSync(path.join(artifacts,'failure.json')))fs.writeFileSync(path.join(artifacts,'failure.json'),JSON.stringify({stage,starts,error:error.message,state},null,2))
   await boundedCapture(page?.screenshot({path:path.join(artifacts,'failure.png'),timeout:1000}).catch(()=>{}))
-  await boundedCapture(page?.context().tracing.stop({path:path.join(artifacts,'trace.zip')}).catch(()=>{}))
+  // A ZIP export can outlast screenshot capture. Keep the browser alive until
+  // it finishes or record UNAVAILABLE; never hide the original test failure.
+  const trace=await browserCall(browser,()=>page.context().tracing.stop({path:path.join(artifacts,'trace.zip')}),'trace export',10000)
+   .then(()=>({status:'COMPLETE'}),cause=>({status:'UNAVAILABLE',error:cause.message}))
+  fs.writeFileSync(path.join(artifacts,'trace-capture.json'),JSON.stringify(trace,null,2))
   throw error
  }finally{
   console.log(`Browser evidence: ${artifacts}`)
