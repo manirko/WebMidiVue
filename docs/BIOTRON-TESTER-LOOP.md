@@ -77,6 +77,17 @@ Official references checked 9 October 2026:
 [Mozilla Web MIDI capabilities](https://developer.mozilla.org/en-US/docs/Web/API/Web_MIDI_API).
 Real browser/OS permissions and hardware remain additional lanes.
 
+A disconnected browser or pending newContext/newPage rejects immediately or at a
+30s bound; it cannot silently leave an unresolved promise and exit0. Fake controls
+cover resolution, original rejection, disconnect, deadline and listener cleanup.
+Vivaldi8.2 disconnected on an independent empty-page newPage control before the
+application loaded; this is a driver/startup failure, not a Biotron compatibility verdict.
+The firmware modal lane records capabilities and first faults before cleanup.
+Without showDirectoryPicker it verifies the truthful limitation/manual UF2 link,
+no automatic install button and visible footer; download/install remains explicitly
+NOT SUPPORTED. Actual picker browsers retain the original download/check oracle.
+No synthetic picker is injected to manufacture firmware support.
+
 ## Faults that must remain regressions
 
 | Observed fault | Automated oracle | Remaining physical oracle |
@@ -173,7 +184,7 @@ quality cases. Every option must be finite, have headroom, settle its tail and
 release its voice pool. Upper processing must leave the middle-register control
 unchanged. Actual WAV hashes must differ within each bank. A case timeout writes
 failure.json; first failures remain evidence. OfflineAudioContext cannot close,
-so each bank uses a new page. This isolation does not replace the browser's
+so each offline DSP case uses a new page. This isolation does not replace the browser's
 same-page100-start/close resource regression, nor a real mobile/Windows test.
 
 WebRenderer4.0.3 retained a polling interval and a worklet Blob URL after every

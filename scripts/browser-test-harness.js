@@ -32,6 +32,30 @@ const installed = {
   }
 const browserNames = ['chrome', ...Object.keys(installed), 'msedge', 'chromium', 'firefox', 'webkit']
 
+// A fork can disconnect while Playwright leaves newPage/newContext pending.
+// Keep these operations bounded; an unresolved promise must never exit as PASS.
+function browserCall(browser, action, label, timeout = 30000) {
+  if (!browser.isConnected()) return Promise.reject(new Error(`Browser disconnected before ${label}`))
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (error, value) => {
+      if (settled) return
+      settled = true; clearTimeout(timer); browser.off('disconnected', disconnected)
+      if (error) reject(error); else resolve(value)
+    }
+    const disconnected = () => finish(new Error(`Browser disconnected during ${label}`))
+    browser.once('disconnected', disconnected)
+    const timer = setTimeout(() => finish(new Error(`Browser ${label} timed out after ${timeout}ms`)), timeout)
+    Promise.resolve().then(action).then(value => finish(null, value), finish)
+  })
+}
+
+function guardPages(context, browser) {
+  const newPage = context.newPage.bind(context)
+  context.newPage = (...args) => browserCall(browser, () => newPage(...args), 'newPage')
+  return context
+}
+
 function browserConfig(name = process.env.BIOTRON_QA_BROWSER || 'chrome') {
   if (name === 'chrome') return {name, engine: 'chromium', options: {executablePath: chromePath()}}
   if (Object.hasOwn(installed, name)) {
@@ -46,6 +70,9 @@ function browserConfig(name = process.env.BIOTRON_QA_BROWSER || 'chrome') {
 async function launchBrowser() {
   const config = browserConfig()
   const browser = await require('playwright-core')[config.engine].launch({...config.options, headless: true})
+  const newContext = browser.newContext.bind(browser)
+  browser.newContext = (...args) => browserCall(browser, () => newContext(...args), 'newContext')
+    .then(context => guardPages(context, browser))
   console.log(JSON.stringify({browser: config.name, engine: config.engine, version: browser.version(),
     executable: config.options.executablePath || config.options.channel || 'Playwright pinned binary',
     scope: config.engine === 'webkit' ? 'Playwright WebKit, not installed Safari' :
@@ -59,7 +86,7 @@ async function launchPersistentContext(profile, options) {
     {...options, ...config.options, headless: true})
   console.log(JSON.stringify({browser: config.name, engine: config.engine, version: context.browser().version(),
     scope: 'Isolated persistent test profile; Firefox/WebKit are Playwright binaries, not installed Firefox/Safari'}))
-  return context
+  return guardPages(context, context.browser())
 }
 
 function contextOptions(options, browser) {
@@ -96,4 +123,4 @@ function createStaticServer(root, options = {}) {
   })
 }
 
-module.exports = {chromePath, browserNames, browserConfig, launchBrowser, launchPersistentContext, contextOptions, createStaticServer}
+module.exports = {chromePath, browserNames, browserConfig, browserCall, launchBrowser, launchPersistentContext, contextOptions, createStaticServer}

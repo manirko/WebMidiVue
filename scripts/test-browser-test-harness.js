@@ -4,8 +4,9 @@ const fs = require('node:fs')
 const http = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
+const {EventEmitter} = require('node:events')
 const {chromium} = require('playwright-core')
-const {chromePath, browserConfig, createStaticServer} = require('./browser-test-harness')
+const {chromePath, browserConfig, browserCall, createStaticServer} = require('./browser-test-harness')
 
 assert.throws(() => browserConfig('safari'), /Unknown BIOTRON_QA_BROWSER/,
   'Safari must never silently run Chrome or Playwright WebKit')
@@ -42,6 +43,18 @@ function readHttp(url, options = {}) {
 }
 
 ;(async () => {
+  const fake = new EventEmitter()
+  fake.isConnected = () => true
+  assert.equal(await browserCall(fake, () => 42, 'resolved'), 42)
+  await assert.rejects(browserCall(fake, () => {throw new Error('original fault')}, 'rejected'), /original fault/)
+  const pending = browserCall(fake, () => new Promise(() => {}), 'newPage')
+  fake.emit('disconnected')
+  await assert.rejects(pending, /disconnected during newPage/)
+  await assert.rejects(browserCall(fake, () => new Promise(() => {}), 'deadline', 5), /timed out/)
+  fake.isConnected = () => false
+  await assert.rejects(browserCall(fake, () => {throw new Error('must not run')}, 'closed'), /disconnected before closed/)
+  assert.equal(fake.listenerCount('disconnected'), 0, 'All completed guards release their listener')
+  console.log('PASS pending browser call disconnect/deadline/original-fault guards')
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'biotron-http-fixture-'))
   let server, browser, fault
   try {
