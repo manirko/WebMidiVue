@@ -40,6 +40,10 @@ function observeAudio() {
   window.__biotronFieldSnapshot = () => ({
     visibility: document.visibilityState,
     pageTime: performance.now(),
+    route: location.hash,
+    details: Array.from(document.querySelectorAll('details')).slice(0,16).map(element => ({
+      summary: (element.querySelector('summary')?.textContent || '').trim().slice(0,120), open: element.open
+    })),
     midiAvailable: typeof navigator.requestMIDIAccess === 'function',
     contextsCreated: created,
     contextObservationTruncated: created > 64,
@@ -87,13 +91,18 @@ function observeAudio() {
       append('events.jsonl',{kind:'requestfailed',origin:url.origin,path:url.pathname,error:request.failure()?.errorText})
     })
     await context.tracing.start({screenshots:true,snapshots:true,sources:false})
-    await page.goto(config.origin+'/#/biotron', {waitUntil:'domcontentloaded',timeout:15000})
+    await page.goto(config.origin+'/#/biotron/play', {waitUntil:'domcontentloaded',timeout:15000})
     cdp = await context.newCDPSession(page)
     await cdp.send('Performance.enable')
     const browserVersion = await cdp.send('Browser.getVersion')
-    write('browser.json',{at:new Date().toISOString(),web_commit:config.web_commit,browser:config.browser,version:browserVersion,headless:config.smoke,instrumented:true,physical_result:'NOT_RUN',midi_capture:'NONE; app alone owns its ports',acoustic_capture:'NONE'})
+    write('browser.json',{at:new Date().toISOString(),web_commit:config.web_commit,browser:config.browser,version:browserVersion,headless:config.smoke,instrumented:true,physical_result:'NOT_RUN',midi_capture:'NONE; app alone owns its ports',acoustic_capture:'NONE',firmware_version:config.firmware_version,firmware_source_commit:config.firmware_source_commit})
     if (config.smoke) {
-      await page.goto(config.origin+'/#/biotron/compare',{waitUntil:'domcontentloaded'})
+      const palette=page.locator('details.sound-palette')
+      await palette.waitFor()
+      await palette.locator('summary').click()
+      await page.locator('#compare-variant').waitFor()
+      if (await page.getByRole('button',{name:'Calibration sounds',exact:true}).count()) throw new Error('Calibration cues leaked onto Play')
+      if (await page.getByLabel('Low CPU',{exact:true}).count() !== 1 || await page.getByRole('button',{name:'Play with keyboard',exact:true}).count() !== 1) throw new Error('Play keyboard/quality controls missing')
       await page.getByRole('button',{name:'Handpan',exact:true}).click()
       if (await page.locator('#compare-variant option').count() !== 6) throw new Error('Exact candidate is missing six Handpan options')
       await page.getByRole('button',{name:'Listen to example',exact:true}).click()

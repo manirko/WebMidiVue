@@ -9,6 +9,7 @@ import mimetypes
 import os
 from pathlib import Path, PurePosixPath
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -17,13 +18,16 @@ import urllib.parse
 import uuid
 import zipfile
 
-WEB_COMMIT = '623f15eedf1d2aaf32fb8f340e5a7d04e7869b1a'
+# Final packager fills this after the web freeze; incomplete drafts fail closed.
+WEB_COMMIT = 'PACKAGING_PENDING_WEB_COMMIT'
+FIRMWARE_VERSION = '1.10.11'
+FIRMWARE_SOURCE = 'a7739040e07ba7ca04767682755eec8589c15234'
+FROZEN_SHA = '598d5a084f1eb3274e7c62b7bbeec1701f49d28edad87662e19c084dfc75477d'
 ROLLBACK_SHA = '823d044374268462d39b13c0e65dc2676cda2fb3d5162edba78aedccb0a09f3d'
-UF2_SHA = '598d5a084f1eb3274e7c62b7bbeec1701f49d28edad87662e19c084dfc75477d'
-LIVE = 'https://calm-payroll-homeland-conditions.trycloudflare.com'
+UF2_SHA = '18a73113ae75ccd68d244a2d90d1e902848a8473452e65b07a2173883abe6d60'
 CASES = {
  'W01': 'Exact web, firmware, PCB, OS, browser and audio route identity',
- 'W02': 'Offline local preset edit, reconnect, explicit Apply and restore',
+ 'W02': 'Device-free Play Sound palette, computer keyboard/Low CPU, then local preset and explicit Apply',
  'W03': 'Real plant/light sound, held notes, Stop and subsequent incoming notes',
  'W04': 'Chrome and Edge sustained known stimulus; preserve first freeze',
  'W05': 'Real DAW MIDI clip: On/Off, releases and audible receiver behavior',
@@ -32,9 +36,10 @@ CASES = {
  'W08': 'Offline reopen and comparison sound, no false ready state',
  'W09': 'Installed/same/legacy firmware presentation, without BOOT or write',
  'W10': 'Physical flash -> rollback -> reflash; screened board/backup/review first',
- 'W11': 'Human listening: ten timbres, ten cues, ten upper-note treatments, six handpan variants',
- 'W12': 'Compact UI, sliders, local feedback, exact copied diagnostics',
+ 'W11': 'Play: ten timbres/ten upper-note/six handpan; Settings: ten explicitly selected calibration cues',
+ 'W12': 'Independent native details, sliders, local feedback and exact copied diagnostics',
  'W13': 'Physical phone USB/MIDI, sound, settings and recovery (separate platform)',
+ 'W14': 'FB44 physical active calibration cue: original-channel Note Off, next cue on new channel; DAW/audio',
 }
 
 
@@ -61,9 +66,13 @@ def safe_file(root, relative):
 
 
 def verify(root):
+ if not re.fullmatch(r'[0-9a-f]{40}', WEB_COMMIT):
+  raise ValueError('Web candidate not frozen; final packet assembly required')
  manifest = json.loads((root/'packet-manifest.json').read_text(encoding='utf-8'))
  if manifest['web_commit'] != WEB_COMMIT:
   raise ValueError('Unexpected web commit')
+ if manifest.get('firmware_version') != FIRMWARE_VERSION or manifest.get('firmware_source_commit') != FIRMWARE_SOURCE:
+  raise ValueError('Firmware identity differs from candidate')
  for relative, expected in manifest['files'].items():
   file = safe_file(root, relative)
   if not file.is_file() or digest(file) != expected:
@@ -76,8 +85,10 @@ def verify(root):
  release = json.loads((runtime/'release-evidence.json').read_text(encoding='utf-8'))
  if release['source_commit'] != WEB_COMMIT:
   raise ValueError('Runtime metadata differs from candidate')
- if digest(runtime/'firmware/biotron-1.10.10-internal.uf2') != UF2_SHA:
+ if digest(runtime/'firmware/biotron-1.10.11-internal.uf2') != UF2_SHA:
   raise ValueError('Firmware hash differs from candidate')
+ if digest(runtime/'firmware/biotron-1.10.10-internal.uf2') != FROZEN_SHA:
+  raise ValueError('Frozen 1.10.10 hash differs')
  if digest(runtime/'firmware/biotron-1.10.9-clean.uf2') != ROLLBACK_SHA:
   raise ValueError('Rollback hash differs from candidate')
  return manifest
@@ -158,7 +169,7 @@ def export_results(root):
  inventory = {p.relative_to(root).as_posix():digest(p) for p in sorted(files)}
  with zipfile.ZipFile(output,'x',compression=zipfile.ZIP_DEFLATED) as archive:
   for p in files: archive.write(p,p.relative_to(root).as_posix())
-  archive.writestr('result-manifest.json',json.dumps({'at':utc(),'web_commit':WEB_COMMIT,'files':inventory,'status':'UNREVIEWED_OPERATOR_EVIDENCE','customer_release':False},indent=2))
+  archive.writestr('result-manifest.json',json.dumps({'at':utc(),'web_commit':WEB_COMMIT,'firmware_version':FIRMWARE_VERSION,'firmware_source_commit':FIRMWARE_SOURCE,'firmware_sha256':UF2_SHA,'files':inventory,'status':'UNREVIEWED_OPERATOR_EVIDENCE','customer_release':False},indent=2))
  return output
 
 
@@ -177,7 +188,7 @@ def main():
  sub=p.add_subparsers(dest='command',required=True)
  sub.add_parser('verify'); sub.add_parser('doctor'); sub.add_parser('cases'); sub.add_parser('bundle')
  serve=sub.add_parser('serve'); serve.add_argument('--browser',choices=['chrome','edge','none'],default='none');serve.add_argument('--port',type=int,default=8765)
- capture=sub.add_parser('capture');capture.add_argument('--browser',choices=['chrome','edge'],default='chrome');capture.add_argument('--site',choices=['local','live'],default='local');capture.add_argument('--minutes',type=float,default=10);capture.add_argument('--port',type=int,default=8765);capture.add_argument('--smoke',action='store_true',help='Automated headless harness check; never a physical PASS')
+ capture=sub.add_parser('capture');capture.add_argument('--browser',choices=['chrome','edge'],default='chrome');capture.add_argument('--site',choices=['local','live'],default='local');capture.add_argument('--origin',help='Exact approved HTTPS origin for live capture');capture.add_argument('--minutes',type=float,default=10);capture.add_argument('--port',type=int,default=8765);capture.add_argument('--smoke',action='store_true',help='Automated headless harness check; never a physical PASS')
  record=sub.add_parser('record');record.add_argument('--case',choices=CASES,required=True);record.add_argument('--result',choices=['PASS','FAIL','NOT_RUN','BLOCKED','INCONCLUSIVE'],required=True);record.add_argument('--note',required=True);record.add_argument('--evidence',action='append',default=[])
  args=p.parse_args();root=args.root.resolve()
  if args.command=='cases':print(json.dumps(CASES,ensure_ascii=False,indent=2));return
@@ -194,7 +205,7 @@ def main():
   print(run);return
  browsers={name:find_browser(name) for name in ['chrome','edge']}
  run=new_run(root,args.command)
- environment={'at':utc(),'system':platform.system(),'release':platform.release(),'machine':platform.machine(),'python':platform.python_version(),'node':shutil.which('node'),'browsers':browsers,'web_commit':WEB_COMMIT,'firmware_sha256':UF2_SHA,'physical_windows_result':'NOT_RUN','customer_release':False}
+ environment={'at':utc(),'system':platform.system(),'release':platform.release(),'machine':platform.machine(),'python':platform.python_version(),'node':shutil.which('node'),'browsers':browsers,'web_commit':WEB_COMMIT,'firmware_version':FIRMWARE_VERSION,'firmware_source_commit':FIRMWARE_SOURCE,'firmware_sha256':UF2_SHA,'physical_windows_result':'NOT_RUN','customer_release':False}
  environment['node_version']=node_version(environment['node'])
  write_json(run/'environment.json',environment)
  if args.command=='doctor':print(json.dumps(environment,ensure_ascii=False,indent=2));return
@@ -207,19 +218,23 @@ def main():
    server=make_server(root,manifest,args.port,run)
    threading.Thread(target=server.serve_forever,daemon=True).start()
    origin='http://127.0.0.1:'+str(server.server_address[1])
-  else: origin=LIVE
-  print('Exact field-test site:',origin+'/#/biotron',flush=True)
+  else:
+   url=urllib.parse.urlsplit(args.origin or '')
+   if url.scheme!='https' or not url.netloc or url.username or url.password or url.path not in ['', '/'] or url.query or url.fragment:
+    raise ValueError('Live capture requires an explicit approved HTTPS origin; no default/latest fallback')
+   origin=urllib.parse.urlunsplit(('https',url.netloc,'','',''))
+  print('Exact field-test site:',origin+'/#/biotron/play',flush=True)
   if args.command=='serve':
    if args.browser!='none':
     profile=root/'.tester-profiles'/(args.browser+'-plain');profile.mkdir(parents=True,exist_ok=True)
-    subprocess.Popen([browsers[args.browser],'--user-data-dir='+str(profile),'--new-window',origin+'/#/biotron'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    subprocess.Popen([browsers[args.browser],'--user-data-dir='+str(profile),'--new-window',origin+'/#/biotron/play'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
    print('Ctrl+C stops only this local server. Close its test browser normally.',flush=True)
    threading.Event().wait()
   else:
    node=shutil.which('node')
    if not node or not environment['node_version'] or int(environment['node_version'].lstrip('v').split('.')[0])<20:raise ValueError('Capture needs installed Node.js >=20; plain serve only needs Python')
    profile=root/'.tester-profiles'/(args.browser+'-observed')
-   config={'root':str(root),'run':str(run),'executable':browsers[args.browser],'browser':args.browser,'origin':origin,'profile':str(profile),'seconds':args.minutes*60,'smoke':args.smoke,'web_commit':WEB_COMMIT}
+   config={'root':str(root),'run':str(run),'executable':browsers[args.browser],'browser':args.browser,'origin':origin,'profile':str(profile),'seconds':args.minutes*60,'smoke':args.smoke,'web_commit':WEB_COMMIT,'firmware_version':FIRMWARE_VERSION,'firmware_source_commit':FIRMWARE_SOURCE}
    write_json(run/'capture-config.json',config)
    result=subprocess.run([node,str(root/'capture-browser.cjs'),str(run/'capture-config.json')],cwd=root)
    if result.returncode:raise ValueError('Capture stopped with an incident; see '+str(run))

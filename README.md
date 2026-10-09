@@ -2,11 +2,16 @@
 
 ## Project setup
 
-The Biotron beta **Play** page and **Settings → Experiments** have **Play with
-keyboard**. White notes use A S D F G H J K; black notes W E T Y U at their
-physical QWERTY positions, independently of the active language. Choose C2–C7
-with **Octave**; changing the octave releases held keys. Screen keys are hidden
-at Andrey’s request (8 October 2026). Keyboard audio needs no device, MIDI permission or new
+The Biotron beta **Play** page has **Play with keyboard** and **Octave**.
+Open **Sound** below the visual to choose Classic, Timbres, High-note treatments
+or Handpan. **Settings → Experiments** contains calibration cues and the calmer
+plant response action. Enable keyboard mode on Play before using it in Settings;
+both routes share the same player.
+
+White notes use A S D F G H J K; black notes W E T Y U at their physical QWERTY
+positions, independently of the active language. Choose C2–C7 with **Octave**;
+changing the octave releases held keys. Screen keys are hidden at Andrey’s
+request (8 October 2026). Keyboard audio needs no device, MIDI permission or new
 library; it uses the existing renderer and its 4/8 voice limits.
 
 Keyboard mode is explicitly switchable. It ignores text fields, editable or

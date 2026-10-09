@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
+from unittest import mock
 import urllib.request
 import urllib.error
 import zipfile
@@ -21,11 +22,13 @@ class PacketTests(unittest.TestCase):
   (runtime/'app.js').write_text('window.fixture=true')
   (runtime/'release-evidence.json').write_text(json.dumps({'source_commit':tester.WEB_COMMIT}))
   (runtime/'firmware').mkdir()
-  source=Path(__file__).resolve().parent/'runtime/firmware/biotron-1.10.10-internal.uf2'
-  if not source.is_file():source=Path(__file__).resolve().parents[2]/'beta-assets/firmware/biotron-1.10.10-internal.uf2'
-  (runtime/'firmware/biotron-1.10.10-internal.uf2').write_bytes(source.read_bytes())
-  (runtime/'firmware/biotron-1.10.9-clean.uf2').write_bytes(source.with_name('biotron-1.10.9-clean.uf2').read_bytes())
-  self.manifest={'web_commit':tester.WEB_COMMIT,'files':{x.relative_to(self.root).as_posix():tester.digest(x) for x in runtime.rglob('*') if x.is_file()}}
+  # Synthetic bytes exercise verification; never claim a real UF2/platform result.
+  fixtures={'biotron-1.10.11-internal.uf2':b'test-only candidate', 'biotron-1.10.10-internal.uf2':b'test-only frozen', 'biotron-1.10.9-clean.uf2':b'test-only rollback'}
+  for name,body in fixtures.items():(runtime/'firmware'/name).write_bytes(body)
+  patch=mock.patch.multiple(tester,WEB_COMMIT='1'*40,UF2_SHA=tester.digest(runtime/'firmware/biotron-1.10.11-internal.uf2'),FROZEN_SHA=tester.digest(runtime/'firmware/biotron-1.10.10-internal.uf2'),ROLLBACK_SHA=tester.digest(runtime/'firmware/biotron-1.10.9-clean.uf2'))
+  patch.start();self.addCleanup(patch.stop)
+  (runtime/'release-evidence.json').write_text(json.dumps({'source_commit':tester.WEB_COMMIT}))
+  self.manifest={'web_commit':tester.WEB_COMMIT,'firmware_version':tester.FIRMWARE_VERSION,'firmware_source_commit':tester.FIRMWARE_SOURCE,'files':{x.relative_to(self.root).as_posix():tester.digest(x) for x in runtime.rglob('*') if x.is_file()}}
   tester.write_json(self.root/'packet-manifest.json',self.manifest)
  def tearDown(self):self.temp.cleanup()
  def test_hash_change_stops_packet(self):
@@ -50,6 +53,20 @@ class PacketTests(unittest.TestCase):
   self.manifest['files']['runtime/firmware/biotron-1.10.9-clean.uf2']=tester.digest(file)
   tester.write_json(self.root/'packet-manifest.json',self.manifest)
   with self.assertRaisesRegex(ValueError,'Rollback'):tester.verify(self.root)
+ def test_unassembled_web_and_wrong_firmware_identity_stop(self):
+  with mock.patch.object(tester,'WEB_COMMIT','PACKAGING_PENDING_WEB_COMMIT'),self.assertRaisesRegex(ValueError,'not frozen'):tester.verify(self.root)
+  self.manifest['firmware_version']='1.10.10'
+  tester.write_json(self.root/'packet-manifest.json',self.manifest)
+  with self.assertRaisesRegex(ValueError,'Firmware identity'):tester.verify(self.root)
+ def test_altered_candidate_and_frozen_cannot_pass_rehashed_manifest(self):
+  for name,message in [('biotron-1.10.11-internal.uf2','Firmware hash'),('biotron-1.10.10-internal.uf2','Frozen')]:
+   file=self.root/'runtime'/'firmware'/name;original=file.read_bytes();file.write_bytes(b'changed')
+   self.manifest['files']['runtime/firmware/'+name]=tester.digest(file);tester.write_json(self.root/'packet-manifest.json',self.manifest)
+   with self.subTest(name=name),self.assertRaisesRegex(ValueError,message):tester.verify(self.root)
+   file.write_bytes(original);self.manifest['files']['runtime/firmware/'+name]=tester.digest(file)
+ def test_case_inventory_keeps_physical_cue_gate(self):
+  self.assertEqual(len(tester.CASES),14)
+  self.assertIn('FB44',tester.CASES['W14'])
  def test_paths_cannot_escape_on_either_os(self):
   for name in ['../secret','/secret','C:/secret','..\\secret','runtime/../../secret']:
    with self.subTest(name=name),self.assertRaises(ValueError):tester.safe_file(self.root,name)

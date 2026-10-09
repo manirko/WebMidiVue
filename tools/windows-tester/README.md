@@ -1,19 +1,23 @@
 # Biotron: тестировщик для Windows и Claude Сергея
 
-Самостоятельный внутренний пакет для точного web623f15eedf1d + firmware1.10.10.
+Черновик внутреннего пакета для final-frozen web + firmware1.10.11.
+До финальной упаковки `WEB_COMMIT` не задан: `verify` блокирует запуск.
+Packager после общего freeze записывает exact40-hex SHA в `tester.py` и manifest
+только в копии для ZIP, не переписывает frozen web checkout,
+а также `firmware_version`/`firmware_source_commit`; не брать latest.
 Запускает уже собранный инструмент и сохраняет доказательства. Прошивку не пишет.
 Обычный запуск требует Python3.10+ и установленный Chrome/Edge. Наблюдатель
 дополнительно требует Node.js20+. Playwright-core1.62.1 включён вместе с лицензией:
 `npm install`, Git, WSL, Docker, права администратора и новый браузер не нужны.
 
-Статус8 октября2026: точный веб прошёл38 автоматических проверок на Mac;5
-программных/физических направлений оставались NOT RUN. Сам пакет проверяется
-отдельно. Реального Windows/DAW PASS на компьютере Андрея нет. Пакет не является
+Статус9 октября2026: helper подготовлен отдельно; web ещё не final-frozen.
+Обязательные физические Windows/DAW/firmware1.10.11 проверки — NOT RUN. Mac QA
+и helper selftests не закрывают эти gates. Пакет не является
 подписанным установщиком и не изменяет производственный стенд или firmware latest.
 
 ## Сергею: короткий старт
 
-Распакуй ZIP в локальную папку, например `C:\BiotronTester-623f15e`. Открой там Claude
+Распакуй ZIP в локальную папку, например `C:\BiotronTester-20261009`. Открой там Claude
 Code, дай ему прочитать `CLAUDE.md` и попроси: «Проведи доступные тесты по этому
 пакету, сохрани первые ошибки. Физические действия давай по одному».
 Используй новую папку: не смешивай прежние runtime, results и browser profiles.
@@ -32,8 +36,12 @@ py -3 tester.py serve --browser chrome
 предлагает обычную установку с официального сайта; без обхода защит/админ-запуска.
 `doctor` не устанавливает программы и не подключается к MIDI.
 
-Откроется отдельное тестовое окно по `http://127.0.0.1:8765/#/biotron`.
-Разрешение MIDI/SysEx и первый Play подтверждает сам Сергей. Сначала небольшая
+Откроется отдельное тестовое окно по `http://127.0.0.1:8765/#/biotron/play`.
+Начать без прибора: открыть Sound на Play, выбрать звук и Play with keyboard.
+Клавиши — физические позиции A S D F G H J K / W E T Y U, без экранной клавиатуры;
+текстовые поля не должны играть. Low CPU находится на Play; смена останавливает
+звук, после неё запустить снова. Для Biotron выбрать Start listening; реальные
+MIDI/SysEx permissions подтверждает Сергей. Сначала небольшая
 системная громкость. Для фоновых тестов звук может продолжиться/остановиться:
 записать фактическое поведение. Не менять настройки всей Windows.
 Ctrl+C останавливает только сервер; тестовое окно закрывается обычным способом.
@@ -78,34 +86,58 @@ MIDI On/Off записывает сама DAW; audible output оценивает
 Для актуального HTTPS-сайта, пока доступен Mac Андрея:
 
 ```powershell
-py -3 tester.py capture --browser chrome --site live --minutes 10
+py -3 tester.py capture --browser chrome --site live --origin 'https://EXACT-APPROVED-HOST' --minutes 10
 ```
 
+Передать только согласованный HTTPS origin: встроенного tunnel/latest fallback нет.
 Он проверяет exact commit перед открытием. Недоступность туннеля/другая версия —
 BLOCKED, не повод переключаться на производственный сайт. Локальный и live origin
 имеют разные permissions/пресеты/PWA; не переносить выводы между ними молча.
 
-Firmware-review: [точный source2ae1973](https://github.com/manirko/biotron-firmware/pull/1).
-[Отдельный CI-only PR](https://github.com/manirko/biotron-firmware/pull/2) проверяет
-build identity; его зелёный artifact не заменяет вложенный UF2 и owner approval.
+Firmware1.10.11: [exact source a773904](https://github.com/manirko/biotron-firmware/commit/a7739040e07ba7ca04767682755eec8589c15234),
+UF2 SHA256 `18a73113ae75ccd68d244a2d90d1e902848a8473452e65b07a2173883abe6d60`.
+Это отдельный внутренний кандидат, не hardware acceptance. Frozen1.10.10 SHA256
+`598d5a084f1eb3274e7c62b7bbeec1701f49d28edad87662e19c084dfc75477d` не изменяется.
+Rollback1.10.9 SHA256 `823d044374268462d39b13c0e65dc2676cda2fb3d5162edba78aedccb0a09f3d`.
+Host/build identity не заменяют совместимость платы, owner approval и физический тест.
+
+Текущий web updater этого пакета закреплён на **frozen1.10.10**.
+**Browser W10 для candidate1.10.11 сейчас BLOCKED.** Вложенный UF21.10.11
+не является разрешением прошивания. Отдельная ручная firmware-процедура может
+стать будущей проверкой только после явного owner approval exact1.10.11,
+подтверждения платы, своего backup и согласованного rollback; такого разрешения
+этот helper или его selftests не дают.
 
 ## Что проверить последовательно
 
 | ID | Проверка и ожидаемое доказательство |
 |---|---|
-| W01 | PCB, исходная firmware version/hash если известен, Windows/build, browser version, DAW/version, MAIN/EXTRA, USB adapter и audio output. В диагностиках должен быть web623f15eedf1d. Неизвестное так и записать. |
-| W02 | Без прибора изменить/сохранить локальный preset. Подключение не затирает draft; Apply отдельно. После изменения вернуть свой исходный preset. |
+| W01 | PCB, исходная firmware version/hash если известен, Windows/build, browser version, DAW/version, MAIN/EXTRA, USB adapter и audio output. В диагностиках должен быть exact web из final packet-manifest.json. Неизвестное так и записать. |
+| W02 | Без прибора: Sound на Play доступен до Start listening; Classic и эксперименты, обычные клавиши/отпускание, Low CPU -> Stop/restart. Затем локальный preset; подключение не затирает draft, Apply отдельно. Восстановить исходный preset. |
 | W03 | Plant/light: реальное звучание, короткая/удержанная нота, отпускание. Stop не возобновляет звук от следующих входных нот; повторный Play работает. Проверить аппаратный touch Mute отдельно. |
 | W04 | Chrome и Edge по одному: несколько минут заданного стимула и Start/Stop. При зависании записать время, действие, первое сообщение/trace, звук, recovery; затем отдельная попытка. |
 | W05 | Ableton/REAPER: MIDI clip с On/Off и реальным звуком на названном receiver. MAIN и EXTRA отдельно; не считать отсутствие EXTRA провалом успешного MAIN music route. |
 | W06 | Освободить порт веба -> DAW принимает ноты -> закрыть DAW -> reconnect web. Три реально завершённых цикла. На Windows одновременно открытый порт может мешать; отсутствие ошибок не доказывает release. |
 | W07 | Фон/возврат; USB disconnect/reconnect. Записать реальные ноты до/после и восстановление, а не только видимый порт. Lock screen — отдельный наблюдаемый сценарий. |
 | W08 | Один online load, затем сеть выключить, закрыть и открыть тот же test profile. Настройки/сравнения работают; incomplete cache не выдаётся за ready. На `127.0.0.1` сеть отключена, но локальный сервер должен оставаться включённым. Полностью server-off PWA проверять в браузере отдельно, не через capture, которому нужна metadata. |
-| W09 | Проверка версии/Download & check: exact1.10.10, same/legacy/no-reply flow. Без согласованного W10 не нажимать BOOT/write. Download location выбирает браузер. |
-| W10 | Только совместимая подтверждённая плата, независимое firmware-owner review exact diff, свой backup/settings и штатный rollback: browser flash -> readback/sound ->1.10.9 rollback -> readback/sound ->1.10.10 reflash. Восстановить свои настройки. Никаких erase, power cut или чужого raw sector. |
-| W11 | NEW -> Compare sounds: отдельно все10 тембров,10 cues,10 upper treatments и6 Handpan. Примеры и Play with Biotron: менять вариант во время реальной игры, включая короткие ноты и Stop/Start. Одинаковые volume/quality/output; записать выбор или «ни один» и причину в каждой группе, экспортировать feedback. Рендер и Play не присваивают LISTENED/APPROVED. |
-| W12 | Слайдеры/курсор, Humanize built-ins1/user0, компактность, feedback Copy/optional mail, exact diagnostic preview. Скопировать диагностику до/после инцидента в results. |
+| W09 | Проверить installed version и Download & check/hash, same/legacy/no-reply. Текущий web target — frozen1.10.10. Candidate1.10.11 отдельный; browser W10 для него BLOCKED. Не обходить hash guard и не нажимать BOOT/write. |
+| W10 | СЕЙЧАС browser flash candidate1.10.11 BLOCKED: updater закреплён на frozen1.10.10. Отдельная будущая ручная процедура — только с явным firmware-owner approval exact1.10.11, совместимой платой и своим backup:1.10.11 -> readback/sound -> согласованный1.10.9 rollback -> readback/sound -> exact1.10.11 reflash. Helper не разрешает эту процедуру. Frozen1.10.10 не менять; никаких erase/power cut/raw sector. |
+| W11 | Play -> Sound:10 Timbres,10 High-note treatments,6 Handpan (+7 Classic). Settings -> Experiments -> Calibration cues:10, только явный выбор; открытие панели не выбирает cue. Примеры, keyboard и реальная игра/Stop/Start при одинаковых volume/quality/output. Выбран один experiment slot: cue заменяет прежний эксперимент, обычные plant notes возвращаются к последнему Classic. Cue — звук, не новый sensor algorithm. Записать выбор/«ни один» и причины;36 WAV не дают LISTENED/APPROVED. |
+| W12 | Native details Sound/Plant sensor/More fun/Experiments открываются независимо. Закрытие Experiments не закрывает другие и не теряет выбранный cue. Слайдеры, Humanize built-ins1/user0, компактность, feedback Copy и exact diagnostics до/после инцидента. Keyboard/Low CPU только на Play. Ничего не отправлять. |
 | W13 | Если есть телефон+USB: отдельная фактическая проверка своего browser/OS/adapter, sound/settings/reconnect. Windows capture или эмулятор её не заменяют. |
+| W14 | FB44: сменить Plant channel при реально активном calibration cue; Off должен уйти на исходный канал/ноту, следующий cue — на новый. Сохранить DAW On/Off clip, audible outcome и способ отмены; UI label/host PASS этого не доказывают. |
+
+Для W14 сохранить preset и исходный Plant channel, снизить громкость receiver.
+Нужна одна согласованная MIDI-сессия, которая может менять канал и писать события:
+не открывать одновременно web и DAW, если Windows удерживает порт эксклюзивно.
+Если такая topology недоступна — BLOCKED; observer не добавляет второй MIDI client.
+Зафиксировать реальный cue Note On (note/channel/velocity), изменить канал пока
+именно этот cue активен, дождаться matching Note Off на старом канале и следующего
+Note On на новом. Записать реальные времена, receiver и звук; восстановить канал.
+Если не удалось попасть в активный cue — INCONCLUSIVE, повтор отдельной попыткой.
+Для отмены остановить monitor/receiver (его Stop/All Notes Off), web Stop & release;
+записать эту интервенцию. Ручное снятие зависшей ноты не доказывает firmware Off
+и не закрывает FAIL. Настройки восстанавливать согласованным клиентом.
 
 Один прибор и один клиент MIDI за раз. Не посылать Clock или config CC из DAW
 без отдельного выбранного теста. Исчезнувшая после ожидания нота остаётся
@@ -130,7 +162,8 @@ py -3 tester.py bundle
 `record` лишь сохраняет предоставленное наблюдение с пометкой UNVERIFIED; не
 проверяет его истинность и не создаёт customer approval. Добавлять видео/.mid/
 diagnostics в соответствующую results-папку; файл может быть `.txt`/`.json`.
-После просмотра отправить готовый `biotron-results-....zip` в HT×PL -> Biotron.
+Готовый `biotron-results-....zip` оставить локально для Андрея; текущий scope —
+без Telegram/email/upload. Отправка только по новой явной команде владельца.
 Не давать Claude доступ к аккаунтам/секретам Андрея; их в пакете нет.
 
 ## Карта файлов и данные
@@ -140,10 +173,12 @@ diagnostics в соответствующую results-папку; файл мо�
 - `test_tester.py` — проверки целостности, приватных путей, Windows discovery,
   ограничения сервера/экспорта. Локальный запуск: `py -3 test_tester.py`.
 - `CLAUDE.md` — рабочие инструкции Claude Сергея, пределы и first-fault loop.
-- `runtime/` — неизменённая опубликованная web623f15eedf1d с1.10.10/rollback.
+- `runtime/` — final-frozen web и exact1.10.11 UF2, frozen1.10.10 и rollback1.10.9;
+  добавляет packager после freeze, в этом helper draft runtime отсутствует.
 - `vendor/playwright-core/` — та же версия1.62.1 и её LICENSE/NOTICE, без browser binary.
 - `packet-manifest.json` — SHA256 каждого поставляемого файла; ZIP SHA отдельно в сообщении.
-- `listening-36.zip` —36 проверенных WAV и параметры, альтернативное прослушивание.
+- `listening-36.zip` — существующие36 WAV и параметры; packager проверяет digest
+  перед включением. Это альтернативное прослушивание, не новая physical acceptance.
 - `results/`, `.tester-profiles/` — локальные данные после запуска; не коммитить.
 
 Production/readiness решаются существующим product-loop после всех platform,
@@ -153,4 +188,4 @@ firmware-owner и human gates. В репозитории только helper sou
 
 Метод: [Playwright persistent context](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-persistent-context)
 с отдельным user data directory; [Python local HTTP server](https://docs.python.org/3/library/http.server.html)
-используется только на loopback для внутреннего теста. Проверено8 октября2026.
+используется только на loopback для внутреннего теста. Helper draft9 октября2026; physical Windows/DAW/1.10.11 NOT RUN.
