@@ -163,13 +163,12 @@ test('closed or releasing audio is never silently re-enabled', async () => {
 })
 
 test('changing note limit names the available restart action after Stop resets keyboard intent', async () => {
-  for (const [revealMode, keyboardOn, midi, examplePlaying, label] of [
-    [false, false, true, false, 'Start sound'],
-    [true, true, true, false, 'Play with keyboard'],
-    [true, false, true, false, 'Start listening'],
-    [true, false, false, false, 'Play with keyboard'],
-    [true, false, true, true, 'Listen to example'],
-    [false, false, true, true, 'Listen to example']
+  for (const [revealMode, keyboardOn, midi, examplePlaying, action] of [
+    [false, false, true, false, 'Press Start sound'],
+    [true, true, true, false, 'Press Play with keyboard'],
+    [true, false, true, false, 'Press Start listening'],
+    [true, false, false, false, 'Press Play with keyboard'],
+    [true, false, true, true, 'Open Sound, then press Listen to example']
   ]) {
     const {target} = fixture()
     Object.assign(target, {revealMode, keyboardOn, examplePlaying, capabilities: {midi}, lowCpu: false})
@@ -179,7 +178,7 @@ test('changing note limit names the available restart action after Stop resets k
     await target.changeQuality({target: {checked: true}})
     assert(stopped)
     assert.equal(target.lowCpu, true)
-    assert(target.status.includes(`Press ${label} to start again.`), target.status)
+    assert(target.status.includes(`${action} to start again.`), target.status)
     assert.match(target.status, /Up to 4 notes at once/)
   }
 })
