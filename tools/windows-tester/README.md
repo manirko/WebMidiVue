@@ -147,9 +147,13 @@ Host/build identity не заменяют совместимость платы,
 | W11 | Play -> Sound:10 Timbres,10 High-note treatments,6 Handpan (+7 Classic). Settings -> Experiments -> Calibration cues:10, только явный выбор; открытие панели не выбирает cue. Примеры, keyboard и реальная игра/Stop/Start при одинаковых volume/quality/output. Выбран один experiment slot: cue заменяет прежний эксперимент, обычные plant notes возвращаются к последнему Classic. Cue — звук, не новый sensor algorithm. Записать выбор/«ни один» и причины;36 WAV не дают LISTENED/APPROVED. |
 | W12 | Native details Sound/Plant sensor/More fun/Experiments открываются независимо. Закрытие Experiments не закрывает другие и не теряет выбранный cue. Слайдеры, Humanize built-ins1/user0, компактность, feedback Copy и exact diagnostics до/после инцидента. Keyboard/Limit to 4 notes at once только на Play. Ничего не отправлять. |
 | W13 | Если есть телефон+USB: отдельная фактическая проверка своего browser/OS/adapter, sound/settings/reconnect. Windows capture или эмулятор её не заменяют. |
-| W14 | FB44: сменить Plant channel при реально активном calibration cue; Off должен уйти на исходный канал/ноту, следующий cue — на новый. Сохранить DAW On/Off clip, audible outcome и способ отмены; UI label/host PASS этого не доказывают. |
+| W14 | FB44 BLOCKED до подтверждения установленной и одобренной exact1.10.11 на совместимой плате. Только после этого: сменить Plant channel при реально активном calibration cue; Off должен уйти на исходный канал/ноту, следующий cue — на новый. Сохранить DAW On/Off clip, audible outcome и способ отмены; UI label/host PASS этого не доказывают. |
 
-Для W14 сохранить preset и исходный Plant channel, снизить громкость receiver.
+Приложенный UF2 не подтверждает установленную версию и не разрешает прошивку.
+W14 остаётся BLOCKED, пока firmware-owner не одобрит exact1.10.11 и пока её
+установка на совместимой плате не будет подтверждена отдельно. Этот тест не
+предлагает обходить W10 или прошивать прибор ради снятия блокировки.
+Для разрешённого W14 сохранить preset и исходный Plant channel, снизить громкость receiver.
 Нужна одна согласованная MIDI-сессия, которая может менять канал и писать события:
 не открывать одновременно web и DAW, если Windows удерживает порт эксклюзивно.
 Если такая topology недоступна — BLOCKED; observer не добавляет второй MIDI client.
