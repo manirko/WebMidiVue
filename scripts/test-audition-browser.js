@@ -1,6 +1,25 @@
 const assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs')
 const {devices}=require('playwright-core')
 const {launchBrowser,browserCall,contextOptions,createStaticServer}=require('./browser-test-harness')
+const allowedSoundRequest=message=>message[0]===0xf0&&message[1]===20&&message[2]===13&&message.at(-1)===0xf7&&
+ message.slice(3,-1).every(byte=>Number.isInteger(byte)&&byte>=0&&byte<=127)&&
+ ((message.length===6&&[125,126].includes(message[3]))||
+  (message.length===7&&((message[3]===123&&message[4]===1)||(message[3]===125&&message[5]===5))))
+// Permit the exact sensor read; settings writes, BOOT and other commands still fail.
+const requestControls=[
+ [[0xf0,20,13,125,32,0xf7],true],[[0xf0,20,13,126,1,0xf7],true],
+ [[0xf0,20,13,123,1,27,0xf7],true],[[0xf0,20,13,125,32,5,0xf7],true],
+ [[0xb0,1,12],false],[[0xf0,20,13,123,0,27,0xf7],false],
+ [[0xf0,20,13,127,1,0xf7],false],[[0xf0,20,13,1,0xf7],false],
+ [[0xf0,20,13,125,32,6,0xf7],false],[[0xf0,20,13,126,32,5,0xf7],false],
+ [[0xf0,21,13,125,32,5,0xf7],false],[[0xf0,20,13,125,128,5,0xf7],false],
+ [[0xf0,20,13,125,32,5,1,0xf7],false],[[0xf0,20,13,125,32,5,0],false],
+]
+for(const [message,expected] of requestControls)assert.equal(allowedSoundRequest(message),expected,`Request guard: ${message}`)
+if(process.argv.includes('--request-guard-only')){
+ console.log(`PASS ${requestControls.length} request controls: calibration/settings/status reads allowed, writes/BOOT/malformed rejected`)
+ process.exit(0)
+}
 const server=createStaticServer(path.resolve(process.env.BIOTRON_QA_DIST_ROOT||path.join(__dirname,'..','dist')))
 const artifacts=process.env.AUDITION_BROWSER_OUTPUT||`/private/tmp/biotron-audition-browser-${Date.now()}`
 fs.mkdirSync(artifacts,{recursive:true})
@@ -603,9 +622,8 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   fs.writeFileSync(path.join(artifacts,'live-observations.json'),JSON.stringify(liveObservations,null,2))
   const requests=await page.evaluate(()=>window.__comparisonSent)
   fs.writeFileSync(path.join(artifacts,'midi-requests.json'),JSON.stringify(requests,null,2))
-  assert(requests.every(message=>message[0]===0xf0&&message[1]===20&&message[2]===13&&message.at(-1)===0xf7&&
-   ((message.length===6&&[125,126].includes(message[3]))||(message.length===7&&message[3]===123&&message[4]===1))),
-   'Sound selection wrote settings or firmware; only calibration and Settings read-only queries are allowed')
+  assert(requests.every(allowedSoundRequest),
+   'Sound selection wrote settings or firmware; only calibration, Settings queries and exact sensor reads are allowed')
   assert.equal(await page.evaluate(()=>window.__comparisonContexts.length),liveContexts+1,'live option switching created a new audio context')
   // Stop disconnects the listener; another incoming note cannot restart sound.
   await page.getByRole('button',{name:'Stop & release',exact:true}).click();await stopped()
