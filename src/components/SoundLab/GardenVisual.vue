@@ -1,6 +1,7 @@
 <template>
-  <div ref="visual" class="garden-visual" :class="{'garden-visual--expanded':expanded}" :role="expanded?'dialog':undefined" :aria-modal="expanded?'true':undefined" :aria-label="expanded?'Biotron visual fullscreen':undefined">
+  <div ref="visual" class="garden-visual" :data-state="stage" :class="{'garden-visual--expanded':expanded}" :role="expanded?'dialog':undefined" :aria-modal="expanded?'true':undefined" :aria-label="expanded?'Biotron visual fullscreen':undefined">
     <iframe ref="frame" src="/garden/scene.html" title="Garden Anomaly — drag to rotate" tabindex="-1" sandbox="allow-scripts allow-same-origin" @load="sync" />
+    <span class="garden-state">{{ message || labels[stage] }}</span>
     <span v-if="showDragHint" class="garden-drag-hint">Drag to explore</span>
     <button ref="expand" class="garden-expand" type="button" :aria-label="expanded?'Exit fullscreen':'Open visual fullscreen'" :title="expanded?'Exit fullscreen (Esc)':'Fullscreen'" @click="toggleFullscreen">
       <svg v-if="!expanded" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5" /></svg>
@@ -10,8 +11,9 @@
 </template>
 <script>
 export default {
-  props:{stage:{type:String,default:'intro'}},
-  data(){return {expanded:false,previousOverflow:null,showDragHint:true}},
+  props:{stage:{type:String,default:'waiting'},message:{type:String,default:''}},
+  data(){return {expanded:false,previousOverflow:null,showDragHint:true,
+    labels:{waiting:'Not playing',connecting:'Starting…',calibrating:'Calibrating…',ready:'Ready to play',paused:'Sound paused',attention:'Sound stopped'}}},
   mounted(){
     this.listener=e=>{
       if(e.source!==this.$refs.frame?.contentWindow || e.origin!==location.origin)return;
@@ -31,7 +33,7 @@ export default {
   watch:{stage(){this.sync()}},
   methods:{
     send(data){this.$refs.frame?.contentWindow?.postMessage({type:'biotron-preview',...data},location.origin)},
-    sync(){this.send({state:['ready','revealed'].includes(this.stage)?'ready':this.stage==='calibrating'?'calibrating':'waiting'})},
+    sync(){this.send({state:this.stage})},
     note(on,pitch,velocity){this.send(on?{noteOn:true,pitch,velocity}:{noteOff:true,pitch})},
     toggleFullscreen(){
       if(this.expanded){this.closeFullscreen();return}
@@ -47,7 +49,13 @@ export default {
 </script>
 <style scoped>
 .garden-visual{position:relative;width:100%;max-width:320px;aspect-ratio:1;justify-self:center;overflow:visible}
-.garden-visual iframe{display:block;position:absolute;left:-10%;top:-10%;width:120%;height:120%;border:0;background:transparent;pointer-events:auto}
+.garden-visual iframe{display:block;position:absolute;left:-10%;top:-10%;width:120%;height:120%;border:0;background:transparent;pointer-events:auto;transition:opacity .2s,filter .2s}
+.garden-state{position:absolute;z-index:2;top:0;left:50%;transform:translateX(-50%);width:max-content;max-width:100%;padding:4px 12px;border-radius:16px;background:#fbfaf7;color:#514465;font-size:12px;text-align:center;pointer-events:none}
+.garden-visual[data-state=attention] iframe{opacity:.4;filter:grayscale(1)}
+.garden-visual[data-state=attention] .garden-state{border-left:3px solid #a95118;color:#783610}
+.garden-visual[data-state=paused] iframe{opacity:.65}
+.garden-visual[data-state=connecting]::before{content:'';position:absolute;inset:8%;border:2px solid transparent;border-top-color:#7663bc;border-radius:50%;animation:garden-connecting 1.6s linear infinite;pointer-events:none;z-index:1}
+@keyframes garden-connecting{to{transform:rotate(360deg)}}
 .garden-drag-hint{position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-size:11px;color:#827b8d;pointer-events:none}.garden-visual--expanded .garden-drag-hint{bottom:24px}
 .garden-expand{position:absolute;z-index:3;touch-action:manipulation;right:0;bottom:0;display:grid;place-items:center;width:44px;height:44px;border:1px solid rgba(82,73,110,.18);border-radius:50%;background:rgba(251,250,247,.88);color:#645a83;box-shadow:0 3px 14px rgba(48,39,99,.07);cursor:pointer;transition:background .18s,transform .18s}
 .garden-expand:hover{background:#eeeaf4;transform:scale(1.06)}
@@ -56,6 +64,8 @@ export default {
 .garden-visual--expanded{position:fixed;inset:0;z-index:10000;width:100%;height:100%;max-width:none;aspect-ratio:auto;background:#fbfaf7;overflow:hidden}
 .garden-visual--expanded iframe{width:min(100vw,100dvh);height:min(100vw,100dvh);left:50%;top:50%;transform:translate(-50%,-50%)}
 .garden-visual--expanded .garden-expand{position:fixed;pointer-events:auto;right:max(24px,env(safe-area-inset-right));top:max(24px,env(safe-area-inset-top));bottom:auto;background:#fbfaf7}
+.garden-visual--expanded .garden-state{top:24px}
+.garden-visual--expanded[data-state=connecting]::before{inset:auto;width:min(70vw,70dvh);aspect-ratio:1;top:50%;left:50%;translate:-50% -50%}
 @media(max-width:640px){.garden-visual:not(.garden-visual--expanded){width:min(76vw,320px)}}
-@media(prefers-reduced-motion:reduce){.garden-expand{transition:none}}
+@media(prefers-reduced-motion:reduce){.garden-expand,.garden-visual iframe{transition:none}.garden-visual::before{animation:none!important}}
 </style>

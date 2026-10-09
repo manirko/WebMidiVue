@@ -84,6 +84,79 @@ async function openSoundHelp(page) {
     'Opening sound help shifted the visual in the document')
 }
 
+async function verifyGardenStates(page, origin) {
+  await page.addInitScript(() => {
+    document.addEventListener('click', event => {
+      if (event.target.closest('button')?.textContent.trim() !== 'Start listening') return
+      const clickedAt = performance.now()
+      const observer = new MutationObserver(() => {
+        if (document.querySelector('.garden-visual')?.dataset.state !== 'connecting') return
+        window.__visualStartMs = performance.now() - clickedAt
+        observer.disconnect()
+      })
+      observer.observe(document.documentElement, {subtree: true, attributes: true, childList: true})
+    }, true)
+  })
+  await page.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
+  const visual = page.locator('.garden-visual')
+  const state = value => visual.and(page.locator(`[data-state="${value}"]`))
+  await visual.waitFor()
+  await page.evaluate(() => window.__deferSoundOpen())
+  await page.getByRole('button', {name: 'Start listening', exact: true}).click()
+  await state('connecting').waitFor()
+  await page.waitForFunction(() => window.__soundInput.connection === 'opening')
+  const milliseconds = await page.evaluate(() => window.__visualStartMs)
+  assert(milliseconds >= 0 && milliseconds < 250, `Visual start feedback took ${milliseconds}ms`)
+  assert.equal(await visual.locator('.garden-state').innerText(), 'Starting…')
+  assert.notEqual(await visual.evaluate(element => getComputedStyle(element, '::before').animationName), 'none')
+  const evidence = process.env.BIOTRON_TEST_EVIDENCE_DIR
+  if (evidence) await page.screenshot({path: path.join(evidence, 'garden-connecting.png'), timeout: 2000})
+  await page.evaluate(() => window.__finishSoundOpen())
+  await page.locator('.sound-lab[data-reveal-stage="settling"]').waitFor()
+  await state('connecting').waitFor()
+  await page.evaluate(() => {
+    const nonce = window.__soundMidiSent.filter(message => message[3] === 125).at(-1)[4]
+    window.__emitSoundMidi([0xf0, 0x0b, 125, nonce, 2, 0xf7])
+  })
+  await state('calibrating').waitFor()
+  await page.evaluate(() => {
+    const nonce = window.__soundMidiSent.filter(message => message[3] === 125).at(-1)[4]
+    window.__emitSoundMidi([0xf0, 0x0b, 125, nonce, 3, 0xf7])
+  })
+  await state('ready').waitFor()
+  await page.evaluate(() => window.__soundContext.suspend())
+  await state('paused').waitFor()
+  await page.getByRole('button', {name: 'Resume sound', exact: true}).click()
+  await state('ready').waitFor()
+  await page.evaluate(() => window.__setSoundInputState('disconnected'))
+  await state('attention').waitFor()
+  assert.equal(await visual.locator('.garden-state').innerText(), 'Connection lost')
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('.garden-visual iframe')).opacity === '0.4')
+  assert.equal(await page.locator('.sound-lab').getAttribute('data-active-voices'), '0')
+  if (evidence) await page.screenshot({path: path.join(evidence, 'garden-disconnected.png'), timeout: 2000})
+  await page.getByRole('button', {name: 'Stop & release', exact: true}).click()
+  await state('waiting').waitFor()
+  assert.equal(await page.evaluate(() => window.__soundInput.connection), 'closed')
+  await page.setViewportSize({width: 320, height: 568})
+  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Visual state overflows 320px')
+  await page.emulateMedia({reducedMotion: 'reduce'})
+  await page.evaluate(() => { window.__setSoundInputState('connected'); window.__deferSoundOpen() })
+  await page.getByRole('button', {name: 'Start listening', exact: true}).click()
+  await state('connecting').waitFor()
+  await page.waitForFunction(() => window.__soundInput.connection === 'opening')
+  assert.equal(await visual.evaluate(element => getComputedStyle(element, '::before').animationName), 'none')
+  await page.getByRole('button', {name: 'Open visual fullscreen', exact: true}).click()
+  await page.getByRole('dialog', {name: 'Biotron visual fullscreen'}).waitFor()
+  await page.getByRole('button', {name: 'Exit fullscreen', exact: true}).click()
+  assert.equal(await page.getByRole('dialog', {name: 'Biotron visual fullscreen'}).count(), 0)
+  assert.notEqual(await page.evaluate(() => document.body.style.overflow), 'hidden')
+  await page.evaluate(() => window.__finishSoundOpen())
+  await page.locator('.sound-lab[data-reveal-stage="settling"]').waitFor()
+  await page.getByRole('button', {name: 'Stop & release', exact: true}).click()
+  await state('waiting').waitFor()
+  console.log(`PASS garden states: trusted click→feedback ${milliseconds.toFixed(1)}ms, deferred connect/calibration/ready/pause/resume/disconnect/Stop/reduced motion; synthetic MIDI only`)
+}
+
 async function verifyCapabilityFallbacks(browser, origin) {
   const audioOnlyContext = await browser.newContext()
   audioOnlyContext.setDefaultTimeout(5000)
@@ -511,6 +584,21 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     const page = await context.newPage()
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
+    if (process.argv.includes('--visual-only')) {
+      const evidence = process.env.BIOTRON_TEST_EVIDENCE_DIR
+      if (evidence) fs.mkdirSync(evidence, {recursive: true})
+      await verifyGardenStates(page, origin).catch(async error => {
+        if (evidence) {
+          fs.writeFileSync(path.join(evidence, 'garden-first-fault.json'), JSON.stringify({error: error.stack,
+            beforeCleanup: true, url: page.url(), browser: browser.version()}, null, 2))
+          await page.screenshot({path: path.join(evidence, 'garden-first-fault.png'), timeout: 2000}).catch(() => {})
+        }
+        throw error
+      })
+      assert.deepStrictEqual(errors, [])
+      console.log('PASS visual development subset; remaining full sound suite NOT RUN')
+      return
+    }
     const devtools = browser.browserType().name() === 'chromium' ? await context.newCDPSession(page) : null
     if (!devtools) console.log('NOT SUPPORTED: CDP CPU throttle, JS heap and realtime heap soak in this engine; generic audio/MIDI/lifecycle checks still run')
     await page.goto(`${origin}/#/sound`, {waitUntil: 'domcontentloaded'})
@@ -956,6 +1044,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await verifyCapabilityFallbacks(browser, origin)
     assert(telemetryEvents.some(event => event.event_name === 'session.started' && event.service_name === 'biotron'))
     assert(telemetryEvents.every(event => !('raw_midi' in event) && !('device_name' in event)))
+    await verifyGardenStates(page, origin)
     assert.deepStrictEqual(errors, [])
     if (realtimeSoak) writeSoakEvidence('PASS', 'suite-complete', realtimeSoak)
     console.log(`Sound browser verified: first-play Biotron reveal, Play → Settings → Speed live-save continuity, permission/audio-only/no-audio fallbacks, 7 variants, ${devtools ? '6x-throttled' : 'unthrottled (CDP NOT SUPPORTED)'} Low CPU start ${constrainedStartMilliseconds} ms and burst ${constrainedBurstMilliseconds.toFixed(1)} ms, exclusive two-tab sound handoff, 100/100 lifecycle cycles in ${cycleMilliseconds} ms, 1000 burst ${burstMilliseconds.toFixed(1)} ms, 20000 soak ${soakMilliseconds.toFixed(1)} ms, optional real-time soak ${realtimeSoak ? `${realtimeSoak.elapsedMilliseconds} ms` : 'not requested'}, heap delta ${heapGrowth}, disconnect/background recovery and retryable release.`)

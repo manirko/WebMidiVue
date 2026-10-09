@@ -30,7 +30,7 @@
       </header>
 
       <section class="sound-lab__reveal" aria-labelledby="device-reveal-title">
-        <GardenVisual ref="garden" :stage="revealStage" />
+        <GardenVisual ref="garden" :stage="visualStage" :message="revealIssue?.title || (releaseBlocked ? 'Release did not finish' : '')" />
         <div class="sound-lab__reveal-copy">
           <small v-if="recognizedInput && revealStage !== 'intro'" class="sound-lab__recognized" :title="recognizedInput">Device connected</small>
           <h2 id="device-reveal-title">{{ revealStage === 'revealed' ? (midiActive ? 'Notes arriving' : 'Ready for the next note') : revealCopy.heading }}</h2>
@@ -234,6 +234,14 @@ export default {
   },
   computed: {
     revealMode() { return this.mode === 'reveal' },
+    visualStage() {
+      if (this.releaseBlocked || this.revealIssue || this.audioState === 'error') return 'attention'
+      if (this.starting) return this.revealStage === 'intro' || this.audioStarting || this.midiOpening || this.permissionPending ? 'connecting' : 'paused'
+      if (this.engine && this.audioState !== 'running') return 'paused'
+      if (this.revealStage === 'settling') return 'connecting'
+      return this.keyboardOn || this.examplePlaying || this.revealStage === 'revealed' ? 'ready'
+        : this.revealStage === 'intro' ? 'waiting' : this.revealStage
+    },
     audition() { return this.profileId === 'biotron' ? soundSessionState.audition : null },
     selectedSound() {
       const cue = this.examplePlaying || soundSessionState.calibrating || (this.keyboardOn && !this.recognizedInput)

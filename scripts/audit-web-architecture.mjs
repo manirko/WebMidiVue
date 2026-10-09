@@ -82,12 +82,14 @@ const report = {
 // 08.10.2026 explicit handpan request: +37 source lines in existing voice/bank
 // files for three bounded modal rings + six native presets. No new engine,
 // dependency, source file or voice pool; retain 25KiB lazy audio and all safety caps.
+// 09.10.2026 explicit visual-state feedback: +18 presentation lines in the
+// existing two components. MIDI/audio effects, files, dependencies and pools unchanged.
 const limits = {
   eagerDeviceRouteImports: 0,
   sleepCalls: 0,
   unmanagedListenerFiles: 0,
   sourceFiles: 70,
-  sourceLines: 10679,
+  sourceLines: 10697,
   largestProductFileLines: 850
 }
 const violations = [

@@ -687,7 +687,7 @@ const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
 motionQuery.addEventListener('change', e => { motionPaused = e.matches; renderFrame(); });
 addEventListener('message', e => {
   if(e.source !== parent || e.origin !== location.origin || e.data?.type !== 'biotron-preview') return;
-  if(e.data.state) demoState = e.data.state;
+  if(e.data.state) { demoState = e.data.state; if(demoState !== 'ready') activityUntil = 0; }
   if(typeof e.data.paused === 'boolean') motionPaused = e.data.paused || motionQuery.matches;
   if(e.data.noteOn && demoState === 'ready') {
     setPitchColour(e.data.pitch);
@@ -706,7 +706,8 @@ addEventListener('message', e => {
 });
 function renderFrame() {
   if(document.hidden) return;
-  const connected = demoState === 'ready' || demoState === 'calibrating';
+  const connecting = demoState === 'connecting';
+  const connected = connecting || demoState === 'ready' || demoState === 'calibrating';
   const active = connected && !motionPaused;
   const noteActive = demoState === 'ready' && performance.now() < activityUntil;
   const calibrating = demoState === 'calibrating';
@@ -715,7 +716,7 @@ function renderFrame() {
 
   timer.update();
   const rdt = Math.min(timer.getDelta(), 1 / 30);
-  const dt = active ? rdt * (calibrating ? .22 : prm.simSpeed) : 0;
+  const dt = active && !connecting ? rdt * (calibrating ? .22 : prm.simSpeed) : 0;
   if (dt > 0 && !calibrating) { step(dt); updateBulges(dt); }
   calibrationMix += ((calibrating?1:0)-calibrationMix)*(1-Math.exp(-rdt*3));
   calibrationTime += active ? rdt : 0;
@@ -735,7 +736,7 @@ function renderFrame() {
   }
   if(active && demoState === 'ready') updateCellColours(rdt);
   const autoRotate = active && !manualDrag && performance.now() > manualUntil;
-  shell.rotation.y += autoRotate ? (calibrating ? -5.0 : noteActive ? prm.rotY : .035) * rdt : 0; // constant spin, independent of simSpeed
+  shell.rotation.y += autoRotate ? (connecting ? .8 : calibrating ? -5.0 : noteActive ? prm.rotY : .035) * rdt : 0; // constant spin, independent of simSpeed
   shell.rotation.x += autoRotate ? (calibrating ? .025 : .012) * rdt : 0;
   window.__scanU.uScan.value = (window.__scanU.uScan.value + (calibrating ? .35 : prm.scanSpeed) * dt) % 1;
 

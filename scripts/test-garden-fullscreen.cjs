@@ -80,3 +80,63 @@ pressureContext.updateBulges(12);
 assert(Math.max(...pressureContext.bulgeVecs.map(v=>Math.abs(v.w)))<1e-8,'shell did not return to its resting shape');
 assert([...pressureContext.P,...pressureContext.V,...pressureContext.bulgeA,...pressureContext.bulgeAge].every(Number.isFinite));
 console.log(`PASS: real contact/envelope pressure gentle=${gentlePressure.toFixed(4)}, playing=${playingPressure.toFixed(4)}, strong=${strongPressure.toFixed(4)}; bounded and relaxed to rest`);
+
+// Run the actual draw function: connecting must rotate before any notes arrive,
+// without running the music physics. Inactive/reduced-motion views must stop.
+const drawStart=scene.indexOf('function renderFrame() {');
+const drawEnd=scene.indexOf('\n}',drawStart)+2;
+function drawFixture(state,paused=false) {
+  const stats={steps:0,bulges:0,draws:0};
+  const position={set(){return this},addScaledVector(){return this},copy(){return this},multiplyScalar(){return this}};
+  const draw={document:{hidden:false,getElementById:()=>({hidden:false})},performance:{now:()=>100},
+    demoState:state,motionPaused:paused,firstFrame:true,announced:true,activityUntil:0,manualUntil:0,manualDrag:false,
+    calibrationMix:0,calibrationTime:0,timer:{update(){},getDelta:()=>1/30},prm:{simSpeed:.37,rotY:.7,scanSpeed:.1},
+    step(){stats.steps++},updateBulges(){stats.bulges++},updateCellColours(){},shell:{rotation:{x:0,y:0}},
+    window:{__scanU:{uScan:{value:0}}},camera:{getWorldDirection(){},quaternion:{},matrixWorld:{extractBasis(){}}},
+    glow:{position,quaternion:{copy(){}}},shadow:{position,quaternion:{copy(){}}},
+    controls:{update(){}},pipeline:{render(){stats.draws++}},_back:{},_bx:{},_by:{},_bz:{},
+    N_BLOBS:0,blobs:{instanceMatrix:{}},parent:{postMessage(){}},location:{origin:'https://fixture'}};
+  vm.runInNewContext(scene.slice(drawStart,drawEnd),draw);
+  return {draw,stats};
+}
+let draw=drawFixture('connecting');draw.draw.renderFrame();
+assert(draw.draw.shell.rotation.y>0,'connecting sphere stayed frozen');
+assert.equal(draw.stats.steps,0,'connecting ran music physics');
+assert.equal(draw.stats.bulges,0,'connecting pretended to receive notes');
+for(const state of ['waiting','attention','paused']) {
+  draw=drawFixture(state);draw.draw.renderFrame();draw.draw.renderFrame();
+  assert.equal(draw.draw.shell.rotation.y,0,`${state} continued spinning`);
+  assert.equal(draw.stats.steps,0,`${state} continued music physics`);
+  assert.equal(draw.stats.draws,1,`${state} kept repainting without interaction`);
+}
+for(const state of ['connecting','calibrating','ready']) {
+  draw=drawFixture(state,true);draw.draw.renderFrame();draw.draw.renderFrame();
+  assert.equal(draw.draw.shell.rotation.y,0,`${state} ignored reduced motion`);
+  assert.equal(draw.stats.steps,0,`${state} ran reduced-motion physics`);
+}
+draw=drawFixture('ready');draw.draw.renderFrame();assert.equal(draw.stats.steps,1,'ready lost music physics');
+console.log('PASS: immediate connecting rotation without music physics; inactive/reduced-motion views remain still');
+
+// Derive presentation from the existing live state; never mutate session data.
+const labSource=fs.readFileSync('src/components/SoundLab/SoundLab.vue','utf8');
+const stateMethod=labSource.match(/visualStage\(\) \{([\s\S]*?)\n    \},/);
+assert(stateMethod,'Play is not wired to the visual state');
+const visualStage=vm.runInNewContext('(function(){'+stateMethod[1]+'})');
+const cases=[
+  [{},'waiting'],[{starting:true},'connecting'],[{revealStage:'settling',engine:{},audioState:'running'},'connecting'],
+  [{revealStage:'calibrating',engine:{},audioState:'running'},'calibrating'],
+  [{revealStage:'revealed',engine:{},audioState:'running'},'ready'],
+  [{keyboardOn:true,engine:{},audioState:'running'},'ready'],
+  [{revealStage:'settling',engine:{},audioState:'suspended'},'paused'],
+  [{revealStage:'revealed',starting:true,engine:{},audioState:'running'},'paused'],
+  [{starting:true,revealIssue:{title:'Connection lost'}},'attention'],
+  [{releaseBlocked:true},'attention'],[{audioState:'error'},'attention']
+];
+for(const [changes,expected] of cases) {
+  const session=Object.freeze({revealStage:'intro',audioState:'closed',...changes});
+  assert.equal(visualStage.call(session),expected);
+  const delivered=[];
+  component.methods.sync.call({stage:expected,send:value=>delivered.push(value)});
+  assert.equal(delivered[0].state,expected,'scene received a different presentation state');
+}
+console.log('PASS:11 existing session-state combinations derive presentation only; scene receives the same state');
