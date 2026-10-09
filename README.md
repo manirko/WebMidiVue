@@ -265,8 +265,18 @@ The browser lifecycle test uses an installed Chrome/Chromium (`CHROME_PATH` can
 override discovery) and covers service-worker install/control, offline direct
 navigation, the offline firmware guard, and a non-disruptive waiting update.
 
-### Lints and fixes files
+### Lint and build gates
+
+`npm run test:lint` checks without changing files. All three `npm run build*`
+commands run it before webpack; use these commands for candidate builds.
+`npm run lint` explicitly applies fixes. Both use the existing ESLint rules
+and cover `src` JavaScript/JSX/Vue files and root JavaScript configs.
+The old Vue CLI ESLint plugin and its unused Git-hook dependency were removed.
+The development server no longer lints on every hot save; run `test:lint`
+when reviewing edits. Direct `vue-cli-service build` bypasses this npm gate.
+
 ```
+npm run test:lint
 npm run lint
 ```
 
