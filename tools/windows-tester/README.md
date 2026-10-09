@@ -189,3 +189,12 @@ firmware-owner и human gates. В репозитории только helper sou
 Метод: [Playwright persistent context](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-persistent-context)
 с отдельным user data directory; [Python local HTTP server](https://docs.python.org/3/library/http.server.html)
 используется только на loopback для внутреннего теста. Helper draft9 октября2026; physical Windows/DAW/1.10.11 NOT RUN.
+
+## Автоматические Windows guard-тесты
+
+`.github/workflows/windows-tester.yml` запускает существующие helper selftests
+на hosted Windows2022: Python3.10/Node20 и Python3.14/Node24. Первый результат,
+точный commit, версии и SHA логов сохраняются как CI artifacts даже при FAIL.
+Триггер ограничен helper/workflow изменениями текущей codex-ветки. Это проверка
+переносимости тестировщика; реальные Windows/DAW, USB, звук и прошивка остаются
+отдельными W01–W14. Workflow не собирает или публикует сайт.

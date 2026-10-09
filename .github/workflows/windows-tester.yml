@@ -1,0 +1,84 @@
+name: Windows tester guards
+
+on:
+  push:
+    branches: [codex/biotron-web-firmware-11010-20261008]
+    paths: [tools/windows-tester/**, .github/workflows/windows-tester.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  helper:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: '3.10'
+            node: '20'
+          - python: '3.14'
+            node: '24'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Run real helper guards and retain their first result
+        shell: python
+        run: |
+          import datetime, hashlib, json, os, pathlib, platform, re, subprocess, sys
+          output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'windows-tester-evidence'
+          output.mkdir()
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          def version(*args):
+              return subprocess.check_output(args, text=True).strip()
+          record = {'at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    'head': git('rev-parse', 'HEAD'), 'system': platform.system(),
+                    'os': platform.platform(), 'python': sys.version, 'node': version('node', '--version'),
+                    'scope': 'Hosted Windows helper guards; physical DAW/USB/flash NOT RUN', 'steps': []}
+          def as_text(value):
+              return value.decode(errors='replace') if isinstance(value, bytes) else (value or '')
+          for captured in [b'partial', 'partial', None]:
+              error = subprocess.TimeoutExpired('fixture', 120, output=captured, stderr=captured)
+              assert as_text(error.stdout) + as_text(error.stderr) == ('partialpartial' if captured else '')
+          record['timeout_output_type_checks'] = 3
+          commands = [('syntax', ['node', '--check', 'tools/windows-tester/capture-browser.cjs']),
+                      ('guards', [sys.executable, '-IB', 'tools/windows-tester/test_tester.py'])]
+          for name, command in commands:
+              try:
+                  result = subprocess.run(command, text=True, capture_output=True, timeout=120)
+                  code, text = result.returncode, result.stdout + result.stderr
+              except subprocess.TimeoutExpired as error:
+                  code, text = 124, 'TIMEOUT\n' + as_text(error.stdout) + as_text(error.stderr)
+              except OSError as error:
+                  code, text = 127, 'RUNTIME_UNAVAILABLE: ' + str(error)
+              log = output / (name + '.log')
+              log.write_text(text, encoding='utf-8')
+              record['steps'].append({'name': name, 'exit_code': code, 'log': log.name,
+                                      'sha256': hashlib.sha256(log.read_bytes()).hexdigest()})
+              print(name, code, text, flush=True)
+          count = re.search(r'Ran (\d+) tests', (output / 'guards.log').read_text(encoding='utf-8'))
+          record['guard_count'] = int(count.group(1)) if count else 0
+          record['working_tree'] = git('status', '--porcelain=v1')
+          passed = record['system'] == 'Windows' and record['head'] == os.environ['GITHUB_SHA'] and not record['working_tree']
+          passed = passed and record['guard_count'] >= 14 and all(step['exit_code'] == 0 for step in record['steps'])
+          record['status'] = 'PASS' if passed else 'FAIL'
+          (output / 'summary.json').write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
+          sys.exit(0 if passed else 1)
+      - name: Preserve logs even on failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-helper-${{ matrix.python }}-node${{ matrix.node }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/windows-tester-evidence/
+          if-no-files-found: error
+          retention-days: 14
