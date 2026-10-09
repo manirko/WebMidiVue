@@ -108,7 +108,24 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  assert next(row for row in rows if row['test']=='test:ui-performance')['result']=='PASS'
  assert next(row for row in rows if row['test']=='test:lint')['result']=='PASS'
  assert next(row for row in rows if row['test']=='test:browser-harness')['result']=='PASS'
- for arguments in [['--soak-seconds','600'],['--browser','--soak-seconds','-1'],['--browser','--soak-seconds','28801'],['--timeout','nan'],['--timeout','inf']]:
+ # Matrix lanes must propagate the requested browser and keep failures separate.
+ npm.write_text('#!/bin/sh\ncase "$BIOTRON_QA_BROWSER" in firefox) echo firefox-fault; exit 9;; *) echo fixture-pass;; esac\n')
+ matrix = subprocess.run([sys.executable,str(runner),'--output',str(output),'--browser','--browsers','firefox,webkit'],env=environment,capture_output=True,text=True,timeout=15)
+ assert matrix.returncode == 1, matrix.stdout+matrix.stderr
+ latest = max(output.iterdir(),key=lambda p:p.stat().st_mtime_ns)
+ rows = [json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
+ for script in ['test:firmware:browser','test:sound:browser','test:pwa:browser','test:quality:browser','test:auditions:browser','test:playtron-variants:browser','test:scales-variants:browser','test:touchme-variants:browser']:
+  firefox = next(row for row in rows if row['test']==script+'@firefox')
+  webkit = next(row for row in rows if row['test']==script+'@webkit')
+  assert firefox['result']=='FAIL' and firefox['exit_code']==9 and firefox['browser']=='firefox'
+  assert webkit['result']=='PASS' and webkit['browser']=='webkit'
+  assert firefox['command']==['npm','run','test:firmware:browser:compiled' if script=='test:firmware:browser' else script]
+ names=[row['test'] for row in rows]
+ assert names.count('test:firmware:browser')==1 and names.count('test:beta-build')==1
+ assert names.index('test:firmware:browser@webkit') < names.index('test:beta-build') < names.index('test:sound:browser@firefox')
+ assert len([row for row in rows if '@' in row['test']])==16
+ npm.write_text('#!/bin/sh\necho fixture-pass\n')
+ for arguments in [['--soak-seconds','600'],['--browser','--soak-seconds','-1'],['--browser','--soak-seconds','28801'],['--timeout','nan'],['--timeout','inf'],['--browsers','firefox'],['--browser','--browsers','firefox,firefox'],['--browser','--browsers','../unowned'],['--browser','--browsers','safari']]:
   invalid = subprocess.run([sys.executable,str(runner),'--output',str(output),*arguments],env=environment,capture_output=True,text=True,timeout=5)
   assert invalid.returncode==2 and 'error:' in invalid.stderr, arguments
  npm.write_text('#!/bin/sh\ncase "$2" in test:ui-performance) echo fixture-inconclusive; exit 2;; *) echo fixture-pass;; esac\n')
@@ -127,4 +144,42 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  latest = max(output.iterdir(),key=lambda p:p.stat().st_mtime_ns)
  rows = [json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
  assert len(rows) == 1 and rows[0]['result'] == 'INTERRUPTED', rows
+ assert rows[0]['cleanup_confirmed'], rows[0]
+ # A browser in its own process group must still be released after a timeout.
+ # The first fixture survives SIGINT and owns a detached child; an unrelated
+ # control process must remain alive. No actual user/browser process is targeted.
+ detached=root/'detached-child.json'
+ npm.write_text('#!'+sys.executable+'\nimport os,signal,subprocess,sys,time,json\nfrom pathlib import Path\nif sys.argv[2]=="test:lint":\n signal.signal(signal.SIGINT,signal.SIG_IGN)\n child=subprocess.Popen([sys.executable,"-c","import signal,time;signal.signal(signal.SIGINT,signal.SIG_IGN);time.sleep(60)"],start_new_session=True)\n Path(os.environ["QA_CHILD_FILE"]).write_text(json.dumps({"pid":child.pid}))\n time.sleep(60)\nelse: print("fixture-pass")\n')
+ unrelated=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],start_new_session=True)
+ try:
+  environment['QA_CHILD_FILE']=str(detached)
+  timed=subprocess.run([sys.executable,str(runner),'--output',str(output),'--timeout','0.4'],env=environment,capture_output=True,text=True,timeout=25)
+  assert timed.returncode==1,timed.stdout+timed.stderr
+  assert detached.exists(),'Detached fixture never started'
+  latest=pathlib.Path(next(line.removeprefix('Evidence: ') for line in timed.stdout.splitlines() if line.startswith('Evidence: ')))
+  rows=[json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
+  assert rows,timed.stdout+timed.stderr
+  assert rows[0]['result']=='TIMEOUT' and rows[0]['cleanup_confirmed'],rows[0]
+  assert rows[1]['result']=='PASS','Next lane started only after confirmed cleanup'
+  assert unrelated.poll() is None,'Unrelated control was terminated'
+  child_pid=json.loads(detached.read_text())['pid']
+  probe=subprocess.run(['ps','-p',str(child_pid),'-o','stat='],text=True,capture_output=True)
+  assert probe.returncode!=0 or probe.stdout.strip().startswith('Z'), 'Detached child survived'
+ finally:
+  unrelated.terminate();unrelated.wait(timeout=5)
+ # If ancestry is lost before cleanup, the runner must stop rather than
+ # report an empty ownership set as successful browser release.
+ npm.write_text('#!'+sys.executable+'\nimport subprocess,sys,time,json,os\nfrom pathlib import Path\nchild=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"],start_new_session=True)\nstarted=subprocess.check_output(["ps","-p",str(child.pid),"-o","lstart="],text=True).strip()\nPath(os.environ["QA_CHILD_FILE"]).write_text(json.dumps({"pid":child.pid,"started":started}))\n')
+ try:
+  lost=subprocess.run([sys.executable,str(runner),'--output',str(output),'--timeout','0.4'],env=environment,capture_output=True,text=True,timeout=25)
+  assert lost.returncode==1,lost.stdout+lost.stderr
+  latest=pathlib.Path(next(line.removeprefix('Evidence: ') for line in lost.stdout.splitlines() if line.startswith('Evidence: ')))
+  rows=[json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
+  assert rows[0]['result']=='TIMEOUT' and not rows[0]['cleanup_confirmed'],rows
+  assert all(row['result']=='NOT RUN' for row in rows[1:]),rows
+ finally:
+  identity=json.loads(detached.read_text())
+  probe=subprocess.run(['ps','-p',str(identity['pid']),'-o','lstart='],text=True,capture_output=True)
+  if probe.returncode==0 and probe.stdout.strip()==identity['started']:
+   os.kill(identity['pid'],signal.SIGTERM)
  print('QA runner: source-boundary controls; soak timeout/arguments, invalid options, browser skip, strict incomplete gate, interruption, failure, timeout and immutable checksummed evidence passed')

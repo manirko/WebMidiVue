@@ -1,19 +1,34 @@
 const assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs')
-const {chromium,devices}=require('playwright-core')
-const {chromePath,createStaticServer}=require('./browser-test-harness')
+const {devices}=require('playwright-core')
+const {launchBrowser,contextOptions,createStaticServer}=require('./browser-test-harness')
 const server=createStaticServer(path.resolve(process.env.BIOTRON_QA_DIST_ROOT||path.join(__dirname,'..','dist')))
 const artifacts=process.env.AUDITION_BROWSER_OUTPUT||`/private/tmp/biotron-audition-browser-${Date.now()}`
 fs.mkdirSync(artifacts,{recursive:true})
 let page,stage='launch',starts=0
+const deadlineMs=Number(process.env.AUDITION_BROWSER_TIMEOUT_MS||300000)
+assert(Number.isFinite(deadlineMs)&&deadlineMs>0,'AUDITION_BROWSER_TIMEOUT_MS must be finite and positive')
 const progress=[]
 const mark=value=>{stage=value;progress.push({stage,starts,at:new Date().toISOString()});fs.writeFileSync(path.join(artifacts,'progress.json'),JSON.stringify(progress,null,2))}
 const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()=>resolve({unavailable:'page did not respond within 1500ms'}),1500))])
 ;(async()=>{
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
- const browser=await chromium.launch({executablePath:chromePath(),headless:true})
+ const browser=await launchBrowser()
+ fs.writeFileSync(path.join(artifacts,'browser.json'),JSON.stringify({requested:process.env.BIOTRON_QA_BROWSER||'chrome',engine:browser.browserType().name(),version:browser.version()},null,2))
+ let deadlineExpired=false
+ const deadline=setTimeout(()=>{
+  deadlineExpired=true;process.exitCode=1
+  void (async()=>{
+  const file=path.join(artifacts,'failure.json')
+  if(!fs.existsSync(file))fs.writeFileSync(file,JSON.stringify({stage,starts,error:`Browser attempt exceeded ${deadlineMs}ms`,kind:'TIMEOUT'},null,2))
+  console.error(`TIMEOUT at ${stage}; closing only this test browser`)
+  await boundedCapture(page?.screenshot({path:path.join(artifacts,'timeout.png'),timeout:1000}).catch(()=>{}))
+  await browser.close()
+  })().catch(error=>console.error(`Deadline cleanup failed: ${error.message}`))
+ },deadlineMs)
  try{
   const context=await browser.newContext({viewport:{width:1366,height:900}})
   await context.addInitScript(()=>{
+   window.__nativeCapabilities={midi:typeof navigator.requestMIDIAccess==='function',audio:typeof window.AudioContext==='function',secure:isSecureContext}
    window.__comparisonContexts=[];window.__comparisonMidiRequests=0
    window.__comparisonValues=[];window.__comparisonProperties=new Map();window.__keyboardRefsByGate=new Map()
    window.__keyboardEvents=[]
@@ -118,6 +133,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   }
   await page.goto(`http://127.0.0.1:${server.address().port}/#/biotron/compare`)
   await waitCompareAlias()
+  fs.writeFileSync(path.join(artifacts,'native-capabilities.json'),JSON.stringify(await page.evaluate(()=>window.__nativeCapabilities),null,2))
   const stopped=async()=>{
    await page.locator('.sound-lab[data-example="idle"][data-active-voices="0"][data-example-timers="0"][data-audio-state="closed"]').waitFor({state:'attached'})
    assert(await page.evaluate(()=>window.__comparisonContexts.every(context=>context.state==='closed')),'Stop left an open AudioContext')
@@ -329,6 +345,17 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
     assert.equal(await page.evaluate(()=>window.__comparisonMidiRequests),bankMidiRequests,'keyboard option requested MIDI')
    }
   }
+  const levelObservations=keyboardBanks.map(bank=>{
+   const rows=keyboardObservations.filter(row=>row.bank===bank.id)
+   const levels=rows.map(row=>20*Math.log10(row.rms)).sort((a,b)=>a-b)
+   const median=levels[Math.floor(levels.length/2)]
+   return {bank:bank.id,medianSampleRmsDb:median,rows:rows.map(row=>({id:row.id,
+    sampleRmsDb:20*Math.log10(row.rms),belowMedianDb:median-20*Math.log10(row.rms),
+    advisory:bank.id==='calibration'?'Intentional low-velocity cue; separate listening acceptance':
+     median-20*Math.log10(row.rms)>8?'Review attack and level; this short sample is not perceived loudness':'No short-sample level advisory'}))}
+  })
+  fs.writeFileSync(path.join(artifacts,'keyboard-level-observations.json'),JSON.stringify({
+   scope:'Advisory only: brief real-time analyser windows at the same bank octave/velocity/volume. No LUFS, loudness normalization or perceptual PASS.',banks:levelObservations},null,2))
   assert.equal(await page.evaluate(()=>window.__comparisonContexts.length),keyboardContexts,'keyboard selection made another renderer')
   assert.equal(await page.evaluate(()=>window.__comparisonMidiRequests),keyboardMidiRequests+settingsMidiRequests-keyboardSettingsRequests,'keyboard requested MIDI outside Settings navigation')
   await selectBank('Timbres')
@@ -448,8 +475,9 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
    await page.waitForTimeout(80)
    const state=await actual(440*2**((62-69)/12+option.preset.cv.octave))
    handpan.push({id:option.id,...state})
+   fs.writeFileSync(path.join(artifacts,'handpan-midi.json'),JSON.stringify(handpan,null,2))
    assert.equal(state.count,0,option.id+': short MIDI note remained held')
-   assert(state.rms>.001&&state.modes.every(energy=>energy>1e-7),option.id+': short note did not leave three audible rings')
+   assert(state.rms>.001&&state.modes.every(energy=>energy>1e-7),option.id+': short note did not leave three audible rings '+JSON.stringify(state))
   }
   fs.writeFileSync(path.join(artifacts,'handpan-midi.json'),JSON.stringify(handpan,null,2))
   mark('chosen handpan survives Settings/Play and independent experiment disclosure')
@@ -625,7 +653,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   assert.equal(await keyboardPlay.evaluate(()=>window.__keyboardMidi),0,'cold Play keyboard asked for a device')
   await keyboardPlay.getByRole('button',{name:'Stop keyboard',exact:true}).click();await cold.close()
   for(const profile of [{viewport:{width:320,height:700}},{...devices['iPhone 15'],isMobile:false}]){
-   const mobile=await browser.newContext(profile);await mobile.addInitScript(()=>Object.defineProperty(navigator,'requestMIDIAccess',{value:undefined,configurable:true}))
+   const mobile=await browser.newContext(contextOptions(profile,browser));await mobile.addInitScript(()=>Object.defineProperty(navigator,'requestMIDIAccess',{value:undefined,configurable:true}))
    const tab=await mobile.newPage();await tab.goto(`http://127.0.0.1:${server.address().port}/#/biotron/compare`)
    await waitCompareAlias(tab)
    assert(await tab.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth),'comparison overflows mobile')
@@ -644,9 +672,16 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   console.log(keyboardOnly ? 'Keyboard development subset:43 trusted keyboard PCM/DSP choices including Classic, focused Sound/Octave and uncancelled native control keys, C2–C7, layout/edit/IME/release guards, live MIDI and cold device-free Play; full preview/startup gate not rerun.' : `Comparison browser: ${cases}/36 real-engine option Play/Stop, 100 repeated starts/closes without timers/Blobs, cancelled module load, failed-close route protection/retry, suspend/background release, four natural completions, switch/route release, reference, no preview MIDI or inferred outcome;36 live MIDI selections, six short-gate handpan modal rings and cue-only calibration changes, persistent selection through Settings/Play/reload, independent inline sections without voting, stock reset and 320/iPhone layout passed; 43 trusted keyboard PCM/DSP choices including Classic, focused Sound/Octave and uncancelled native control keys, C2–C7, four key layouts, typing/shadow/IME/modifier guards, repeat/focus/blur/background/route/Stop, keyboard/MIDI identity isolation and no screen keys, cold audio-only Play without a MIDI request.`)
  }catch(error){
   const state=await boundedCapture(page?.evaluate(()=>({url:location.href,phase:document.querySelector('.audio-compare')?.dataset,player:document.querySelector('.sound-lab')?.dataset,contexts:window.__comparisonContexts.map(context=>({state:context.state,time:context.currentTime})),intervals:window.__comparisonIntervals.size,blobs:window.__comparisonBlobs.size,heap:performance.memory?.usedJSHeapSize})).catch(cause=>({unavailable:cause.message})))
-  fs.writeFileSync(path.join(artifacts,'failure.json'),JSON.stringify({stage,starts,error:error.message,state},null,2))
+  if(!fs.existsSync(path.join(artifacts,'failure.json')))fs.writeFileSync(path.join(artifacts,'failure.json'),JSON.stringify({stage,starts,error:error.message,state},null,2))
   await boundedCapture(page?.screenshot({path:path.join(artifacts,'failure.png'),timeout:1000}).catch(()=>{}))
   await boundedCapture(page?.context().tracing.stop({path:path.join(artifacts,'trace.zip')}).catch(()=>{}))
   throw error
- }finally{console.log(`Browser evidence: ${artifacts}`);await browser.close();await new Promise(resolve=>server.close(resolve))}
-})().catch(error=>{console.error(error);process.exitCode=1})
+ }finally{
+  console.log(`Browser evidence: ${artifacts}`)
+  try{await browser.close()}finally{clearTimeout(deadline);server.closeAllConnections();await new Promise(resolve=>server.close(resolve))}
+  if(deadlineExpired)throw new Error(`Browser deadline exceeded ${deadlineMs}ms`)
+ }
+})().catch(error=>{
+ if(!fs.existsSync(path.join(artifacts,'failure.json')))fs.writeFileSync(path.join(artifacts,'failure.json'),JSON.stringify({stage,starts,error:error.message},null,2))
+ console.error(error);process.exitCode=1;server.close()
+})

@@ -2,10 +2,9 @@ const assert = require('assert')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { chromium } = require('playwright-core')
-const {chromePath, createStaticServer} = require('./browser-test-harness')
+const {launchPersistentContext, createStaticServer} = require('./browser-test-harness')
 
-const root = path.resolve(__dirname, '..', 'dist')
+const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'biotron-pwa-profile-'))
 let origin
 let serviceWorkerVersion = 1
@@ -27,12 +26,7 @@ async function waitFor(predicate, message, timeout = 10000) {
 }
 
 async function openProfile(online, denyMidiOnce = false) {
-  context = await chromium.launchPersistentContext(profile, {
-    executablePath: chromePath(),
-    headless: true,
-    serviceWorkers: 'allow',
-    args: ['--no-first-run']
-  })
+  context = await launchPersistentContext(profile, {serviceWorkers: 'allow'})
   context.setDefaultTimeout(5000)
   await context.addInitScript(({ initiallyOnline, initiallyDenyMidi }) => {
     window.__testOnline = initiallyOnline
@@ -199,12 +193,14 @@ async function controllerVersion(page) {
   assert.strictEqual(manifest.start_url, './#/biotron/play')
   assert.strictEqual(manifest.scope, './')
   assert.strictEqual(manifest.display, 'standalone')
-  const devtools = await context.newCDPSession(page)
-  const manifestReport = await devtools.send('Page.getAppManifest')
-  assert.deepStrictEqual(manifestReport.errors || [], [], 'Chrome rejected the generated PWA manifest')
-  const installability = await devtools.send('Page.getInstallabilityErrors')
-  assert.deepStrictEqual(installability.installabilityErrors || [], [], 'Chrome reports PWA installability errors')
-  console.log('1/7 online install action, Chrome installability, active precache, manifest and MIDI denial/retry verified')
+  if (context.browser().browserType().name() === 'chromium') {
+    const devtools = await context.newCDPSession(page)
+    const manifestReport = await devtools.send('Page.getAppManifest')
+    assert.deepStrictEqual(manifestReport.errors || [], [], 'Chromium rejected the generated PWA manifest')
+    const installability = await devtools.send('Page.getInstallabilityErrors')
+    assert.deepStrictEqual(installability.installabilityErrors || [], [], 'Chromium reports PWA installability errors')
+  } else console.log('NOT SUPPORTED: Chromium CDP installability oracle; real service worker/offline/retry checks still run')
+  console.log('1/7 online install fixture, active precache, manifest and MIDI denial/retry verified; native install/permissions are separate')
 
   await closeProfile()
   page = await openProfile(false)
@@ -475,7 +471,7 @@ async function controllerVersion(page) {
   await page.getByText(/Offline mode — Settings are working without internet/i).waitFor({state: 'visible', timeout: 10000})
   console.log('7/7 Retry repairs offline setup and the same profile launches offline again')
 
-  console.log('Browser PWA verified across persistent-profile restarts: installability, offline app shell, permission/retry, MIDI setting write, firmware isolation and controlled update.')
+  console.log(`Browser PWA verified across persistent-profile restarts: offline app shell, simulated permission/retry and MIDI setting write, firmware isolation and controlled update. ${context.browser().browserType().name() === 'chromium' ? 'CDP manifest/installability checks ran.' : 'Native installability NOT SUPPORTED by this driver; OS installation NOT RUN.'}`)
 })().catch(error => {
   console.error(error)
   process.exitCode = 1

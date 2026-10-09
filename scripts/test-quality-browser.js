@@ -1,10 +1,14 @@
 const assert = require('assert')
 const path = require('path')
-const {chromium, devices} = require('playwright-core')
-const {chromePath, createStaticServer} = require('./browser-test-harness')
+const fs = require('node:fs')
+const {devices} = require('playwright-core')
+const {launchBrowser, contextOptions, createStaticServer} = require('./browser-test-harness')
 
 const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
 const server = createStaticServer(root)
+const artifacts = process.env.QUALITY_BROWSER_OUTPUT || path.join(process.env.BIOTRON_QA_OUTPUT || require('node:os').tmpdir(), `biotron-quality-${Date.now()}`)
+fs.mkdirSync(artifacts, {recursive: true})
+let currentPage
 
 const profiles = [
   {name: 'desktop', options: {viewport: {width: 1440, height: 900}}, midi: true, heading: 'Settings'},
@@ -15,7 +19,7 @@ const profiles = [
     midi: true,
     heading: 'Settings'
   },
-  {name: 'iphone-15-no-midi', options: devices['iPhone 15'], midi: false, heading: 'No MIDI in this browser'}
+  {name: 'iphone-15-no-midi', options: devices['iPhone 15'], midi: false, heading: 'Settings'}
 ]
 
 async function readQuality(page) {
@@ -71,7 +75,7 @@ function assertQuality(result, label, checkCls = true) {
   assert.strictEqual(result.lang, 'en', `${label}: document language is not English`)
   assert.strictEqual(result.mainCount, 1, `${label}: expected one main landmark`)
   assert(result.documentOverflow <= 1, `${label}: page overflows viewport by ${result.documentOverflow}px`)
-  if (checkCls) assert(result.cls <= 0.1, `${label}: CLS ${result.cls.toFixed(3)} exceeds 0.1`)
+  if (checkCls && result.cls !== null) assert(result.cls <= 0.1, `${label}: CLS ${result.cls.toFixed(3)} exceeds 0.1`)
   assert.deepStrictEqual(result.duplicateIds, [], `${label}: duplicate IDs`)
   assert.deepStrictEqual(result.unlabeledControls, [], `${label}: visible unlabeled controls`)
   assert.deepStrictEqual(result.smallRanges, [], `${label}: range target below 24px`)
@@ -80,7 +84,7 @@ function assertQuality(result, label, checkCls = true) {
 }
 
 async function auditProfile(browser, origin, profile) {
-  const context = await browser.newContext({...profile.options, reducedMotion: 'reduce'})
+  const context = await browser.newContext(contextOptions({...profile.options, reducedMotion: 'reduce'}, browser))
   context.setDefaultTimeout(5000)
   await context.addInitScript(hasMidi => {
     window.__copiedText = ''
@@ -88,8 +92,8 @@ async function auditProfile(browser, origin, profile) {
       if (window.__blockClipboard) throw Error('Injected clipboard denial')
       window.__copiedText = text
     }}})
-    window.__layoutShiftScore = 0
-    new PerformanceObserver(list => {
+    window.__layoutShiftScore = PerformanceObserver.supportedEntryTypes.includes('layout-shift') ? 0 : null
+    if (window.__layoutShiftScore !== null) new PerformanceObserver(list => {
       for (const entry of list.getEntries()) {
         if (!entry.hadRecentInput) window.__layoutShiftScore += entry.value
       }
@@ -104,10 +108,17 @@ async function auditProfile(browser, origin, profile) {
   }, profile.midi)
 
   const page = await context.newPage()
+  currentPage = page
   const pageErrors = []
   page.on('pageerror', error => pageErrors.push(error.message))
-  await page.goto(`${origin}/#/biotron`, {waitUntil: 'domcontentloaded'})
-  await page.getByRole('heading', {name: profile.heading}).waitFor()
+  try {
+    await page.goto(`${origin}/#/biotron`, {waitUntil: 'domcontentloaded'})
+    await page.getByRole('heading', {name: profile.heading}).waitFor()
+  } catch (error) {
+    fs.writeFileSync(path.join(artifacts, 'failure.json'), JSON.stringify({profile: profile.name, error: error.message}, null, 2))
+    await page.screenshot({path: path.join(artifacts, 'failure.png'), timeout: 2000}).catch(() => {})
+    throw error
+  }
   await page.getByText(/Offline mode is ready/i).waitFor({timeout: 15000})
 
   const result = await readQuality(page)
@@ -123,7 +134,7 @@ async function auditProfile(browser, origin, profile) {
     assertQuality(expanded, `${profile.name}/${state}`, false)
     expandedResults.push({state, cls: expanded.cls, overflow: expanded.documentOverflow})
   }
-  if (profile.midi) {
+  {
     await page.getByText(/Local preset — changes stay/).waitFor()
     const opened = []
     for (const name of ['Plant sensor', 'More fun', 'Light sensor', 'Experiments']) {
@@ -228,22 +239,29 @@ async function auditProfile(browser, origin, profile) {
   }
 
   await context.close()
-  return `${profile.name}: initial CLS ${result.cls.toFixed(3)}, overflow ${result.documentOverflow}px; Play CLS ${playResult.cls.toFixed(3)}; ${expandedResults.length} opened states checked`
+  const cls = value => value === null ? 'NOT MEASURABLE in this engine' : value.toFixed(3)
+  return `${profile.name}: initial CLS ${cls(result.cls)}, overflow ${result.documentOverflow}px; Play CLS ${cls(playResult.cls)}; ${expandedResults.length} opened states checked`
 }
 
 ;(async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const origin = `http://127.0.0.1:${server.address().port}`
-  const browser = await chromium.launch({executablePath: chromePath(), headless: true})
+  const browser = await launchBrowser()
   try {
     const results = []
-    for (const profile of profiles) results.push(await auditProfile(browser, origin, profile))
+    for (const profile of profiles) {
+      results.push(await auditProfile(browser, origin, profile))
+      fs.writeFileSync(path.join(artifacts, 'results.json'), JSON.stringify({browser: process.env.BIOTRON_QA_BROWSER || 'chrome',
+        engine: browser.browserType().name(), version: browser.version(), root, results}, null, 2))
+    }
     console.log(`Responsive quality verified — ${results.join('; ')}`)
   } finally {
     await browser.close()
     await new Promise(resolve => server.close(resolve))
   }
-})().catch(error => {
+})().catch(async error => {
+  if (!fs.existsSync(path.join(artifacts, 'failure.json'))) fs.writeFileSync(path.join(artifacts, 'failure.json'), JSON.stringify({error: error.message}, null, 2))
+  await currentPage?.screenshot({path: path.join(artifacts, 'failure.png'), timeout: 1000}).catch(() => {})
   console.error(error)
   server.close(() => process.exit(1))
 })

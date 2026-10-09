@@ -10,7 +10,7 @@ const notice = read('src/components/CompatibilityNotice.vue')
 const webpack = read('vue.config.js')
 
 const midiRoutes = new Map([
-  ['/biotron', 'Biotron'], ['/touchme', 'TouchMe'], ['/touchme/test', 'TouchMe'],
+  ['/touchme', 'TouchMe'], ['/touchme/test', 'TouchMe'],
   ['/touchme/standalone', 'TouchMe'], ['/playtron', 'Playtron'],
   ['/playtron/test', 'Playtron'], ['/scales', 'Scales'], ['/scales/test', 'Scales'],
   ['/biotron/update', 'Biotron'], ['/scala', 'Playtronica device'], ['/circle', 'Circle']
@@ -29,6 +29,9 @@ for (const [route, product] of midiRoutes) {
 }
 
 const firstPlay = main.slice(main.indexOf("path: '/biotron/play'"), main.indexOf("routes.push({path: '/sound'"))
+const biotronSettings = main.split('\n').find(line => line.includes("path: '/biotron'"))
+assert(biotronSettings.includes("...deviceMeta('Biotron'), requiresMidi: !betaBuild"),
+  'beta local presets must open without MIDI; production retains its MIDI gate')
 assert(firstPlay.includes("meta: {requiresAudio: true, productName: 'Biotron', firstPlay: true}"),
   'Biotron Play must permit keyboard audio without a MIDI API')
 
@@ -44,7 +47,7 @@ assert(compatibility.includes('support is experimental'), 'iOS recovery must not
 assert(notice.includes('issue.action.href'), 'the compatibility popup must expose the MIDIWeb recovery action')
 assert(app.includes('Browser &amp; phone compatibility'), 'the beta must include a discoverable compatibility guide')
 
-console.log('Compatibility contract verified: every device route fails closed; Sound keeps audio-only fallback; MIDIWeb remains an explicit experimental iOS path.')
+console.log('Compatibility contract verified: device-only routes fail closed; beta Biotron local Settings and Sound remain available; MIDIWeb remains an explicit experimental iOS path.')
 
 ;(async () => {
   const {biotronFirstSoundFeedbackUrl} = await import('../src/compatibility.mjs')

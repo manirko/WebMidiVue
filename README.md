@@ -1,5 +1,26 @@
 # WebMidiVue
 
+## Start here for humans and AI
+
+This Vue app turns Biotron MIDI or computer keys into browser audio and a visual.
+Beta Settings also opens local presets without a Web MIDI API; device actions remain unavailable.
+The same SoundLab session survives Play/Settings; musical choices do not write firmware.
+
+Pipeline: MIDI or physical key codes → shared SoundLab → Elementary worklet → master output;
+settings use the separate MIDI request/readback flow; Vue Router owns navigation cleanup.
+Read [the tester loop](docs/BIOTRON-TESTER-LOOP.md) for commands and evidence rules,
+[the QA contract](docs/BIOTRON-COMPREHENSIVE-QA.md) for gates, and
+[the architecture map](docs/WEB-TEST-STRATEGY.md) for the remaining checks.
+Runtime files: `src/components/SoundLab/` (UI), `src/audio/` (session and DSP),
+`src/components/AudioCompare.vue` (sound selection), `scripts/` (existing tester),
+`tools/windows-tester/` (verified offline handoff). Build output is `dist/`;
+recordings, traces and archives belong in ProjectData, never Git.
+
+Use one checkout per agent. Commit only owned paths to `codex/` branches on manirko.
+Do not alter production/manufacturing, send feedback, or flash a physical board
+from software-test results. Pinned firmware, compatible board, owner approval,
+backup and rollback remain separate requirements.
+
 ## Project setup
 
 The Biotron beta **Play** page has **Play with keyboard** and **Octave**.

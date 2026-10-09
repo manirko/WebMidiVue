@@ -6,13 +6,70 @@ The runner is engineering evidence, not human approval or a release decision.
 Run `python3 scripts/run-biotron-qa.py --browser --timeout 300 --output <ProjectData-run-dir>`.
 Each attempt gets a new directory, source/input hashes, raw logs, JSONL results,
 coverage inventory and summary. Failures do not stop unrelated safe lanes.
-Timeout/interruption terminate only the runner's process group. Missing scripts
+Timeout/interruption send SIGINT to the owned lane, then use bounded grace and PID/start-time checks for its descendants, including detached browser groups. Unconfirmed cleanup stops subsequent lanes. The cleanup field covers recorded host processes only, not MIDI/audio/device release; normal exits have null inventory evidence. Missing scripts
 are NOT RUN, never green. Without --browser, browser lanes are NOT RUN.
 
 Build order: production isolation → firmware beta/browser → general beta →
 sound/PWA/quality/device variants. Browser updater tests use simulated MIDI and
 cannot certify physical flash. Presets and digital audio levels are automated;
 microphone/system/physical audio are distinct unavailable lanes.
+
+## Autonomous browser matrix — 9 October 2026
+
+The browser audition test sends trusted key down/up through the actual built UI.
+It observes actual final-output PCM, DSP frequency/velocity/gate and voice release
+for 43 choices: 7 Classic, 10 Timbres, 10 calibration cues, 10 high-note treatments,
+6 Handpan. Focused Sound/Octave, text fields, IME, shortcuts, background, route
+changes, repeated keys and cold device-free Play are separate cases. The native
+popup's actual OS selection behavior remains a physical case.
+
+Select a browser without editing a test:
+
+```sh
+BIOTRON_QA_BROWSER=brave npm run test:auditions:browser -- --keyboard-only
+BIOTRON_QA_BROWSER=msedge npm run test:quality:browser
+```
+
+Supported selectors: `chrome` (default), `chrome-beta`, `brave`, `chromium-gost`,
+`opera`, `vivaldi`, `arc`, `msedge`, and pinned Playwright `chromium`, `firefox`, `webkit`.
+`CHROME_PATH` applies only to `chrome`. A missing or unknown browser fails;
+there is no automatic Chrome fallback. Tests use isolated profiles.
+Install official test engines with the existing dependency, without upgrading it:
+
+```sh
+node node_modules/playwright-core/cli.js install firefox webkit
+python3 scripts/run-biotron-qa.py --browser --timeout 600   --browsers chrome-beta,brave,chromium-gost,msedge,firefox,webkit   --output /absolute/ProjectData/unique-parent
+```
+
+Extra matrix lanes reuse the complete sound/MIDI lifecycle, PWA, firmware modal,
+audition, responsive-quality and other-device variant tests, sequentially.
+Each browser gets separate JSONL/logs and audition artefacts. Firmware matrix cases run immediately after the single firmware build; general
+matrix cases follow the single general-beta build. Chrome-only CDP CPU/heap and
+installability probes are explicitly NOT SUPPORTED in Firefox/WebKit. The same
+generic functionality still runs, without invented throttle or heap measurements.
+Use `BIOTRON_QA_DIST_ROOT` for an already verified immutable build and
+`AUDITION_BROWSER_OUTPUT` for a unique audition evidence folder when running directly.
+The inner audition deadline is 300s (`AUDITION_BROWSER_TIMEOUT_MS`); choose matching
+runner deadlines for slow browsers. A timeout preserves the first fault and closes
+only its own test browser. A process launch failure must also release the server.
+
+Playwright Firefox is patched Firefox, not the installed Mozilla release;
+Playwright WebKit is not installed Safari. Responsive Firefox profiles retain
+viewport/touch data; Playwright's unsupported `isMobile` option is removed explicitly.
+Unsupported LayoutShift measurement is **NOT MEASURABLE**, never zero/PASS.
+Brave can suppress this API despite advertising it: its measured zero is not
+independent evidence of zero visual shift. Browser version/scope is printed per lane.
+
+Short-sample RMS advisories flag relative quietness within a bank. They are not
+LUFS or perceived-loudness verdicts. Calibration uses deliberately lower velocity.
+The handpan short-gate test retains incremental spectra before assertions, including
+failures. A single-task cue fixture verifies browser routing; tracker units retain the 700ms boundary and reject 701/823ms or reversed arrivals. It does not replace the retained timed-score finding or native cadence proof. `test:sound:browser -- --capability-only` is a development subset, not full-suite PASS. Digital PCM, FFT and WAV existence never imply speaker or musical acceptance.
+
+Official references checked 9 October 2026:
+[Playwright browser distinctions](https://playwright.dev/docs/browsers),
+[Apple Safari WebDriver](https://developer.apple.com/documentation/safari-developer-tools/macos-enabling-webdriver),
+[Mozilla Web MIDI capabilities](https://developer.mozilla.org/en-US/docs/Web/API/Web_MIDI_API).
+Real browser/OS permissions and hardware remain additional lanes.
 
 ## Faults that must remain regressions
 

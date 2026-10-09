@@ -4,10 +4,9 @@
 // Runs on the firmware beta build; test:biotron rebuilds the plain beta into dist afterwards.
 const assert = require('assert')
 const path = require('path')
-const {chromium} = require('playwright-core')
-const {chromePath, createStaticServer} = require('./browser-test-harness')
+const {launchBrowser, createStaticServer} = require('./browser-test-harness')
 
-const server = createStaticServer(path.resolve(__dirname, '..', 'dist'))
+const server = createStaticServer(path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist')))
 // Full 1366x768 window and its usual inner viewport in a maximised Windows Chrome.
 const viewports = [{width: 1366, height: 768}, {width: 1366, height: 657}]
 
@@ -53,7 +52,7 @@ async function check(browser, origin, viewport) {
 ;(async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const origin = `http://127.0.0.1:${server.address().port}`
-  const browser = await chromium.launch({executablePath: chromePath(), headless: true})
+  const browser = await launchBrowser()
   try {
     const results = []
     for (const viewport of viewports) results.push(await check(browser, origin, viewport))

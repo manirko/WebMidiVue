@@ -1,7 +1,6 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
-const {chromium} = require('playwright-core')
-const {chromePath, createStaticServer} = require('./browser-test-harness')
+const {launchBrowser, createStaticServer} = require('./browser-test-harness')
 
 const root = process.env.PLAYTRON_DIST_ROOT || path.resolve(__dirname, '..', 'dist')
 const server = createStaticServer(root)
@@ -9,7 +8,7 @@ const server = createStaticServer(root)
 ;(async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const origin = `http://127.0.0.1:${server.address().port}`
-  const browser = await chromium.launch({executablePath: chromePath(), headless: true})
+  const browser = await launchBrowser()
   try {
     const context = await browser.newContext()
     context.setDefaultTimeout(5000)

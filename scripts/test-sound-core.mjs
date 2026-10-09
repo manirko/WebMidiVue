@@ -116,6 +116,20 @@ test('Biotron calibration recognizes the soft cue and legacy 91/92 pattern', () 
   assert.equal(tracker.observe({type: 'note-off', channel: 1, note: 64}, 520), 'ignored')
 })
 
+test('calibration cue accepts the 700ms boundary and rejects late or reversed arrivals', () => {
+  const score = [64, 65, 67, 72]
+  const observe = (tracker, note, at) => tracker.observe({type: 'note-on', channel: 1, note, velocity: 24}, at)
+  const tracker = new BiotronCalibrationTracker()
+  assert.deepEqual(score.map((note, i) => observe(tracker, note, i * 700)), ['candidate', 'candidate', 'candidate', 'calibrating'])
+  for (const gap of [701, 823]) {
+    tracker.reset()
+    const states = score.map((note, i) => observe(tracker, note, i * gap))
+    assert(!states.includes('calibrating'), `late ${gap}ms score was accepted`)
+  }
+  tracker.reset()
+  assert(!score.map((note, i) => observe(tracker, note, 3000 - i * 70)).includes('calibrating'))
+})
+
 test('MIDI state exposes the parsed event without exposing SysEx access', () => {
   const states = []
   const played = []

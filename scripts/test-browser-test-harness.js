@@ -5,7 +5,12 @@ const http = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
 const {chromium} = require('playwright-core')
-const {chromePath, createStaticServer} = require('./browser-test-harness')
+const {chromePath, browserConfig, createStaticServer} = require('./browser-test-harness')
+
+assert.throws(() => browserConfig('safari'), /Unknown BIOTRON_QA_BROWSER/,
+  'Safari must never silently run Chrome or Playwright WebKit')
+assert.equal(browserConfig('firefox').engine, 'firefox')
+assert.equal(browserConfig('webkit').engine, 'webkit')
 
 // Non-ASCII CSS previously reached CDP response.body() in a different encoding
 // from the actual HTTP bytes. Keep both observations: transport and browser.

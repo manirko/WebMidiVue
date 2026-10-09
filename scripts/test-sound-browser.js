@@ -4,8 +4,8 @@ const {execFileSync} = require('child_process')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const {chromium, devices} = require('playwright-core')
-const {chromePath, createStaticServer} = require('./browser-test-harness')
+const {devices} = require('playwright-core')
+const {browserConfig, launchBrowser, contextOptions, createStaticServer} = require('./browser-test-harness')
 
 const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
 
@@ -45,7 +45,7 @@ const evidenceContext = soakReportPath ? {
   sourceCommit: execFileSync('/usr/bin/git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim(),
   sourceDirty: Boolean(execFileSync('/usr/bin/git', ['status', '--porcelain'], {encoding: 'utf8'}).trim()),
   distTreeSha256: hashDirectory(root),
-  browserExecutable: path.basename(chromePath()),
+  browserExecutable: browserConfig().name,
   platform: process.platform,
   platformRelease: os.release(),
   architecture: process.arch
@@ -111,7 +111,7 @@ async function verifyCapabilityFallbacks(browser, origin) {
   assert.strictEqual(await audioOnly.getByRole('button', {name: 'Start listening'}).isDisabled(), true)
   await audioOnly.getByRole('button', {name: 'Stop keyboard', exact: true}).click()
   for (const [route, product] of [
-    ['/biotron', 'Biotron'], ['/biotron/update', 'Biotron'],
+    ['/biotron/update', 'Biotron'],
     ['/touchme', 'TouchMe'], ['/playtron', 'Playtron'],
     ['/scales', 'Scales'], ['/circle', 'Circle'], ['/scala', 'Playtronica device']
   ]) {
@@ -123,9 +123,11 @@ async function verifyCapabilityFallbacks(browser, origin) {
   assert.deepStrictEqual(audioOnlyErrors, [])
   await audioOnlyContext.close()
 
-  // Android Chrome: full device profile (UA, screen, touch) and real Web MIDI with both permissions granted.
+  // Android viewport/UA/touch with an empty synthetic MIDI provider. Never request native MIDI here.
   // Reddens if the gate judges by device name again: beta21 showed «Biotron needs a computer» here (05.09.2026).
-  const androidContext = await browser.newContext({...devices['Pixel 7'], permissions: ['midi', 'midi-sysex']})
+  const androidContext = await browser.newContext(contextOptions(devices['Pixel 7'], browser))
+  await androidContext.addInitScript(() => Object.defineProperty(navigator, 'requestMIDIAccess', {configurable: true,
+    value: async () => ({inputs: new Map(), outputs: new Map(), addEventListener() {}, removeEventListener() {}})}))
   androidContext.setDefaultTimeout(5000)
   const android = await androidContext.newPage()
   const androidErrors = []
@@ -179,8 +181,10 @@ async function verifyCapabilityFallbacks(browser, origin) {
   })
   const missing = await missingContext.newPage()
   await missing.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
+  const missingStarted = Date.now()
   await missing.getByRole('button', {name: 'Start listening'}).click()
-  await missing.getByText('Connect the device', {exact: true}).waitFor()
+  try { await missing.getByText('Connect the device', {exact: true}).waitFor() }
+  finally { console.log('Missing-device fallback elapsed ms: ' + (Date.now() - missingStarted)) }
   await missing.getByText(/Connect the device to this computer with a USB data cable/i).waitFor()
   assert.strictEqual(await missing.getByRole('button', {name: 'Stop notes'}).count(), 0)
   await missing.locator('.sound-lab[data-reveal-stage="intro"][data-audio-state="closed"][data-tab-lease="free"]').waitFor()
@@ -207,8 +211,8 @@ async function verifyCapabilityFallbacks(browser, origin) {
   assert.deepStrictEqual(noAudioErrors, [])
   await noAudioContext.close()
 
-  // Safari profile without MIDI: Settings still explains USB recovery; Play offers screen/keyboard audio.
-  const iphoneContext = await browser.newContext(devices['iPhone 15'])
+  // No-MIDI profile: local Settings remain available; USB recovery is in the compatibility disclosure.
+  const iphoneContext = await browser.newContext(contextOptions(devices['iPhone 15'], browser))
   iphoneContext.setDefaultTimeout(5000)
   await iphoneContext.addInitScript(() => {
     Object.defineProperty(navigator, 'requestMIDIAccess', {configurable: true, value: undefined})
@@ -217,11 +221,11 @@ async function verifyCapabilityFallbacks(browser, origin) {
   const iphoneErrors = []
   iphone.on('pageerror', error => iphoneErrors.push(error.message))
   await iphone.goto(`${origin}/#/biotron`, {waitUntil: 'domcontentloaded'})
-  await iphone.getByRole('heading', {name: 'No MIDI in this browser'}).waitFor()
-  const midiWebLink = iphone.getByRole('link', {name: 'Get MIDIWeb Browser'})
-  await midiWebLink.waitFor()
-  assert.strictEqual(await midiWebLink.getAttribute('href'), 'https://apps.apple.com/us/app/midiweb-browser/id6757226617')
-  assert.strictEqual(await iphone.getByRole('heading', {name: 'Settings'}).count(), 0)
+  await iphone.getByRole('heading', {name: 'Settings'}).waitFor()
+  await iphone.getByText(/Local preset — changes stay/).waitFor()
+  await iphone.getByText('Browser & phone compatibility', {exact: true}).click()
+  assert.strictEqual(await iphone.getByRole('link', {name: 'MIDIWeb Browser', exact: true}).getAttribute('href'), 'https://apps.apple.com/us/app/midiweb-browser/id6757226617')
+  assert(await iphone.getByRole('button', {name: 'Apply preset to Biotron', exact: true}).isDisabled())
   await iphone.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
   await iphone.getByRole('button', {name: 'Play with keyboard', exact: true}).waitFor()
   assert(await iphone.getByRole('button', {name: 'Start listening'}).isDisabled())
@@ -336,8 +340,13 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
 ;(async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const origin = `http://127.0.0.1:${server.address().port}`
-  const browser = await chromium.launch({executablePath: chromePath(), headless: true})
+  const browser = await launchBrowser()
   try {
+    if (process.argv.includes('--capability-only')) {
+      await verifyCapabilityFallbacks(browser, origin)
+      console.log('PASS capability development subset; full audio/MIDI suite NOT RUN')
+      return
+    }
     const context = await browser.newContext()
     context.setDefaultTimeout(5000)
     const telemetryEvents = []
@@ -473,7 +482,8 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     const page = await context.newPage()
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
-    const devtools = await context.newCDPSession(page)
+    const devtools = browser.browserType().name() === 'chromium' ? await context.newCDPSession(page) : null
+    if (!devtools) console.log('NOT SUPPORTED: CDP CPU throttle, JS heap and realtime heap soak in this engine; generic audio/MIDI/lifecycle checks still run')
     await page.goto(`${origin}/#/sound`, {waitUntil: 'domcontentloaded'})
     assert.strictEqual(await page.getByRole('navigation', {name: 'Choose a device'}).count(), 0)
     assert.strictEqual(await page.getByRole('link', {name: 'TouchMe'}).count(), 0)
@@ -507,12 +517,12 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await secondPage.close()
 
     await page.getByLabel('Low CPU').check()
-    await devtools.send('Emulation.setCPUThrottlingRate', {rate: 6})
+    if (devtools) await devtools.send('Emulation.setCPUThrottlingRate', {rate: 6})
     const constrainedStart = Date.now()
     await page.getByRole('button', {name: 'Start sound'}).click()
     await page.locator('.sound-lab[data-audio-state="running"][data-quality="safe"][data-tab-lease="held"]').waitFor()
     const constrainedStartMilliseconds = Date.now() - constrainedStart
-    assert(constrainedStartMilliseconds < 5000, `6x-throttled Low CPU start took ${constrainedStartMilliseconds} ms`)
+    assert(constrainedStartMilliseconds < 5000, `Low CPU start took ${constrainedStartMilliseconds} ms`)
     assert.strictEqual(await page.getByLabel('Low CPU').isDisabled(), false)
     for (const code of ['KeyA', 'KeyW', 'KeyS', 'KeyE', 'KeyD', 'KeyF', 'KeyT', 'KeyG']) {
       await page.dispatchEvent('body', 'keydown', {code, key: code})
@@ -530,11 +540,11 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     })
     await page.locator('.sound-lab[data-active-voices="4"]').waitFor()
     assert(constrainedBurstMilliseconds < 3000,
-      `6x-throttled Low CPU burst blocked the page for ${constrainedBurstMilliseconds} ms`)
+      `Low CPU burst blocked the page for ${constrainedBurstMilliseconds} ms`)
     await page.evaluate(() => window.__emitSoundMidi([0xb0, 123, 0]))
     await page.locator('.sound-lab[data-active-voices="0"]').waitFor()
     await page.getByRole('button', {name: 'Stop & release'}).click()
-    await devtools.send('Emulation.setCPUThrottlingRate', {rate: 1})
+    if (devtools) await devtools.send('Emulation.setCPUThrottlingRate', {rate: 1})
     await page.getByLabel('Low CPU').uncheck()
 
     await page.getByRole('button', {name: 'Start sound'}).click()
@@ -593,9 +603,12 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await page.evaluate(() => window.__emitSoundMidi([0xb0, 123, 0]))
     await page.locator('.sound-lab[data-active-voices="0"]').waitFor()
 
-    await devtools.send('Performance.enable')
-    await devtools.send('HeapProfiler.collectGarbage')
-    const beforeMetrics = (await devtools.send('Performance.getMetrics')).metrics
+    let beforeMetrics, heapGrowth = null
+    if (devtools) {
+      await devtools.send('Performance.enable')
+      await devtools.send('HeapProfiler.collectGarbage')
+      beforeMetrics = (await devtools.send('Performance.getMetrics')).metrics
+    }
     const soakMilliseconds = await page.evaluate(() => {
       const started = performance.now()
       for (let cycle = 0; cycle < 20; cycle += 1) {
@@ -608,12 +621,15 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     })
     await page.locator('.sound-lab[data-active-voices="0"]').waitFor()
     await page.waitForTimeout(750)
-    await devtools.send('HeapProfiler.collectGarbage')
-    const afterMetrics = (await devtools.send('Performance.getMetrics')).metrics
-    const heapGrowth = requiredMetric(afterMetrics, 'JSHeapUsedSize') - requiredMetric(beforeMetrics, 'JSHeapUsedSize')
+    if (devtools) {
+      await devtools.send('HeapProfiler.collectGarbage')
+      const afterMetrics = (await devtools.send('Performance.getMetrics')).metrics
+      heapGrowth = requiredMetric(afterMetrics, 'JSHeapUsedSize') - requiredMetric(beforeMetrics, 'JSHeapUsedSize')
+      assert(heapGrowth < 20 * 1024 * 1024, `JS heap grew by ${heapGrowth} bytes`)
+    }
     assert(soakMilliseconds < 15000, `20000-message soak blocked the page for ${soakMilliseconds} ms`)
-    assert(heapGrowth < 20 * 1024 * 1024, `JS heap grew by ${heapGrowth} bytes`)
-    const realtimeSoak = await runRealtimeSoak(page, devtools, realtimeSoakSeconds, await browser.version())
+    const realtimeSoak = devtools ? await runRealtimeSoak(page, devtools, realtimeSoakSeconds, await browser.version()) : null
+    if (!devtools && realtimeSoakSeconds) throw Error('Requested heap soak requires a Chromium browser; it was NOT RUN')
 
     await page.evaluate(() => window.__setSoundInputState('disconnected'))
     await page.getByText(/MIDI disconnected/i).waitFor()
@@ -758,11 +774,19 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     assert.deepStrictEqual((await page.evaluate(() => window.__soundMidiRequests)).at(-1), {sysex: true})
     assert.strictEqual(await page.evaluate(() => window.__soundInput.connection), 'open')
     assert.strictEqual(await page.evaluate(() => window.__soundServiceInput.connection), 'closed')
-    for (const [note, velocity] of [[64, 64], [65, 64], [67, 64], [72, 64]]) {
-      await page.evaluate(([value, level]) => window.__emitSoundMidi([0x91, value, level]), [note, velocity])
-      await page.evaluate(value => window.__emitSoundMidi([0x81, value, 0]), note)
-      await page.waitForTimeout(70)
-    }
+    // This is a routing/state integration fixture, not a hardware timing proof.
+    // A single task avoids OS/driver timer delays changing the score. The unit
+    // tracker tests retain the real 700ms boundary and delayed-note rejection.
+    const cueStimulus = await page.evaluate(() => {
+      const events = []
+      for (const note of [64, 65, 67, 72]) {
+        events.push({note, at: performance.now()})
+        window.__emitSoundMidi([0x91, note, 64])
+        window.__emitSoundMidi([0x81, note, 0])
+      }
+      return events
+    })
+    console.log('Cue integration fixture (single task, not physical timing): ' + JSON.stringify(cueStimulus))
     await page.locator('.sound-lab[data-reveal-stage="calibrating"]').waitFor()
     await page.getByRole('heading', {name: 'Calibrating'}).waitFor()
     await page.getByText('Keep the plant, cables and device still. Wait for the device to confirm it is ready.').waitFor()
@@ -905,7 +929,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     assert(telemetryEvents.every(event => !('raw_midi' in event) && !('device_name' in event)))
     assert.deepStrictEqual(errors, [])
     if (realtimeSoak) writeSoakEvidence('PASS', 'suite-complete', realtimeSoak)
-    console.log(`Sound browser verified: first-play Biotron reveal, Play → Settings → Speed live-save continuity, permission/audio-only/no-audio fallbacks, 7 variants, 6x-throttled Low CPU start ${constrainedStartMilliseconds} ms and burst ${constrainedBurstMilliseconds.toFixed(1)} ms, exclusive two-tab sound handoff, 100/100 lifecycle cycles in ${cycleMilliseconds} ms, 1000 burst ${burstMilliseconds.toFixed(1)} ms, 20000 soak ${soakMilliseconds.toFixed(1)} ms, optional real-time soak ${realtimeSoak ? `${realtimeSoak.elapsedMilliseconds} ms` : 'not requested'}, heap delta ${heapGrowth}, disconnect/background recovery and retryable release.`)
+    console.log(`Sound browser verified: first-play Biotron reveal, Play → Settings → Speed live-save continuity, permission/audio-only/no-audio fallbacks, 7 variants, ${devtools ? '6x-throttled' : 'unthrottled (CDP NOT SUPPORTED)'} Low CPU start ${constrainedStartMilliseconds} ms and burst ${constrainedBurstMilliseconds.toFixed(1)} ms, exclusive two-tab sound handoff, 100/100 lifecycle cycles in ${cycleMilliseconds} ms, 1000 burst ${burstMilliseconds.toFixed(1)} ms, 20000 soak ${soakMilliseconds.toFixed(1)} ms, optional real-time soak ${realtimeSoak ? `${realtimeSoak.elapsedMilliseconds} ms` : 'not requested'}, heap delta ${heapGrowth}, disconnect/background recovery and retryable release.`)
   } catch (error) {
     const evidenceDirectory = process.env.BIOTRON_TEST_EVIDENCE_DIR
     if (evidenceDirectory) {
@@ -914,8 +938,8 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
       for (const context of browser.contexts()) for (const tab of context.pages()) {
         const prefix = path.join(evidenceDirectory, `sound-fault-${Date.now()}-${++number}`)
         try {
-          fs.writeFileSync(`${prefix}.txt`, `${tab.url()}\n${await tab.locator('body').innerText()}`)
-          await tab.screenshot({path: `${prefix}.png`, fullPage: true})
+          fs.writeFileSync(`${prefix}.txt`, `${tab.url()}\n${await tab.locator('body').innerText({timeout: 1500})}`)
+          await tab.screenshot({path: `${prefix}.png`, fullPage: true, timeout: 2000})
         } catch (captureError) {
           console.error(`Could not capture failing page: ${captureError.message}`)
         }

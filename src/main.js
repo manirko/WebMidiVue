@@ -36,7 +36,7 @@ if (!window.location.hash && knownDirectRoutes.has(window.location.pathname)) {
 
 const routes = [
     { path: '/', component: HomeComponent},
-    { path: '/biotron', component: BiotronPageUpdated, props: {id: "BiotronWebMidiId_2" }, meta: deviceMeta('Biotron') },
+    { path: '/biotron', component: BiotronPageUpdated, props: {id: "BiotronWebMidiId_2" }, meta: {...deviceMeta('Biotron'), requiresMidi: !betaBuild} },
 
     { path: '/touchme', component: TouchMePage, props: {id: "TouchmeWebMidiId_2", showPagedModes: false}, meta: deviceMeta('TouchMe') },
     { path: '/touchme/test', component: TouchMePage, props: {id: "TouchmeWebMidiId_2", showPagedModes: true}, meta: deviceMeta('TouchMe') },
