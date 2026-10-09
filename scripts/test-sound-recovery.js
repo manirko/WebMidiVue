@@ -309,3 +309,44 @@ test('legacy calibration cues time out without claiming absent plant signal or r
   target.handleRevealMessage({calibration: {nonce: target.revealCalibrationNonce, state: 'ready'}})
   assert.equal(target.revealStage, 'intro', 'late readiness cannot complete a timed-out attempt')
 })
+
+test('cold audio startup resumes its context before waiting for the worklet reply', async () => {
+  const {target, context} = fixture()
+  context.registerSoundController = () => {}
+  const audio = {state: 'suspended'}
+  let initialized = false
+  target.engine = {
+    context: audio, ready: false, stopped: false, sound: {name: 'Round'},
+    get state() { return audio.state },
+    async resume() { audio.state = 'running'; return audio.state },
+    async ensureReady() {
+      assert.equal(audio.state, 'running', 'a suspended worklet cannot send its startup reply')
+      initialized = true; this.ready = true
+    },
+    async stop() { this.stopped = true; audio.state = 'closed' },
+  }
+  await target.ensureEngine()
+  assert(initialized)
+  assert.equal(target.audioState, 'running')
+  assert.equal(audio.state, 'running')
+})
+
+test('a refused cold resume releases audio without initializing the worklet', async () => {
+  const {target, context} = fixture()
+  context.registerSoundController = () => {}
+  const audio = {state: 'suspended'}
+  let initialized = false, released = false
+  target.engine = {
+    context: audio, ready: false, stopped: false,
+    get state() { return audio.state },
+    async resume() { throw Error('Audio is blocked') },
+    async ensureReady() { initialized = true; this.ready = true },
+    async stop() { this.stopped = true; audio.state = 'closed' },
+  }
+  target.tabLease = {release() { released = true }}
+  await assert.rejects(target.ensureEngine(), /Audio is blocked/)
+  assert.equal(initialized, false)
+  assert(released)
+  assert.equal(audio.state, 'closed')
+  assert.equal(target.audioState, 'closed')
+})

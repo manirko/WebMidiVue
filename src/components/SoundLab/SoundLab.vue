@@ -187,7 +187,6 @@
     </template>
   </section>
 </template>
-
 <script>
 import {markRaw, defineAsyncComponent} from 'vue'
 const GardenVisual = defineAsyncComponent(() => import(/* webpackChunkName: "garden-visual" */ './GardenVisual.vue'))
@@ -396,6 +395,8 @@ export default {
       let slowTimer = null
       this.audioStarting = true
       try {
+        // Firefox needs a running context to acknowledge worklet initialization.
+        if (!wasReady && engine.state !== 'running' && await resumeAudioWithin(engine) !== 'running') throw new Error('Audio could not start.')
         await audioWithin(engine.ensureReady(stage => {
           if (this.engine !== engine || engine.stopped) return
           if (stage === 'loading') {
@@ -654,7 +655,6 @@ export default {
   }
 }
 </script>
-
 <style scoped>
 .play-help{margin:.8rem 0;color:#625e58;font-size:.9rem;text-align:left}.play-help summary{cursor:pointer;min-height:44px;display:list-item;align-content:center;color:#4f456c}.play-help p{font-size:.9rem;margin:.6rem 0}.play-help ol{padding-left:1.3rem;line-height:1.6}.play-help h3{font-size:1rem;margin-top:1rem}.play-audio-state{font-size:.8rem!important}
 
