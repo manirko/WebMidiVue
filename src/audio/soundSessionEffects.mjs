@@ -223,6 +223,26 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
         if (this.resumeAttemptId === attemptId) this.starting = false
       }
     },
+    watchPlantSignal() {
+      if (this.revealMode && this.revealProfile.id === 'biotron' && this.controlsVisible &&
+          !this.keyboardOn && !this.examplePlaying && !document.hidden && this.audioState === 'running' &&
+          ['ready', 'revealed'].includes(this.revealStage)) this.midi?.startPlantSignalWatch()
+    },
+    resetCalibration() {
+      this.midi?.stopPlantSignalWatch()
+      this.clearCalibrationTimers()
+      this.calibrationTracker.reset()
+      this.explicitCalibration = false
+      updateSoundSession({calibrating: false})
+    },
+    finishCalibration() {
+      this.resetCalibration()
+      if (this.revealStage !== 'intro') {
+        this.revealStage = 'ready'
+        this.status = this.revealProfile.readyStatus
+        this.watchPlantSignal()
+      }
+    },
     handleRevealMessage(message) {
       const calibration = parseBiotronCalibrationState(message)
       if (calibration) {

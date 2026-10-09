@@ -21,6 +21,15 @@ export function parseBiotronCalibrationState(message) {
   return {nonce: data[3] & 0x7f, state: ['waiting', 'measuring', 'ready'][data[4] - 1]}
 }
 
+export function parseBiotronSensorState(message, nonce) {
+  const data = message?.type === 'system-exclusive' ? message.data : null
+  if (!Array.isArray(data) || data.length !== 33 || data[0] !== 0xf0 || data[1] !== 0x0b ||
+      data[2] !== 125 || data[3] !== nonce || data[4] !== 5 || data[32] !== 0xf7 ||
+      !data.slice(1, 32).every(byte => Number.isInteger(byte) && byte >= 0 && byte < 128) ||
+      data[30] > 1 || data[31] > 3) return null
+  return data[31]
+}
+
 // Only the firmware's explicit calibration state (125) makes notes quiet. Guessing the cue
 // by pitch and velocity muted real plant notes (64 @ velocity 64 matched a profile, 2026-09-03).
 export function biotronVoiceLevel(message, contract = BIOTRON_CALIBRATION, calibrating = false) {

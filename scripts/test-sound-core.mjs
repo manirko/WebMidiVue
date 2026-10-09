@@ -24,7 +24,7 @@ import {
 } from '../src/audio/revealProfiles.mjs'
 import {detectSoundCapabilities, soundCapabilityMessage} from '../src/audio/capabilities.mjs'
 import {BIOTRON_CALIBRATION, biotronVoiceLevel, BiotronCalibrationTracker,
-  parseBiotronCalibrationState} from '../src/audio/biotronCalibration.mjs'
+  parseBiotronCalibrationState, parseBiotronSensorState} from '../src/audio/biotronCalibration.mjs'
 import {
   buildCompatibilityIssue,
   buildMidiAdvisory,
@@ -212,6 +212,125 @@ test('Biotron recalibration writes only to the exact paired output and releases 
   await session.sendToPairedOutput([0xf0, 0x14, 0x0d, 125, 7, 0xf7])
   assert.deepEqual(sent, [[0xf0, 0x14, 0x0d, 125, 7, 0xf7]])
   assert.equal(output.connection, 'closed')
+})
+
+const sensorReply = (nonce, state) => [0xf0, 0x0b, 125, nonce, 5, ...Array(24).fill(0), 60, 0, state, 0xf7]
+
+test('plant sensor telemetry accepts only the exact firmware envelope, nonce and enum', () => {
+  for (const state of [0, 1, 2, 3]) {
+    assert.equal(parseBiotronSensorState(parseMidiMessage(Uint8Array.from(sensorReply(127, state))), 127), state)
+  }
+  for (const [index, value] of [[0, 0x90], [1, 20], [2, 124], [3, 126], [4, 6], [10, 128], [30, 2], [31, 4], [32, 0]]) {
+    const data = sensorReply(127, 0); data[index] = value
+    assert.equal(parseBiotronSensorState({type: 'system-exclusive', data}, 127), null, `invalid byte ${index}`)
+  }
+  assert.equal(parseBiotronSensorState(parseMidiMessage([0xf0, 0x0b, 125, 127, 3, 0xf7]), 127), null, 'calibration is separate')
+  assert.equal(parseBiotronSensorState({type: 'system-exclusive', data: sensorReply(127, 0).slice(0, -1)}, 127), null)
+})
+
+test('plant signal uses device state, never a gap in notes; stale replies and Stop cannot reacquire it', async t => {
+  t.mock.timers.enable({apis: ['setTimeout']})
+  const states = [], sent = []
+  const session = new MidiInputSession({panic() {}, activeVoiceCount: 0}, event => {
+    if (event.type === 'plant-signal') states.push(event.state)
+  }, {sysex: true})
+  const reply = (nonce, state, mutate = () => {}) => {
+    const data = sensorReply(nonce, state)
+    mutate(data); session.onMessage({data})
+  }
+  let answer = nonce => reply(nonce, 2)
+  const output = {id: 'out', name: 'Biotron', manufacturer: 'Playtronica', state: 'connected',
+    async open() {}, async close() {}, send(data) { sent.push([...data]); answer(data[4]) }}
+  session.input = {id: 'in', name: output.name, manufacturer: output.manufacturer, state: 'connected'}
+  session.access = {inputs: new Map([['in', session.input]]), outputs: new Map([['out', output]])}
+  t.after(() => session.stopPlantSignalWatch())
+  session.startPlantSignalWatch(); await session.pendingSignalRead
+  assert.equal(states.at(-1), 2)
+  t.mock.timers.tick(2000); await session.pendingSignalRead
+  assert.equal(states.at(-1), 2, 'silence with Active sensor must not imply disconnected contacts')
+  answer = nonce => { reply(nonce + 1, 0); reply(nonce, 0, data => { data[10] = 128 }) }
+  t.mock.timers.tick(2000); await session.pendingSignalRead
+  assert.equal(states.at(-1), 2, 'wrong nonce and invalid bytes must not change state')
+  t.mock.timers.tick(2000)
+  assert.equal(states.at(-1), null, 'no fresh reply must clear stale knowledge')
+  const stoppedAt = sent.length; t.mock.timers.tick(10000)
+  assert.equal(sent.length, stoppedAt, 'failed sensor read must not keep acquiring ports')
+  answer = nonce => reply(nonce, 0)
+  session.startPlantSignalWatch(); await session.pendingSignalRead
+  assert.equal(states.at(-1), 0)
+  session.stopPlantSignalWatch(); reply(sent.at(-1)[4], 0)
+  assert.equal(states.at(-1), null)
+  t.mock.timers.tick(10000); assert.equal(sent.length, stoppedAt + 1)
+  assert(sent.every(data => data.length === 7 && data[3] === 125 && data[5] === 5))
+})
+
+test('plant sensor slow open/close cannot overlap or send after Stop; release waits for its own read', async t => {
+  t.mock.timers.enable({apis: ['setTimeout']})
+  const events = [], sent = []
+  const session = new MidiInputSession({panic() {}, activeVoiceCount: 0}, event => events.push(event), {sysex: true})
+  let finishOpen, finishClose
+  const output = {id: 'out', name: 'Biotron', state: 'connected', opens: 0, closes: 0,
+    open() { this.opens++; return new Promise(resolve => { finishOpen = resolve }) },
+    close() { this.closes++; return new Promise(resolve => { finishClose = resolve }) },
+    send(data) { sent.push([...data]); session.onMessage({data: sensorReply(data[4], 0)}) }}
+  const input = {id: 'in', name: 'Biotron', state: 'connected', removeEventListener() {}, async close() {}}
+  session.input = input
+  session.access = {inputs: new Map([['in', input]]), outputs: new Map([['out', output]])}
+  session.startPlantSignalWatch()
+  session.startPlantSignalWatch(); assert.equal(output.opens, 1)
+  t.mock.timers.tick(2000)
+  assert.equal(events.at(-1).state, null, 'a delayed read clears knowledge')
+  session.startPlantSignalWatch(); assert.equal(output.opens, 1, 'unfinished old read cannot overlap a restart')
+  const release = session.release()
+  let released = false; release.then(() => { released = true })
+  finishOpen(); await Promise.resolve(); await Promise.resolve()
+  assert.equal(sent.length, 0, 'late open after Stop must not send')
+  assert.equal(output.closes, 1); assert.equal(released, false)
+  finishClose(); await release
+  assert.equal(released, true)
+  t.mock.timers.tick(10000); assert.equal(output.opens, 1)
+
+  session.input = input
+  output.open = async () => { output.opens++ }
+  session.startPlantSignalWatch(); await Promise.resolve(); await Promise.resolve()
+  assert.equal(events.filter(event => event.type === 'plant-signal').at(-1).state, 0)
+  t.mock.timers.tick(2000)
+  assert.equal(events.at(-1).state, null, 'stalled output close clears even a valid reply')
+  assert.equal(output.opens, 2, 'no second read during stalled close')
+  finishClose(); await session.pendingSignalRead
+  session.stopPlantSignalWatch()
+})
+
+test('plant sensor pause/disconnect and read errors stay unknown without affecting notes', async () => {
+  for (const action of ['pause', 'disconnect', 'open-error', 'close-error', 'no-sysex']) {
+    const events = [], notes = [], sent = []
+    const session = new MidiInputSession({panic() {}, activeVoiceCount: 0, noteOn(...args) { notes.push(args) }},
+      event => events.push(event), {sysex: action !== 'no-sysex'})
+    const input = {id: 'in', name: 'Biotron', state: 'connected', removeEventListener() {}, async close() {}}
+    const output = {id: 'out', name: 'Biotron', state: 'connected',
+      async open() { if (action === 'open-error') throw new Error('open failed') },
+      async close() { if (action === 'close-error') throw new Error('close failed') },
+      send(data) { sent.push([...data]); session.onMessage({data: sensorReply(data[4], 0)}) }}
+    session.input = input
+    session.access = {inputs: new Map([['in', input]]), outputs: new Map([['out', output]])}
+    session.startPlantSignalWatch(); await session.pendingSignalRead?.catch(() => {})
+    if (action === 'pause') session.setEnabled(false)
+    if (action === 'disconnect') session.onStateChange({port: {...input, state: 'disconnected'}})
+    assert.equal(session.signalWatch, null, action)
+    if (action !== 'no-sysex') assert.equal(events.filter(event => event.type === 'plant-signal').at(-1).state, null, action)
+    else assert.equal(sent.length, 0)
+    session.onMessage({data: sensorReply(sent.at(-1)?.[4] || 1, 0)})
+    assert.equal(session.signalWatch, null, 'late reply must not reactivate monitor')
+    if (action !== 'pause') { session.onMessage({data: [0x90, 64, 80]}); assert.equal(notes.length, 1) }
+    if (action === 'close-error') {
+      assert.equal(session.failedOutputClose, output, 'failed output cleanup must remain retryable')
+      await assert.rejects(session.release(), /close failed/)
+      assert(!events.some(event => event.type === 'released'), 'must not claim release on failed output cleanup')
+      output.close = async () => {}
+      await session.release(); assert.equal(session.failedOutputClose, null)
+      assert.equal(events.at(-1).type, 'released')
+    }
+  }
 })
 
 test('Android names every cable alike: the paired output is the one at the same index', async () => {

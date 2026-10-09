@@ -14,6 +14,7 @@
     :data-keyboard="keyboardOn ? 'on' : 'off'"
     :data-audio-capability="capabilities.audio ? 'available' : 'unavailable'"
     :data-midi-capability="capabilities.midi ? 'available' : 'unavailable'"
+    :data-plant-state="plantSignalState"
   >
     <template v-if="controlsVisible">
     <template v-if="revealMode">
@@ -30,10 +31,10 @@
       </header>
 
       <section class="sound-lab__reveal" aria-labelledby="device-reveal-title">
-        <GardenVisual ref="garden" :stage="visualStage" :message="visualStage === 'attention' ? revealIssue?.title || (releaseBlocked ? 'Release did not finish' : '') : ''" />
+        <GardenVisual ref="garden" :stage="visualStage" :message="plantSignalMissing ? 'Waiting for plant signal' : visualStage === 'attention' ? revealIssue?.title || (releaseBlocked ? 'Release did not finish' : '') : ''" />
         <div class="sound-lab__reveal-copy">
           <small v-if="recognizedInput && revealStage !== 'intro'" class="sound-lab__recognized" :title="recognizedInput">Device connected</small>
-          <h2 id="device-reveal-title">{{ revealStage === 'revealed' ? (midiActive ? 'Notes arriving' : 'Ready for the next note') : revealCopy.heading }}</h2>
+          <h2 id="device-reveal-title">{{ plantSignalMissing ? revealCopy.heading : revealStage === 'revealed' ? (midiActive ? 'Notes arriving' : 'Ready for the next note') : revealCopy.heading }}</h2>
           <p>{{ revealCopy.instruction }}</p>
           <details v-if="revealStage === 'intro'" class="play-help"><summary>Connection steps</summary><ol><li>Push both contact cables onto the device’s CONTACT PINS.</li><li>Clip them to two separate points on the same plant.</li><li>Connect USB with a data cable, then press Start listening.</li></ol><a href="/midi-access.html" target="_blank" rel="noopener">Browser permission help</a></details>
 
@@ -234,8 +235,13 @@ export default {
   },
   computed: {
     revealMode() { return this.mode === 'reveal' },
+    plantSignalMissing() {
+      return this.revealMode && this.revealProfile.id === 'biotron' && this.controlsVisible && !this.revealIssue && !this.releaseBlocked &&
+        this.plantSignalState === 0 && !this.keyboardOn && !this.examplePlaying && this.audioState === 'running' && ['ready', 'revealed'].includes(this.revealStage)
+    },
     visualStage() {
       if (this.releaseBlocked || (this.revealIssue && !this.keyboardOn && !this.examplePlaying) || this.audioState === 'error') return 'attention'
+      if (this.plantSignalMissing) return 'attention'
       if (this.starting) return this.revealStage === 'intro' || this.audioStarting || this.midiOpening || this.permissionPending ? 'connecting' : 'paused'
       if (this.engine && this.audioState !== 'running') return 'paused'
       if (this.revealStage === 'settling') return 'connecting'
@@ -251,6 +257,7 @@ export default {
     exampleSelection() { return this.audition || {...resolveAudition('timbres', 'tone-reference'), variant: {label: this.selectedSound.name, level: 1}} },
     revealProfile() { return getRevealProfile(this.profileId) },
     revealCopy() {
+      if (this.plantSignalMissing) return {heading: 'Waiting for plant signal', instruction: 'Check both contacts on the plant and both contact cables on Biotron.'}
       const stage = ['intro', 'settling', 'calibrating', 'ready'].includes(this.revealStage)
         ? this.revealStage : 'revealed'
       return {heading: this.revealProfile[`${stage}Heading`],
@@ -307,6 +314,7 @@ export default {
       revealIssue: null,
       midiActive: false,
       midiIdleTimer: null,
+      plantSignalState: null,
       firstSoundOutcome: ''
     }
   },
@@ -346,7 +354,8 @@ export default {
     keyboardOctave() { this.releaseHeldKeyboard() },
     selectedSound() { void this.applySelectedSound() },
     audition(next, previous) { if (this.examplePlaying && next?.bankId !== previous?.bankId) void this.stop() },
-    revealStage(stage) { trace('stage', stage); if (this.revealMode) recordBiotronEvent('play.stage_changed', {stage}) }
+    revealStage(stage) { trace('stage', stage); if (this.revealMode) recordBiotronEvent('play.stage_changed', {stage}) },
+    controlsVisible(visible) { if (visible) this.watchPlantSignal(); else this.midi?.stopPlantSignalWatch() }
   },
   methods: {
     ...createSoundSessionEffects({resumeAudioWithin, trace, updateSoundSession, parseBiotronCalibrationState,
@@ -558,6 +567,7 @@ export default {
         if (this.revealMode) this.recognizedInput = event.input
       }
       else if (event.type === 'released') this.status = 'MIDI released'
+      else if (event.type === 'plant-signal') this.plantSignalState = event.state
       else if (event.type === 'disconnected') {
         window.cancelAnimationFrame(this.voiceFrame)
         this.voiceFrame = null
@@ -596,19 +606,6 @@ export default {
       window.clearTimeout(this.revealWatchdog)
       this.revealWatchdog = null
     },
-    resetCalibration() {
-      this.clearCalibrationTimers()
-      this.calibrationTracker.reset()
-      this.explicitCalibration = false
-      updateSoundSession({calibrating: false})
-    },
-    finishCalibration() {
-      this.resetCalibration()
-      if (this.revealStage !== 'intro') {
-        this.revealStage = 'ready'
-        this.status = this.revealProfile.readyStatus
-      }
-    },
     setAudioState(state, status) {
       const running = state === 'running'
       this.midi?.setEnabled(running)
@@ -617,6 +614,7 @@ export default {
       trace('audio-state', state)
       if (this.revealMode) recordBiotronEvent('audio.state_changed', {audio_state: state, last_midi_at: this.midi?.lastMessageAt})
       updateSoundSession({running, volume: this.volume})
+      if (running) this.watchPlantSignal()
     },
     handleAudioContextState(state) {
       if (!this.engine) return
@@ -636,6 +634,8 @@ export default {
       this.setAudioState(state, `Audio paused — press ${this.revealMode ? 'Resume sound' : 'Start sound'}`)
     },
     async handleVisibility() {
+      if (document.hidden) this.midi?.stopPlantSignalWatch()
+      else this.watchPlantSignal()
       if (document.hidden && this.examplePlaying) { await this.stop(); return }
       this.releaseHeldKeyboard()
       if (document.hidden || !this.engine || !['suspended', 'interrupted'].includes(this.engine.context.state)) return

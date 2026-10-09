@@ -1,5 +1,6 @@
 import {parseMidiMessage} from './core.mjs'
 import {requestSharedMidiAccess} from './midiAccess.mjs'
+import {parseBiotronSensorState} from './biotronCalibration.mjs'
 
 const cancelledConnection = () => Object.assign(new Error('MIDI connection was cancelled.'), {name: 'AbortError'})
 
@@ -42,8 +43,12 @@ export class MidiInputSession {
     this.operationId = 0
     this.pendingConnect = null
     this.pendingRelease = null
+    this.failedOutputClose = null
     this.cleanupTimeoutMs = options.cleanupTimeoutMs ?? 2000
     this.lastMessageAt = null
+    this.signalWatch = null
+    this.signalNonce = 0
+    this.pendingSignalRead = null
     this.boundMessage = event => this.onMessage(event)
     this.boundState = event => this.onStateChange(event)
   }
@@ -119,7 +124,7 @@ export class MidiInputSession {
     this.onState({type: 'connected', input: input.name || 'MIDI input'})
   }
 
-  async sendToPairedOutput(data) {
+  async sendToPairedOutput(data, isCurrent = () => true) {
     if (!this.access || !this.input) throw new Error('Connect the MIDI input first.')
     const operationId = this.operationId
     const access = this.access
@@ -136,6 +141,7 @@ export class MidiInputSession {
     try {
       await output.open()
       this.assertActive(operationId)
+      if (!isCurrent()) throw cancelledConnection()
       if (this.access !== access || this.input !== input || output.state === 'disconnected') {
         throw new Error('MIDI connection was cancelled.')
       }
@@ -147,12 +153,42 @@ export class MidiInputSession {
     try {
       await output.close()
     } catch (cleanupError) {
+      this.failedOutputClose = output
+      this.onState({type: 'release-error', input: output.name || 'MIDI output', error: cleanupError})
       if (primaryError) {
         throw new AggregateError([primaryError, cleanupError], 'MIDI output failed and cleanup failed.')
       }
       throw cleanupError
     }
     if (primaryError) throw primaryError
+  }
+
+  startPlantSignalWatch() {
+    if (this.signalWatch || this.pendingSignalRead || this.closed || !this.enabled || !this.sysex || !this.input) return
+    const watch = this.signalWatch = {timer: null, nonce: null}
+    const input = this.input
+    const isCurrent = () => this.signalWatch === watch && this.input === input && this.enabled && !this.closed
+    const poll = async () => {
+      if (!isCurrent()) return
+      if (watch.nonce !== null || this.pendingSignalRead) {
+        this.stopPlantSignalWatch(); return
+      }
+      watch.nonce = this.signalNonce = this.signalNonce % 127 + 1
+      watch.timer = setTimeout(poll, 2000)
+      // One read at a time. A late open after Stop may only close, never send.
+      const task = this.pendingSignalRead = this.sendToPairedOutput([0xf0, 0x14, 0x0d, 125, watch.nonce, 5, 0xf7], isCurrent)
+      try { await task }
+      catch { if (isCurrent()) this.stopPlantSignalWatch() }
+      finally { if (this.pendingSignalRead === task) this.pendingSignalRead = null }
+    }
+    void poll()
+  }
+
+  stopPlantSignalWatch() {
+    if (!this.signalWatch) return
+    clearTimeout(this.signalWatch?.timer)
+    this.signalWatch = null
+    this.onState({type: 'plant-signal', state: null})
   }
 
   release() {
@@ -169,23 +205,28 @@ export class MidiInputSession {
     const connection = pending?.catch(error => {
       if (error?.name !== 'AbortError') throw error
     })
-    await releaseDeadline(Promise.all([this.releaseCurrent(), connection]), this.cleanupTimeoutMs)
+    const sensorRead = this.pendingSignalRead?.catch(error => { if (error?.name !== 'AbortError') throw error })
+    await releaseDeadline(Promise.all([this.releaseCurrent(), connection, sensorRead]), this.cleanupTimeoutMs)
   }
 
   async releaseCurrent() {
+    this.stopPlantSignalWatch()
     if (this.pendingRelease) return this.pendingRelease
-    if (!this.input) return
+    if (!this.input && !this.failedOutputClose) return
     const input = this.input
     const task = (async () => {
-      input.removeEventListener('midimessage', this.boundMessage)
+      input?.removeEventListener('midimessage', this.boundMessage)
       this.engine.panic()
-      try { await input.close() }
+      try {
+        if (this.failedOutputClose) { await this.failedOutputClose.close(); this.failedOutputClose = null }
+        await input?.close()
+      }
       catch (error) {
-        this.onState({type: 'release-error', input: input.name || 'MIDI input', error})
+        this.onState({type: 'release-error', input: input?.name || 'MIDI port', error})
         throw error
       }
       if (this.input === input) this.input = null
-      this.onState({type: 'released', input: input.name || 'MIDI input'})
+      this.onState({type: 'released', input: input?.name || 'MIDI port'})
     })()
     this.pendingRelease = task
     try { await task }
@@ -205,13 +246,18 @@ export class MidiInputSession {
     const next = Boolean(enabled)
     if (this.enabled === next) return
     this.enabled = next
-    if (!next) this.engine.panic()
+    if (!next) { this.stopPlantSignalWatch(); this.engine.panic() }
   }
 
   onMessage(event) {
     this.lastMessageAt = performance.now()
     if (this.closed || !this.enabled) return
     const message = parseMidiMessage(event.data)
+    const sensor = this.signalWatch?.nonce == null ? null : parseBiotronSensorState(message, this.signalWatch.nonce)
+    if (sensor !== null) {
+      this.signalWatch.nonce = null
+      this.onState({type: 'plant-signal', state: sensor})
+    }
     const level = message.type === 'note-on' ? this.voiceLevel(message) : undefined
     trace('in', level === undefined ? [...event.data].slice(0, 12) : {bytes: [...event.data], level})
     const source = this.input?.id || 'midi'
@@ -226,6 +272,7 @@ export class MidiInputSession {
   onStateChange(event) {
     if (this.closed) return
     if (this.input && event.port?.id === this.input.id && event.port.state === 'disconnected') {
+      this.stopPlantSignalWatch()
       this.input.removeEventListener('midimessage', this.boundMessage)
       this.engine.panic()
       this.input = null

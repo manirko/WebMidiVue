@@ -84,12 +84,16 @@ const report = {
 // dependency, source file or voice pool; retain 25KiB lazy audio and all safety caps.
 // 09.10.2026 explicit visual-state feedback: +18 presentation lines in the
 // existing two components. MIDI/audio effects, files, dependencies and pools unchanged.
+// 09.10.2026 requested plant-signal indicator: +76 lines from source10688.
+// Strict existing125/5 telemetry, single read/2s, late-open cancellation and retryable
+// output cleanup in the existing session. No firmware, engine, dependency or source file.
+// Sleep is a waiting hint, not a physical disconnected-contact verdict.
 const limits = {
   eagerDeviceRouteImports: 0,
   sleepCalls: 0,
   unmanagedListenerFiles: 0,
   sourceFiles: 70,
-  sourceLines: 10697,
+  sourceLines: 10764,
   largestProductFileLines: 850
 }
 const violations = [

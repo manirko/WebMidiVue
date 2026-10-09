@@ -20,7 +20,7 @@ const effectsSource = fs.readFileSync('src/audio/soundSessionEffects.mjs', 'utf8
 function fixture() {
   const session = {running: true}
   const events = []
-  const calls = {resume: 0, connect: 0, calibrate: 0, sysex: 0}
+  const calls = {resume: 0, connect: 0, calibrate: 0, sysex: 0, signalStart: 0, signalStop: 0}
   const context = {
     module: {exports: {}}, document: {hidden: false}, markRaw: value => value, defineAsyncComponent: () => ({}), AbortController,
     KEYBOARD_CODE_TO_NOTE,
@@ -39,18 +39,30 @@ function fixture() {
   const engine = {context: {state: 'running'}, panic() {},
     async resume() { calls.resume++; this.context.state = 'running'; return 'running' }}
   const midi = {setEnabled(value) { this.enabled = value },
+    startPlantSignalWatch() { calls.signalStart++ }, stopPlantSignalWatch() { calls.signalStop++ },
     async connect() { calls.connect++ },
     async sendToPairedOutput() { calls.sysex++ }}
-  const target = {engine, midi, audioState: 'running', volume: 65,
+  const target = {engine, midi, audioState: 'running', volume: 65, controlsVisible: true,
     revealMode: true, firstSoundOutcome: 'helped', starting: false, permissionAttemptId: 0,
     releaseBlocked: false, resumeAttemptId: 0, resumeOutcome: 'not_attempted',
     revealStage: 'revealed', revealCalibrationNonce: 7, explicitCalibration: false,
-    revealProfile: {calibratingStatus: 'Calibrating', readyStatus: 'Ready'}, calibrationTracker: {reset() { calls.calibrate++ }}}
+    revealProfile: {id: 'biotron', calibratingStatus: 'Calibrating', readyStatus: 'Ready'}, calibrationTracker: {reset() { calls.calibrate++ }}}
   for (const [name, method] of Object.entries(context.module.exports.methods)) target[name] = method.bind(target)
   target.resetVoiceUi = () => {}
   target.releaseHeldKeyboard = () => {}
   return {target, context, session, calls, events}
 }
+
+test('plant status reads are limited to foreground Biotron MIDI play, never keyboard/examples/settings', () => {
+  for (const patch of [{}, {controlsVisible: false}, {keyboardOn: true}, {examplePlaying: true},
+    {revealMode: false}, {revealProfile: {id: 'touchme'}}, {revealStage: 'settling'}, {audioState: 'suspended'}]) {
+    const {target, calls} = fixture()
+    Object.assign(target, patch); target.watchPlantSignal()
+    assert.equal(calls.signalStart, Object.keys(patch).length ? 0 : 1, JSON.stringify(patch))
+  }
+  const {target, context, calls} = fixture()
+  context.document.hidden = true; target.watchPlantSignal(); assert.equal(calls.signalStart, 0)
+})
 
 test('interruption pauses MIDI and offers the visible Resume sound control', () => {
   const {target, session} = fixture()

@@ -460,6 +460,97 @@ async function verifyGardenStates(page, origin) {
   console.log(`PASS garden states: trusted click→feedback ${milliseconds.toFixed(1)}ms, deferred connect/calibration/ready/pause/resume/disconnect/Stop/reduced motion; synthetic MIDI only`)
 }
 
+async function verifyPlantSignal(page, origin) {
+  const rows = []
+  const evidence = process.env.BIOTRON_TEST_EVIDENCE_DIR
+  const save = async name => {
+    rows.push({name, status: 'PASS', state: await page.locator('.sound-lab').getAttribute('data-plant-state')})
+    if (evidence) fs.writeFileSync(path.join(evidence, 'plant-signal.json'), JSON.stringify(rows, null, 2))
+  }
+  const reads = () => page.evaluate(() => window.__soundMidiSent.filter(m => m.length === 7 && m[3] === 125 && m[5] === 5).length)
+  const confirm = () => page.evaluate(() => {
+    const nonce = window.__soundMidiSent.filter(m => m.length === 6 && m[3] === 125).at(-1)[4]
+    window.__emitSoundMidi([0xf0, 0x0b, 125, nonce, 3, 0xf7])
+  })
+  await page.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
+  await page.getByRole('button', {name: 'Start listening', exact: true}).click()
+  await page.locator('.sound-lab[data-reveal-stage="settling"]').waitFor()
+  await confirm()
+  await page.locator('.sound-lab[data-plant-state="2"]').waitFor()
+  await page.waitForFunction(() => window.__soundMidiSent.filter(m => m.length === 7 && m[3] === 125 && m[5] === 5).length >= 3)
+  assert.equal(await page.locator('.sound-lab').getAttribute('data-active-voices'), '0')
+  assert.notEqual(await page.locator('.garden-visual').getAttribute('data-state'), 'attention', 'silence is not sensor Sleep')
+  await save('Active sensor stays ready through multiple silent polls')
+  await page.evaluate(() => { window.__soundSensorState = 0 })
+  await page.getByRole('heading', {name: 'Waiting for plant signal', exact: true}).waitFor()
+  assert.equal(await page.locator('.garden-state').innerText(), 'Waiting for plant signal')
+  await page.getByText('Device connected', {exact: true}).waitFor()
+  assert.equal(await page.locator('.sound-lab').getAttribute('data-audio-state'), 'running')
+  assert((await page.locator('.sound-lab__reveal-copy').innerText()).includes('Check both contacts on the plant'))
+  await page.setViewportSize({width: 320, height: 568})
+  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Plant signal notice overflows 320px')
+  if (evidence) await page.screenshot({path: path.join(evidence, 'plant-signal-waiting.png'), timeout: 2000})
+  await page.evaluate(() => { window.__emitSoundMidi([0x91, 72, 80]); window.__emitSoundMidi([0x81, 72, 0]) })
+  await page.getByRole('heading', {name: 'Waiting for plant signal', exact: true}).waitFor()
+  await save('Firmware Sleep shows contact advice; light notes do not hide it; 320px fits')
+  await page.evaluate(() => { window.__soundSensorState = 3 })
+  await page.locator('.sound-lab[data-plant-state="3"]').waitFor()
+  assert.equal(await page.getByRole('heading', {name: 'Waiting for plant signal', exact: true}).count(), 0)
+  await save('BPM active recovers without reload or restart')
+
+  for (const mode of ['wrong_nonce', 'invalid_byte', 'invalid_state', 'none']) {
+    await page.evaluate(() => { window.__soundSensorState = 0 })
+    await page.locator('.sound-lab[data-plant-state="0"]').waitFor()
+    await page.evaluate(mode => { window.__soundSensorReplyMode = mode }, mode)
+    await page.locator('.sound-lab:not([data-plant-state])').waitFor()
+    assert.equal(await page.getByRole('heading', {name: 'Waiting for plant signal', exact: true}).count(), 0)
+    const count = await reads(); await page.waitForTimeout(2100)
+    assert.equal(await reads(), count, 'failed read must not keep opening outputs')
+    await save(`${mode}: unknown, no stale warning, no continued reads`)
+    await page.getByRole('link', {name: 'Settings', exact: true}).click()
+    await page.getByRole('link', {name: 'Play', exact: true}).click()
+    await page.evaluate(() => { window.__soundSensorReplyMode = 'valid' })
+    // The current read can already be pending; an explicit, correctly matched reply settles it.
+    await page.evaluate(() => {
+      const nonce = window.__soundMidiSent.filter(m => m.length === 7 && m[3] === 125 && m[5] === 5).at(-1)[4]
+      window.__emitSoundMidi([0xf0, 0x0b, 125, nonce, 5, ...Array(24).fill(0), 60, 0, 0, 0xf7])
+    })
+    await page.locator('.sound-lab[data-plant-state="0"]').waitFor()
+  }
+  await page.getByRole('link', {name: 'Settings', exact: true}).click()
+  const count = await reads(); await page.waitForTimeout(2100)
+  assert.equal(await reads(), count, 'Settings must not poll the sound sensor')
+  await page.getByRole('link', {name: 'Play', exact: true}).click()
+  await page.locator('.sound-lab[data-plant-state="0"]').waitFor()
+  await save('Settings stops polling; Play resumes a fresh read')
+  await page.evaluate(() => window.__setSoundInputState('disconnected'))
+  await page.locator('.garden-state', {hasText: 'Connection lost'}).waitFor()
+  assert.equal(await page.locator('.sound-lab').getAttribute('data-plant-state'), null)
+  const disconnectedCount = await reads(); await page.waitForTimeout(2100)
+  assert.equal(await reads(), disconnectedCount)
+  await save('USB loss replaces contact advice and stops polling')
+  await page.getByRole('button', {name: 'Stop & release', exact: true}).click()
+  await page.evaluate(() => window.__setSoundInputState('connected'))
+  await page.getByRole('button', {name: 'Start listening', exact: true}).click()
+  await page.locator('.sound-lab[data-reveal-stage="settling"]').waitFor()
+  await confirm()
+  await page.locator('.sound-lab[data-plant-state="0"]').waitFor()
+  await page.getByRole('button', {name: 'Stop & release', exact: true}).click()
+  const stoppedCount = await reads()
+  await page.evaluate(() => {
+    const nonce = window.__soundMidiSent.filter(m => m.length === 7 && m[3] === 125 && m[5] === 5).at(-1)[4]
+    window.__emitSoundMidi([0xf0, 0x0b, 125, nonce, 5, ...Array(24).fill(0), 60, 0, 0, 0xf7])
+  })
+  await page.waitForTimeout(2100)
+  assert.equal(await reads(), stoppedCount)
+  assert.equal(await page.locator('.sound-lab').getAttribute('data-plant-state'), null)
+  assert.equal(await page.locator('.garden-visual').getAttribute('data-state'), 'waiting')
+  assert.equal(await page.evaluate(() => window.__soundOutput.connection), 'closed')
+  assert.equal(await page.evaluate(() => window.__soundInput.connection), 'closed')
+  await save('Stop closes input/output; ignores late reply and never restarts reads')
+  console.log(`PASS plant signal: ${rows.length} software cases; read-only status125/5, no silence heuristic; physical contacts NOT RUN`)
+}
+
 async function verifyCapabilityFallbacks(browser, origin) {
   const audioOnlyContext = await browser.newContext()
   audioOnlyContext.setDefaultTimeout(5000)
@@ -835,6 +926,8 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
       ]
       window.__soundSettingsSnapshot = () => [...persistedValues]
       window.__soundSettingsReplyMode = 'valid'
+      window.__soundSensorState = 2
+      window.__soundSensorReplyMode = 'valid'
       // Literal firmware contract, independently maintained from BiotronIDB.
       const settingOffsets = {9: 2, 12: 3, 1: 4, 2: 5, 3: 6, 4: 7,
         15: 8, 5: 9, 17: 10, 6: 11, 10: 12, 11: 13, 24: 14, 13: 15,
@@ -847,6 +940,14 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
           const message = Array.from(data)
           window.__soundMidiSent.push(message)
           if (id !== 'playtronica-out-1') return
+          if (message.length === 7 && message[0] === 0xf0 && message[1] === 20 && message[2] === 13 && message[3] === 125 && message[5] === 5 && message[6] === 0xf7) {
+            const mode = window.__soundSensorReplyMode
+            if (mode === 'none') return
+            const response = [0xf0, 0x0b, 125, mode === 'wrong_nonce' ? (message[4] % 127 + 1) : message[4],
+              5, ...Array(24).fill(0), 60, 0, mode === 'invalid_state' ? 4 : window.__soundSensorState, 0xf7]
+            if (mode === 'invalid_byte') response[10] = 128
+            setTimeout(() => window.__emitSoundMidi(response), 0)
+          }
           if (message.length === 6 && message[0] === 0xf0 && message[1] === 20 && message[2] === 13 && message[5] === 0xf7 && settingOffsets[message[3]] !== undefined) {
             persistedValues[settingOffsets[message[3]]] = message[4]
           }
@@ -930,6 +1031,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
         }
         throw error
       })
+      await verifyPlantSignal(page, origin)
       assert.deepStrictEqual(errors, [])
       console.log('PASS visual development subset; remaining full sound suite NOT RUN')
       return
@@ -1380,6 +1482,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     assert(telemetryEvents.some(event => event.event_name === 'session.started' && event.service_name === 'biotron'))
     assert(telemetryEvents.every(event => !('raw_midi' in event) && !('device_name' in event)))
     await verifyGardenStates(page, origin)
+    await verifyPlantSignal(page, origin)
     await verifySettingsFailures(page, origin)
     await verifyAllSettings(page, origin)
     await verifySettingsActions(page, origin)
