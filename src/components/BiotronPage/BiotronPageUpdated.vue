@@ -10,7 +10,7 @@
     />
     <header :class="{'settings-hero': betaBuild}">
       <h1 class="text-center" :aria-label="betaBuild ? 'Settings' : null">{{ betaBuild ? 'Shape your Biotron' : 'Biotron settings' }}</h1>
-      <p v-if="betaBuild" class="settings-hero__intro">Connect Biotron, then shape how it listens, plays, and responds.</p>
+      <p v-if="betaBuild" class="settings-hero__intro">Edit a local preset, or connect Biotron to shape its music live.</p>
     </header>
     <div v-if="betaBuild && (soundPlayer?.engine || soundPlayer?.midi || soundPlayer?.starting || soundPlayer?.releaseBlocked)" class="alert py-2" :class="soundPlayer?.releaseBlocked ? 'alert-warning' : 'alert-success'" role="status">
       {{ soundPlayer?.releaseBlocked ? 'Release did not finish. Retry Stop.' : soundPlayer?.starting ? 'Connecting sound…' : soundSession.running ? 'Sound stays on while you adjust settings.' : 'Sound is paused. Use Play to resume or stop here.' }}

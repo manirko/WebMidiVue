@@ -655,7 +655,7 @@ export default {
 .sound-lab__controls, .sound-lab__variants, .sound-lab__midi-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .sound-lab__status { min-height: 1.5rem; padding-left: .5rem; color: #625e58; }
 .sound-lab__diagnostic { margin-top: .5rem; }
-.sound-lab__quality { display: inline-flex; min-height: 44px; align-items: center; gap: .4rem; margin: 0; padding: 0 .35rem; white-space: nowrap; }
+.sound-lab__quality { display: inline-flex; flex-wrap:wrap; min-height: 44px; align-items: center; gap: .4rem; margin: 0; padding: 0 .35rem; white-space: normal; }
 .sound-lab__quality input { width: 1.1rem; height: 1.1rem; }
 .sound-palette { max-width:760px; margin:1.5rem auto .5rem; padding:1rem 1.25rem; border:1px solid var(--ui-control-border); border-radius:var(--ui-radius); background:#fff; }
 .sound-palette summary { min-height:44px; cursor:pointer; align-content:center; font-weight:600; }

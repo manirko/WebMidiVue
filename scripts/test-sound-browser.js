@@ -815,6 +815,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     })
     assert(resumedSignalRms > 0.001, `no measurable audio after manual Resume: RMS ${resumedSignalRms}`)
     await page.locator('.sound-palette > summary').click()
+    await page.locator('#compare-variant option').first().waitFor({state: 'attached'})
     assert.strictEqual(await page.locator('#compare-variant option').count(), 7)
     await page.evaluate(() => window.__emitSoundMidi([0x91, 64, 0]))
     await page.evaluate(() => window.__emitSoundMidi([0x91, 64, 100]))
@@ -844,6 +845,9 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     assert.strictEqual(await calmerButton.isEnabled(), true)
     assert((await experiments.innerText()).includes('keeps your tempo, scale and note velocity'))
     await experimentToggle.click()
+    for (const summary of await page.locator('.settings-section > summary').all()) {
+      if (!await summary.evaluate(element => element.parentElement.open)) await summary.click()
+    }
     const settingHelpButtons = page.locator('details.hint > summary')
     assert(await settingHelpButtons.count() >= 8, 'settings info icons must be real help buttons')
     const muteHelp = page.getByRole('button', {name: /Help: Turns off notes coming off plant sensor/i})

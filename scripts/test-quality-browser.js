@@ -18,6 +18,67 @@ const profiles = [
   {name: 'iphone-15-no-midi', options: devices['iPhone 15'], midi: false, heading: 'No MIDI in this browser'}
 ]
 
+async function readQuality(page) {
+  return page.evaluate(() => {
+    const visible = element => {
+      const style = getComputedStyle(element)
+      return style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null
+    }
+    const hasName = element => Boolean(
+      element.getAttribute('aria-label')?.trim() ||
+      element.getAttribute('aria-labelledby')?.trim() ||
+      [...(element.labels || [])].some(label => label.textContent.trim())
+    )
+    const unlabeledControls = [...document.querySelectorAll('input:not([type="hidden"]), select, textarea')]
+      .filter(visible)
+      .filter(element => !hasName(element))
+      .map(element => element.outerHTML.slice(0, 180))
+    const ids = [...document.querySelectorAll('[id]')].map(element => element.id).filter(Boolean)
+    const duplicateIds = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))]
+    const smallRanges = [...document.querySelectorAll('input[type="range"]')]
+      .filter(visible)
+      .map(element => ({name: element.getAttribute('aria-label'), height: element.getBoundingClientRect().height}))
+      .filter(({height}) => height < 24)
+    const smallPrimaryTargets = [...document.querySelectorAll(
+      '[aria-label="Biotron tasks"] a, .beta-feedback__action, ' +
+      'details.settings-section > summary, .sound-palette > summary, ' +
+      '.audio-compare button, .computer-keys button, .computer-keys select'
+    )]
+      .filter(visible)
+      .map(element => ({text: element.textContent.trim(), rect: element.getBoundingClientRect().toJSON()}))
+      .filter(({rect}) => rect.width < 44 || rect.height < 44)
+    const logo = document.querySelector('img[itemprop="logo"]')
+
+    return {
+      cls: window.__layoutShiftScore,
+      documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      duplicateIds,
+      lang: document.documentElement.lang,
+      logo: logo && {
+        source: logo.getAttribute('src'),
+        width: logo.getAttribute('width'),
+        height: logo.getAttribute('height')
+      },
+      mainCount: document.querySelectorAll('main').length,
+      smallPrimaryTargets,
+      smallRanges,
+      unlabeledControls
+    }
+  })
+}
+
+function assertQuality(result, label, checkCls = true) {
+  assert.strictEqual(result.lang, 'en', `${label}: document language is not English`)
+  assert.strictEqual(result.mainCount, 1, `${label}: expected one main landmark`)
+  assert(result.documentOverflow <= 1, `${label}: page overflows viewport by ${result.documentOverflow}px`)
+  if (checkCls) assert(result.cls <= 0.1, `${label}: CLS ${result.cls.toFixed(3)} exceeds 0.1`)
+  assert.deepStrictEqual(result.duplicateIds, [], `${label}: duplicate IDs`)
+  assert.deepStrictEqual(result.unlabeledControls, [], `${label}: visible unlabeled controls`)
+  assert.deepStrictEqual(result.smallRanges, [], `${label}: range target below 24px`)
+  assert.deepStrictEqual(result.smallPrimaryTargets, [], `${label}: primary target below 44px`)
+  assert.deepStrictEqual(result.logo, {source: '/Logo-Black-280.webp', width: '280', height: '199'})
+}
+
 async function auditProfile(browser, origin, profile) {
   const context = await browser.newContext({...profile.options, reducedMotion: 'reduce'})
   context.setDefaultTimeout(5000)
@@ -49,61 +110,42 @@ async function auditProfile(browser, origin, profile) {
   await page.getByRole('heading', {name: profile.heading}).waitFor()
   await page.getByText(/Offline mode is ready/i).waitFor({timeout: 15000})
 
-  const result = await page.evaluate(() => {
-    const visible = element => {
-      const style = getComputedStyle(element)
-      return style.display !== 'none' && style.visibility !== 'hidden' && element.offsetParent !== null
-    }
-    const hasName = element => Boolean(
-      element.getAttribute('aria-label')?.trim() ||
-      element.getAttribute('aria-labelledby')?.trim() ||
-      [...(element.labels || [])].some(label => label.textContent.trim())
-    )
-    const unlabeledControls = [...document.querySelectorAll('input:not([type="hidden"]), select, textarea')]
-      .filter(visible)
-      .filter(element => !hasName(element))
-      .map(element => element.outerHTML.slice(0, 180))
-    const ids = [...document.querySelectorAll('[id]')].map(element => element.id).filter(Boolean)
-    const duplicateIds = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))]
-    const smallRanges = [...document.querySelectorAll('input[type="range"]')]
-      .filter(visible)
-      .map(element => ({name: element.getAttribute('aria-label'), height: element.getBoundingClientRect().height}))
-      .filter(({height}) => height < 24)
-    const smallPrimaryTargets = [...document.querySelectorAll(
-      '[aria-label="Biotron tasks"] a, .beta-feedback__action'
-    )]
-      .filter(visible)
-      .map(element => ({text: element.textContent.trim(), rect: element.getBoundingClientRect().toJSON()}))
-      .filter(({rect}) => rect.width < 44 || rect.height < 44)
-    const logo = document.querySelector('img[itemprop="logo"]')
-
-    return {
-      cls: window.__layoutShiftScore,
-      documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      duplicateIds,
-      lang: document.documentElement.lang,
-      logo: logo && {
-        source: logo.getAttribute('src'),
-        width: logo.getAttribute('width'),
-        height: logo.getAttribute('height')
-      },
-      mainCount: document.querySelectorAll('main').length,
-      smallPrimaryTargets,
-      smallRanges,
-      unlabeledControls
-    }
-  })
-
+  const result = await readQuality(page)
   assert.deepStrictEqual(pageErrors, [], `${profile.name}: page errors`)
-  assert.strictEqual(result.lang, 'en', `${profile.name}: document language is not English`)
-  assert.strictEqual(result.mainCount, 1, `${profile.name}: expected one main landmark`)
-  assert(result.documentOverflow <= 1, `${profile.name}: page overflows viewport by ${result.documentOverflow}px`)
-  assert(result.cls <= 0.1, `${profile.name}: CLS ${result.cls.toFixed(3)} exceeds 0.1`)
-  assert.deepStrictEqual(result.duplicateIds, [], `${profile.name}: duplicate IDs`)
-  assert.deepStrictEqual(result.unlabeledControls, [], `${profile.name}: visible unlabeled controls`)
-  assert.deepStrictEqual(result.smallRanges, [], `${profile.name}: range target below 24px`)
-  assert.deepStrictEqual(result.smallPrimaryTargets, [], `${profile.name}: primary target below 44px`)
-  assert.deepStrictEqual(result.logo, {source: '/Logo-Black-280.webp', width: '280', height: '199'})
+  assertQuality(result, profile.name)
+
+  const expandedResults = []
+  const auditExpanded = async state => {
+    const expanded = await readQuality(page)
+    assert.deepStrictEqual(pageErrors, [], `${profile.name}/${state}: page errors`)
+    // The initial page retains its CLS budget. User-requested disclosure
+    // expansion is audited separately for layout and control quality.
+    assertQuality(expanded, `${profile.name}/${state}`, false)
+    expandedResults.push({state, cls: expanded.cls, overflow: expanded.documentOverflow})
+  }
+  if (profile.midi) {
+    await page.getByText(/Local preset — changes stay/).waitFor()
+    const opened = []
+    for (const name of ['Plant sensor', 'More fun', 'Light sensor', 'Experiments']) {
+      const section = page.locator('details.settings-section').filter({
+        has: page.locator('summary').filter({hasText: new RegExp('^' + name + '$')})
+      })
+      assert.equal(await section.count(), 1, `${profile.name}: missing ${name} section`)
+      if (!await section.evaluate(element => element.open)) await section.locator('summary').click()
+      await section.locator('input:visible, select:visible').first().waitFor()
+      opened.push({name, section})
+      for (const previous of opened) {
+        assert(await previous.section.evaluate(element => element.open),
+          `${profile.name}: opening ${name} closed ${previous.name}`)
+      }
+      await auditExpanded(`Settings ${name} open`)
+    }
+    const handles = page.locator('.biotron-settings-beta .slider-handle:visible')
+    await handles.first().waitFor()
+    const sliders = await handles.evaluateAll(elements => elements.map(element => getComputedStyle(element).cursor))
+    assert(sliders.length > 0 && sliders.every(cursor => cursor === 'pointer'),
+      `${profile.name}: visible settings slider uses a resize cursor`)
+  }
 
   // Feedback is a local editor. No mail client, backend or recorded outcome is
   // required to write, close/reopen or copy a rejection on a phone.
@@ -140,12 +182,32 @@ async function auditProfile(browser, origin, profile) {
     await page.getByRole('button',{name:'Copy diagnostics for Andrey',exact:true}).click()
     await page.getByText('Copy was blocked. Open the preview, select the report and copy it.',{exact:true}).waitFor()
     await page.evaluate(()=>window.__blockClipboard=false)
-    const sliders=await page.locator('.biotron-settings-beta .slider-handle').evaluateAll(elements=>elements.map(element=>getComputedStyle(element).cursor))
-    assert(sliders.length && sliders.every(cursor=>cursor==='pointer'), 'settings slider uses a resize cursor')
-    await page.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
-    await page.getByRole('heading', {name: 'Plant music'}).waitFor()
-    assert.strictEqual(await page.locator('.beta-feedback').count(), 0,
-      `${profile.name}: first play must not duplicate the generic feedback block`)
+  }
+
+  await page.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
+  await page.getByRole('heading', {name: 'Plant music'}).waitFor()
+  assert.strictEqual(await page.locator('.beta-feedback').count(), 0,
+    `${profile.name}: first play must not duplicate the generic feedback block`)
+  const playResult = await readQuality(page)
+  // Hash-route navigation shares the observer with the prior disclosure gestures.
+  assertQuality(playResult, `${profile.name}/Play closed`, false)
+  assert.deepStrictEqual(pageErrors, [], `${profile.name}/Play closed: page errors`)
+  const sound = page.locator('.sound-palette')
+  assert.equal(await sound.count(), 1, `${profile.name}: missing Sound palette`)
+  assert.equal(await sound.evaluate(element => element.open), false,
+    `${profile.name}: Sound opened without a user request`)
+  assert.equal(await sound.locator('.audio-compare').count(), 0,
+    `${profile.name}: unopened Sound mounted its lazy controls`)
+  await sound.locator('summary').click()
+  await sound.getByLabel('Sound', {exact: true}).waitFor()
+  assert(await sound.evaluate(element => element.open), `${profile.name}: Sound did not open`)
+  assert.equal(await sound.getByLabel('Sound', {exact: true}).locator('option').count(), 7,
+    `${profile.name}: Classic sound choices are missing`)
+  await page.getByLabel('Low CPU', {exact: true}).waitFor()
+  await page.getByLabel('Keyboard octave', {exact: true}).waitFor()
+  await auditExpanded('Play Sound open')
+
+  if (profile.midi) {
     await page.getByRole('button', {name: 'Start listening'}).click()
     // Wait for the async attempt's outcome before opening its disclosure.
     try {
@@ -166,7 +228,7 @@ async function auditProfile(browser, origin, profile) {
   }
 
   await context.close()
-  return `${profile.name}: CLS ${result.cls.toFixed(3)}, overflow ${result.documentOverflow}px`
+  return `${profile.name}: initial CLS ${result.cls.toFixed(3)}, overflow ${result.documentOverflow}px; Play CLS ${playResult.cls.toFixed(3)}; ${expandedResults.length} opened states checked`
 }
 
 ;(async () => {

@@ -92,7 +92,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   const goSettings=async()=>{
    await assertExampleMidi()
    const before=await page.evaluate(()=>window.__comparisonMidiRequests)
-   await taskLink('Settings').click()
+   if(await taskLink('Settings').getAttribute('aria-current')!=='page')await taskLink('Settings').click()
    await page.getByRole('heading',{name:'Settings',exact:true}).waitFor()
    await openDetails(page,'Experiments');await selection().waitFor()
    settingsMidiRequests+=await page.evaluate(()=>window.__comparisonMidiRequests)-before
@@ -101,7 +101,8 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   const goPlay=async()=>{
    await assertExampleMidi()
    const before=await page.evaluate(()=>window.__comparisonMidiRequests)
-   await taskLink('Play').click();await waitPlay()
+   if(await taskLink('Play').getAttribute('aria-current')!=='page')await taskLink('Play').click()
+   await waitPlay()
    assert.equal(await page.evaluate(()=>window.__comparisonMidiRequests),before,'Play navigation requested MIDI')
    exampleMidiBaseline=null
   }
