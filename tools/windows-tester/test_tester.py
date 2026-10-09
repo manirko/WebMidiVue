@@ -36,6 +36,10 @@ class PacketTests(unittest.TestCase):
   tester.verify(self.root)
   (self.root/'runtime/app.js').write_text('changed')
   with self.assertRaisesRegex(ValueError,'changed'):tester.verify(self.root)
+ def test_requested_source_rejects_an_unchanged_older_packet(self):
+  tester.verify(self.root, expected_web_commit='1'*40)
+  with self.assertRaisesRegex(ValueError,'requested web commit'):
+   tester.verify(self.root, expected_web_commit='2'*40)
  def test_extra_runtime_file_and_wrong_identity_stop(self):
   (self.root/'runtime/private.txt').write_text('private')
   with self.assertRaisesRegex(ValueError,'inventory'):tester.verify(self.root)

@@ -66,9 +66,11 @@ def safe_file(root, relative):
  return file
 
 
-def verify(root):
+def verify(root, expected_web_commit=None):
  if not re.fullmatch(r'[0-9a-f]{40}', WEB_COMMIT):
   raise ValueError('Web candidate not frozen; final packet assembly required')
+ if expected_web_commit is not None and WEB_COMMIT != expected_web_commit:
+  raise ValueError('Packet differs from requested web commit')
  manifest = json.loads((root/'packet-manifest.json').read_text(encoding='utf-8'))
  if manifest['web_commit'] != WEB_COMMIT:
   raise ValueError('Unexpected web commit')
@@ -236,6 +238,7 @@ def main():
  if sys.version_info < (3,10): raise ValueError('Python3.10+ required')
  p=argparse.ArgumentParser(description=__doc__)
  p.add_argument('--root',type=Path,default=Path(__file__).resolve().parent)
+ p.add_argument('--expect-web-commit',help='Reject an older packet before starting the requested manual test')
  sub=p.add_subparsers(dest='command',required=True)
  sub.add_parser('verify'); sub.add_parser('doctor'); sub.add_parser('cases'); sub.add_parser('bundle')
  serve=sub.add_parser('serve'); serve.add_argument('--browser',choices=['chrome','edge','none'],default='none');serve.add_argument('--port',type=int,default=8765)
@@ -244,7 +247,7 @@ def main():
  record=sub.add_parser('record');record.add_argument('--case',choices=CASES,required=True);record.add_argument('--result',choices=['PASS','FAIL','NOT_RUN','BLOCKED','INCONCLUSIVE'],required=True);record.add_argument('--note',required=True);record.add_argument('--evidence',action='append',default=[])
  args=p.parse_args();root=args.root.resolve()
  if args.command=='cases':print(json.dumps(CASES,ensure_ascii=False,indent=2));return
- manifest=verify(root)
+ manifest=verify(root, args.expect_web_commit)
  if args.command=='verify':print('Packet bytes verified; physical tests NOT RUN');return
  if args.command=='bundle':
   output=export_results(root);print(str(output));print('SHA256:',digest(output));return
