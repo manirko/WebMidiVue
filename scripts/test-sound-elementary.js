@@ -7,6 +7,7 @@ const assert = require('assert')
 const fs = require('fs')
 const http = require('http')
 const path = require('path')
+const os = require('os')
 const {execFileSync} = require('child_process')
 const {chromium} = require('playwright-core')
 
@@ -25,26 +26,29 @@ const chromePath = () => {
   return executable
 }
 
-const entryFile = path.join(root, 'scripts/_elem-engine-entry.js')
-const bundleFile = path.join(root, 'scripts/_elem-engine-bundle.js')
-const cleanupArtifacts = () => {
-  fs.rmSync(entryFile, {force: true})
-  fs.rmSync(bundleFile, {force: true})
-}
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'biotron-levels-build-'))
+const entryFile = path.join(scratch, 'entry.mjs')
+const bundleFile = path.join(scratch, 'bundle.js')
+const cleanupArtifacts = () => fs.rmSync(scratch, {recursive: true, force: true})
 process.once('exit', cleanupArtifacts)
 fs.writeFileSync(entryFile,
-  "export {ElementarySynthEngine} from '../src/audio/elementary/engine.mjs'\n" +
-  "export {SOUNDS} from '../src/audio/elementary/timbres.mjs'\n" +
-  "export {BIOTRON_CALIBRATION} from '../src/audio/biotronCalibration.mjs'\n")
-execFileSync('npx', ['--yes', 'esbuild@0.24.0', 'scripts/_elem-engine-entry.js',
+  `export {ElementarySynthEngine} from ${JSON.stringify(path.join(root, 'src/audio/elementary/engine.mjs'))}\n` +
+  `export {SOUNDS} from ${JSON.stringify(path.join(root, 'src/audio/elementary/timbres.mjs'))}\n` +
+  `export {BIOTRON_CALIBRATION} from ${JSON.stringify(path.join(root, 'src/audio/biotronCalibration.mjs'))}\n`)
+execFileSync('npx', ['--yes', 'esbuild@0.24.0', entryFile,
   '--bundle', '--format=iife', '--global-name=__ElemEngine',
-  '--outfile=scripts/_elem-engine-bundle.js', '--log-level=error'], {cwd: root})
+  '--outfile='+bundleFile, '--log-level=error'], {cwd: root})
 
 const server = http.createServer((request, response) => {
   const pathname = new URL(request.url, 'http://127.0.0.1').pathname
   if (pathname === '/') {
     response.writeHead(200, {'Content-Type': 'text/html', 'Cache-Control': 'no-store'})
     response.end('<!doctype html><meta charset="utf-8"><title>Elementary sound level test</title>')
+    return
+  }
+  if (pathname === '/scripts/_elem-engine-bundle.js') {
+    response.writeHead(200, {'Content-Type': 'text/javascript', 'Cache-Control': 'no-store'})
+    response.end(fs.readFileSync(bundleFile))
     return
   }
   const file = path.resolve(root, pathname.slice(1))

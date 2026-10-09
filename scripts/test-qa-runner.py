@@ -28,6 +28,35 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
   checked=subprocess.run([sys.executable,str(fixture/'build-browser-qa-harness.py'),'--output',str(root/name/'output')],capture_output=True,text=True,timeout=5)
   assert checked.returncode!=0 and 'source boundar' in checked.stderr.lower(),name+checked.stderr
   assert not (root/name/'output/entry.mjs').exists(),name
+ # Exercise the real level-test launcher under the runner's hard-stop mode.
+ # Its build files must stay outside the checkout even when exit hooks cannot run.
+ fixture = root/'interrupted-levels'; (fixture/'scripts').mkdir(parents=True)
+ launcher = fixture/'scripts/test-sound-elementary.js'; launcher.write_text(sound)
+ scratch = root/'level-scratch'; scratch.mkdir()
+ stub_bin = root/'interrupt-bin'; stub_bin.mkdir()
+ ready = root/'interrupt-ready.json'
+ npx = stub_bin/'npx'
+ npx.write_text('#!'+sys.executable+'\nimport json,os,sys,time\nfrom pathlib import Path\nPath(os.environ["BIOTRON_LEVEL_READY"]).write_text(json.dumps(sys.argv[1:]))\ntime.sleep(60)\n')
+ npx.chmod(0o700)
+ environment = dict(os.environ, PATH=str(stub_bin)+os.pathsep+os.environ['PATH'],
+  NODE_PATH=str(runner.parent.parent/'node_modules'), TMPDIR=str(scratch), BIOTRON_LEVEL_READY=str(ready))
+ before = {str(p.relative_to(fixture)):hashlib.sha256(p.read_bytes()).hexdigest() for p in fixture.rglob('*') if p.is_file()}
+ process = subprocess.Popen(['node',str(launcher)],env=environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True,text=True)
+ try:
+  deadline=time.monotonic()+10
+  while not ready.exists() and process.poll() is None and time.monotonic()<deadline: time.sleep(.02)
+  assert ready.exists(), 'Real level-test launcher never reached bundler'
+ finally:
+  if process.poll() is None: os.killpg(process.pid,signal.SIGKILL)
+  stdout,stderr=process.communicate(timeout=5)
+ assert process.returncode == -signal.SIGKILL, stdout+stderr
+ arguments=json.loads(ready.read_text())
+ entry=pathlib.Path(arguments[2]); bundle=pathlib.Path(next(a.split('=',1)[1] for a in arguments if a.startswith('--outfile=')))
+ assert entry.is_absolute() and bundle.is_absolute() and not entry.is_relative_to(fixture) and not bundle.is_relative_to(fixture), 'Hard stop leaves sound-test build files in checkout'
+ after={str(p.relative_to(fixture)):hashlib.sha256(p.read_bytes()).hexdigest() for p in fixture.rglob('*') if p.is_file()}
+ assert after==before, 'Hard stop changed the checkout inventory'
+ assert entry.exists(), 'Interruption fixture did not exercise an actual generated entry'
+ print('Level-test hard-stop: real launcher leaves checkout unchanged')
  binaries = root/'bin'; binaries.mkdir()
  git = binaries/'git'
  git.write_text('#!/bin/sh\ncase "$1" in rev-parse) echo fixture-head;; status) echo " M fixture";; esac\n')
