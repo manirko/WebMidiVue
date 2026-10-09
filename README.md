@@ -100,6 +100,8 @@ Prepare an exact release candidate only from a clean checkout with:
 npm run candidate:biotron
 ```
 
+Settings coverage uses the same fake-MIDI browser suite: `npm run test:sound:browser -- --settings-only`. It edits all 26 device commands and checks exact outgoing bytes against an independent readback fixture. Numeric boundaries, blank fields, rapid edits, dirty/mismatched/missing/wrong-nonce replies and read-only retry are separate cases. This proves UI/protocol behaviour; native musical effects need a saved baseline, exclusive device ownership and a physical MIDI trace. For cached local quick tests, `npm_config_offline=true npm run test:quick` uses the installed esbuild cache without downloading.
+
 The tester loop also checks custom build destinations with
 `npm run test:build-destination`: beta notices/security files and the exact
 internal UF2 must appear in the chosen output, without modifying another

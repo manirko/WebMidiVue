@@ -24,8 +24,10 @@ Rollback1.10.9 SHA256823d044374268462d39b13c0e65dc2676cda2fb3d5162edba78aedccb0a
 2. Сохрани actual environment/версии/PCB/звуковой маршрут в results. Если PCB или
    исходная firmware неизвестна, запиши UNKNOWN, а не предполагай Fibonacci/A08.
 3. Сначала `autotest --browser chrome`, затем `autotest --browser edge`, по очереди.
-   Это существующий audition suite: 43 нажатия и PCM, mock MIDI, переключения,
-   ограничение нот и закрытый Sound. Настоящий MIDI, USB и слышимость здесь NOT RUN.
+   Это existing audition suite (43 нажатия/PCM) и Settings lane (26 изменённых
+   команд, 17 граничных/ошибочных случаев). Проверяй оба лога и JSON в results.
+   Mock MIDI, переключения, ограничение нот и закрытый Sound проверяются автономно.
+   Настоящий MIDI, USB и слышимость здесь NOT RUN.
    Сохраняй FAIL даже при удачном повторе. Не правь runtime/manifest ради PASS.
    Любая ошибка с cleanup NOT_CONFIRMED: останови дальнейшие autotest/capture,
    пока завершение именно этих процессов не подтверждено. Headless не имеет окна

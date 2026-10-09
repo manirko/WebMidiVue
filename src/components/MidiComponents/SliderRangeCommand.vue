@@ -32,20 +32,22 @@ export default {
     }
   },
   methods: {
-    changed_min_val() {
-      this.minCommandObject.set_value(this.values[0]);
-      this.$emit('input-changed', this.minCommandObject)
-    },
-    changed_max_val() {
-      this.maxCommandObject.set_value(this.values[1]);
-      this.$emit('input-changed', this.maxCommandObject)
+    changeEndpoint(index, command) {
+      const value = this.values[index]
+      if (value === '' || !Number.isFinite(Number(value))) {
+        this.values[index] = command.value
+        return
+      }
+      this.values[index] = Math.max(command.min_value, Math.min(command.max_value, Math.round(Number(value))))
+      command.set_value(this.values[index])
+      this.$emit('input-changed', command)
     },
     changed() {
       if (this.minCommandObject.value !== this.values[0]) {
-        this.changed_min_val()
+        this.changeEndpoint(0, this.minCommandObject)
       }
       if (this.maxCommandObject.value !== this.values[1]) {
-        this.changed_max_val()
+        this.changeEndpoint(1, this.maxCommandObject)
       }
     },
   },
@@ -68,12 +70,12 @@ export default {
     </label>
       <div class="row command-range-pair" style="margin-bottom: 10px">
         <div class="col">
-          <input type="number" :aria-label="`${commandLabel} minimum`" class="form-control" @change="this.changed_min_val"
+          <input type="number" :aria-label="`${commandLabel} minimum`" class="form-control" @change="changeEndpoint(0, minCommandObject)"
                  v-model="this.values[0]" :min="this.minCommandObject.min_value" :max="this.minCommandObject.max_value" />
         </div>
         -
         <div class="col">
-          <input type="number" :aria-label="`${commandLabel} maximum`" class="form-control" @change="this.changed_max_val"
+          <input type="number" :aria-label="`${commandLabel} maximum`" class="form-control" @change="changeEndpoint(1, maxCommandObject)"
                  v-model="this.values[1]" :min="this.minCommandObject.min_value" :max="this.maxCommandObject.max_value" />
         </div>
       </div>

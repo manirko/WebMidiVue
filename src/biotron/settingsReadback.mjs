@@ -41,6 +41,7 @@ export function parseSettingsResponse(input, expectedRequestId) {
       data[6] !== SETTINGS_SOURCE_PERSISTED || data[7] !== u7(expectedRequestId)) return null
 
   const flags = data[8]
+  if (flags & ~3) return null
   return {
     valid: Boolean(flags & 1),
     dirty: Boolean(flags & 2),

@@ -69,7 +69,41 @@ for (const value of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
   selectContext.module.exports.methods.changed.call(selection)
 }
 
-(async () => {
+function controlComponent(file) {
+  const script = fs.readFileSync(file, 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1]
+  const scope = {module: {exports: {}}, SysExCommand: class {}, HintComponent: {}, Slider: {}, toRaw: value => value}
+  vm.runInNewContext(script.replace(/import.*$/gm, '').replace('export default', 'module.exports ='), scope)
+  return scope.module.exports
+}
+const slider = controlComponent('src/components/MidiComponents/SliderCommand.vue')
+const numeric = {rawValue: 50, minValue: 0, maxValue: 100, tableValues: undefined,
+  commandObject: {value: 50, set_value(value) {this.value = value}}, sent: [],
+  $emit(name, command) {this.sent.push(command.value)}}
+for (const [name, method] of Object.entries(slider.methods)) numeric[name] = method.bind(numeric)
+for (const [entered, expected] of [['101', 100], ['-1', 0], ['42.6', 43], ['0', 0]]) {
+  numeric.rawValue = entered
+  numeric.changed({target: {value: entered}})
+  assert.equal(numeric.commandObject.value, expected, 'numeric input displayed one value and sent another')
+  assert.equal(numeric.rawValue, expected)
+}
+const numericWrites = numeric.sent.length
+numeric.changed({target: {value: ''}})
+assert.equal(numeric.sent.length, numericWrites, 'blank input must not replace a device setting')
+const range = controlComponent('src/components/MidiComponents/SliderRangeCommand.vue')
+const pair = {values: [-1, 128], sent: [],
+  minCommandObject: {value: 8, min_value: 0, max_value: 127, set_value(value) {this.value = value}},
+  maxCommandObject: {value: 98, min_value: 0, max_value: 127, set_value(value) {this.value = value}},
+  $emit(name, command) {this.sent.push(command.value)}}
+for (const [name, method] of Object.entries(range.methods)) pair[name] = method.bind(pair)
+pair.changeEndpoint(0, pair.minCommandObject); pair.changeEndpoint(1, pair.maxCommandObject)
+assert.equal(pair.minCommandObject.value, 0, 'explicit velocity zero must remain valid')
+assert.equal(pair.maxCommandObject.value, 127)
+assert.deepEqual(pair.values, [0, 127])
+const rangeWrites = pair.sent.length
+pair.values[0] = ''; pair.changeEndpoint(0, pair.minCommandObject)
+assert.equal(pair.sent.length, rangeWrites, 'blank range endpoint must not write zero')
+
+;(async () => {
   const legacy = page()
   legacy.firmwareVersion = '1.8.2'
   legacy.legacyFirmware = component.computed.legacyFirmware.call(legacy)

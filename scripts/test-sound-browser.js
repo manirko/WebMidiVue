@@ -84,6 +84,162 @@ async function openSoundHelp(page) {
     'Opening sound help shifted the visual in the document')
 }
 
+// Independent protocol oracle: command IDs/vector positions from firmware
+// params.c/settings_readback.c, not the application's serialization helpers.
+async function openSettingsForTest(page, origin) {
+  await page.goto(`${origin}/#/biotron`, {waitUntil: 'domcontentloaded'})
+  await page.getByText('Settings loaded. Individual changes apply live; presets need Apply preset to Biotron.', {exact: true}).waitFor({timeout: 15000})
+  for (const summary of await page.locator('.settings-section > summary').all()) {
+    if (!await summary.evaluate(element => element.parentElement.open)) await summary.click()
+  }
+  return Object.fromEntries(['Plant sensor', 'More fun', 'Light sensor'].map(name =>
+    [name, page.locator('.settings-section').filter({has: page.locator('summary', {hasText: name})})]))
+}
+
+async function verifySettingsFailures(page, origin) {
+  const sections = await openSettingsForTest(page, origin)
+  const records = []
+  const save = () => {
+    if (process.env.BIOTRON_TEST_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR,
+      'settings-boundaries.json'), JSON.stringify(records, null, 2))
+  }
+  for (const [section, name, command, entered, value] of [
+    ['More fun', '👣 Step size value', 1, '101', 100],
+    ['More fun', '👣 Step size value', 1, '-1', 0],
+    ['More fun', '👣 Step size value', 1, '42.6', 43],
+    ['Plant sensor', '🌱 The beat value', 0, '0', 1],
+    ['Plant sensor', '🌱 The beat value', 0, '1001', 1000],
+    ['More fun', '💪 Note velocity minimum', 15, '-1', 0],
+    ['More fun', '💪 Note velocity minimum', 15, '128', 127],
+    ['More fun', '💪 Note velocity maximum', 5, '128', 127],
+    ['More fun', '💪 Note velocity minimum', 15, '0', 0],
+  ]) {
+    const record = {case: name, entered, expected: value, status: 'RUNNING'}
+    records.push(record); save()
+    const control = sections[section].getByRole('spinbutton', {name, exact: true})
+    const start = await page.evaluate(() => window.__soundMidiSent.length)
+    await control.fill(entered); await control.press('Tab')
+    await page.waitForFunction(({start, command}) => window.__soundMidiSent.slice(start).some(message => message[3] === command), {start, command})
+    const payload = command === 0 ? [...Array(Math.floor(value / 127)).fill(127), value % 127] : [value]
+    assert.deepStrictEqual(await page.evaluate(start => window.__soundMidiSent.slice(start).filter(message => message[3] !== 123), start),
+      [[0xf0, 20, 13, command, ...payload, 0xf7]], `${name}: displayed clamp did not match device write`)
+    await page.getByText('Saved on Biotron.', {exact: true}).waitFor({timeout: 5000})
+    assert.equal(Number(await control.inputValue()), value)
+    record.status = 'PASS'; save()
+  }
+  const number = sections['More fun'].getByRole('spinbutton', {name: '👣 Step size value', exact: true})
+  const beforeBlank = await page.evaluate(() => window.__soundMidiSent.length)
+  await number.fill(''); await number.press('Tab')
+  assert.equal(await number.inputValue(), '43', 'blank input did not restore the current setting')
+  assert.equal(await page.evaluate(() => window.__soundMidiSent.length), beforeBlank, 'blank field wrote a setting')
+  records.push({case: 'blank numeric field preserves value and sends nothing', status: 'PASS'}); save()
+  const endpoint = sections['More fun'].getByRole('spinbutton', {name: '💪 Note velocity minimum', exact: true})
+  await endpoint.fill(''); await endpoint.press('Tab')
+  assert.equal(await endpoint.inputValue(), '0')
+  assert.equal(await page.evaluate(() => window.__soundMidiSent.length), beforeBlank, 'blank velocity field wrote a setting')
+  records.push({case: 'blank velocity endpoint preserves explicit zero and sends nothing', status: 'PASS'}); save()
+  for (const mode of ['dirty', 'mismatch', 'none', 'wrong_nonce', 'unknown_flags']) {
+    await page.evaluate(mode => { window.__soundSettingsReplyMode = mode }, mode)
+    const marker = await page.evaluate(() => window.__soundMidiSent.length)
+    await page.getByRole('button', {name: 'Check saved settings', exact: true}).click()
+    await page.getByText('Live changes still work. The saved copy could not be confirmed — try again.', {exact: true}).waitFor({timeout: 12000})
+    const messages = await page.evaluate(start => window.__soundMidiSent.slice(start), marker)
+    assert(messages.length > 0 && messages.every(message => message[3] === 123), `${mode}: saved-copy check wrote settings`)
+    assert(await number.isEnabled(), `${mode}: failed check left controls blocked`)
+    await page.evaluate(() => { window.__soundSettingsReplyMode = 'valid' })
+    await page.getByRole('button', {name: 'Check saved settings', exact: true}).click()
+    await page.getByText('Saved on Biotron.', {exact: true}).waitFor({timeout: 5000})
+    records.push({case: `readback ${mode} rejected; retry recovers; check sends queries only`, status: 'PASS'}); save()
+  }
+  const rapidMarker = await page.evaluate(() => window.__soundMidiSent.length)
+  for (const value of [25, 75]) {
+    await number.fill(String(value)); await number.press('Tab')
+    await page.waitForFunction(value => window.__soundSettingsSnapshot()[4] === value, value)
+  }
+  await page.getByText('Saved on Biotron.', {exact: true}).waitFor({timeout: 5000})
+  assert.equal(await number.inputValue(), '75')
+  assert.deepStrictEqual(await page.evaluate(start => window.__soundMidiSent.slice(start).filter(message => message[3] !== 123), rapidMarker),
+    [[0xf0, 20, 13, 1, 25, 0xf7], [0xf0, 20, 13, 1, 75, 0xf7]])
+  records.push({case: 'rapid changes retain the last value; both writes and final saved copy agree', status: 'PASS'}); save()
+  console.log(`PASS Settings boundaries/reply failures: ${records.length} cases; native device NOT RUN`)
+}
+
+async function verifyAllSettings(page, origin) {
+  const sections = await openSettingsForTest(page, origin)
+  const rows = []
+  const save = () => {
+    const directory = process.env.BIOTRON_TEST_EVIDENCE_DIR
+    if (directory) fs.writeFileSync(path.join(directory, 'settings-matrix.json'), JSON.stringify({
+      browser: browserConfig().name, device: 'FAKE MIDI; native settings/music NOT RUN', rows
+    }, null, 2))
+  }
+  // [field, section, accessible name, kind, command ID, vector offset, cases]
+  const matrix = [
+    ['scale', 'Plant sensor', '🎼 Scale', 'select', 4, 7, [0, 12]],
+    ['plantBpm', 'Plant sensor', '🌱 The beat value', 'number', 0, 0, [127, 128, 1000]],
+    ['noteOffPercent', 'Plant sensor', '🎵 Note hold value', 'noteHold', 12, 3, [1, 64]],
+    ['middle_plant_note', 'Plant sensor', '🏠︎ Home note value', 'home', 25, 22, [60, 72]],
+    ['plant_midi_channel', 'More fun', '🎛️ MIDI channel value', 'number', [127, 0], 23, [1, 16]],
+    ['button_mode_state', 'More fun', 'Biotron mute pad', 'switch', 27, 26, [1, 0]],
+    ['swing_first_note_percent', 'More fun', 'Swing note value', 'number', 26, 25, [1, 100]],
+    ['randomness', 'More fun', '📡 Input variation', 'switch', 10, 12, [1, 0]],
+    ['performance', 'More fun', '✋ Manual control', 'switch', 21, 21, [0, 1]],
+    ['same_note_plant', 'More fun', '🔂 Note repeat value', 'number', 11, 13, [0, 10]],
+    ['firstValue', 'More fun', '🌞 Wake-up value', 'number', 2, 5, [0, 100]],
+    ['noteDistance', 'More fun', '👣 Step size value', 'number', 1, 4, [0, 100]],
+    ['smoothness', 'More fun', '⏳ Delay value', 'number', 3, 6, [0, 99]],
+    ['plant_no_velocity', 'Plant sensor', '🔇 Mute', 'switch', 22, 17, [1, 0]],
+    ['randomPlantVelocity', 'More fun', '🧍 Humanize', 'switch', 16, 19, [0, 1]],
+    ['minPlantVelocity', 'More fun', '💪 Note velocity minimum', 'number', 15, 8, [0, 1]],
+    ['maxPlantVelocity', 'More fun', '💪 Note velocity maximum', 'number', 5, 9, [126, 127]],
+    ['light_no_velocity', 'Light sensor', '🔇 Mute', 'switch', 23, 18, [0, 1, 0]],
+    ['randomLightVelocity', 'Light sensor', '🧍 Humanize', 'switch', 18, 20, [0, 1]],
+    ['minLightVelocity', 'Light sensor', '🔨 Note velocity minimum', 'number', 17, 10, [0, 1]],
+    ['maxLightVelocity', 'Light sensor', '🔨 Note velocity maximum', 'number', 6, 11, [126, 127]],
+    ['light_midi_channel', 'Light sensor', '🎛️ MIDI channel value', 'number', [127, 1], 24, [1, 16]],
+    ['light_pitch_mode', 'Light sensor', '〜 Pitch bend', 'switch', 19, 16, [1, 0]],
+    ['lightBpm', 'Light sensor', '🌞 Every N plant beats value', 'number', 9, 2, [1, 30]],
+    ['same_note_light', 'Light sensor', '🔂 Note repeat value', 'number', 24, 14, [0, 10]],
+    ['range_light_note', 'Light sensor', '📏 Range value', 'number', 13, 15, [0, 36]],
+  ]
+  assert.equal(matrix.length, 26)
+  for (const [field, section, name, kind, command, offset, values] of matrix) {
+    for (const value of values) {
+      const before = await page.evaluate(() => ({values: window.__soundSettingsSnapshot(), sent: window.__soundMidiSent.length}))
+      const control = sections[section].getByRole(kind === 'switch' ? 'checkbox' : kind === 'number' ? 'spinbutton' : 'combobox', {name, exact: true})
+      const row = {field, value, status: 'RUNNING'}
+      rows.push(row); save()
+      try {
+        assert.equal(await control.count(), 1, `${field}: control missing or ambiguous`)
+        const current = command === 0 ? before.values[0] | (before.values[1] << 7) : before.values[offset]
+        if (current === value) { row.status = 'UNCHANGED_BASELINE'; save(); continue }
+        if (kind === 'switch') {
+          await control.locator('..').click()
+        } else if (kind === 'number') {
+          await control.fill(String(value)); await control.press('Tab')
+        } else if (kind === 'home') await control.selectOption({label: value === 60 ? 'C4' : 'C5'})
+        else if (kind === 'noteHold') await control.selectOption({label: value === 1 ? '1' : '1/64'})
+        else await control.selectOption(String(value))
+        const payload = command === 0 ? [...Array(Math.floor(value / 127)).fill(127), value % 127]
+          : [Array.isArray(command) ? value - 1 : value]
+        const expected = [0xf0, 20, 13, ...[command].flat(), ...payload, 0xf7]
+        await page.waitForFunction(start => window.__soundMidiSent.slice(start).some(message => message[0] === 0xf0 && message[3] !== 123), before.sent)
+        const writes = await page.evaluate(start => window.__soundMidiSent.slice(start).filter(message => message[3] !== 123), before.sent)
+        assert.deepStrictEqual(writes, [expected], `${field}: wrong command or duplicate/unrelated write`)
+        const expectedVector = [...before.values]
+        expectedVector[offset] = command === 0 ? value & 127 : value
+        if (command === 0) expectedVector[1] = value >> 7
+        assert.deepStrictEqual(await page.evaluate(() => window.__soundSettingsSnapshot()), expectedVector,
+          `${field}: independent device value did not match; existing fixture must process this command`)
+        await page.getByText(/^(Saved on Biotron\.|Calmer play is saved\.)/).waitFor({timeout: 5000})
+        assert.equal(await page.locator('#loader_div').count(), 0, `${field}: blocking loader`)
+        row.status = 'PASS'; row.message = expected; save()
+      } catch (error) { row.status = 'FAIL'; row.error = error.stack; save(); throw error }
+    }
+  }
+  console.log(`PASS Settings matrix: ${matrix.length} commands, ${rows.filter(row => row.status === 'PASS').length} actual edits; unchanged baselines separate; native MIDI/music NOT RUN`)
+}
+
 async function verifyGardenStates(page, origin) {
   await page.addInitScript(() => {
     document.addEventListener('click', event => {
@@ -539,6 +695,12 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
         78, 3, 4, 4, 50, 10, 0, 4, 8, 98, 74, 75, 0, 1, 0, 12,
         0, 0, 1, 1, 0, 1, 60, 2, 3, 100, 0
       ]
+      window.__soundSettingsSnapshot = () => [...persistedValues]
+      window.__soundSettingsReplyMode = 'valid'
+      // Literal firmware contract, independently maintained from BiotronIDB.
+      const settingOffsets = {9: 2, 12: 3, 1: 4, 2: 5, 3: 6, 4: 7,
+        15: 8, 5: 9, 17: 10, 6: 11, 10: 12, 11: 13, 24: 14, 13: 15,
+        19: 16, 22: 17, 23: 18, 16: 19, 18: 20, 21: 21, 25: 22, 26: 25, 27: 26}
       const outputFor = (id, name) => ({
         id, name, manufacturer: 'Playtronica', state: 'connected', connection: 'closed',
         async open() { this.connection = 'open'; return this },
@@ -547,6 +709,12 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
           const message = Array.from(data)
           window.__soundMidiSent.push(message)
           if (id !== 'playtronica-out-1') return
+          if (message.length === 6 && message[0] === 0xf0 && message[1] === 20 && message[2] === 13 && message[5] === 0xf7 && settingOffsets[message[3]] !== undefined) {
+            persistedValues[settingOffsets[message[3]]] = message[4]
+          }
+          if (message.length === 7 && message[0] === 0xf0 && message[1] === 20 && message[2] === 13 && message[3] === 127 && message[6] === 0xf7 && message[4] <= 1) {
+            persistedValues[23 + message[4]] = message[5] + 1
+          }
           if (message[0] === 0xf0 && message[1] === 20 && message[2] === 13 &&
               message[3] === 0 && message.at(-1) === 0xf7) {
             const bpm = message.slice(4, -1).reduce((sum, byte) => sum + byte, 0)
@@ -554,12 +722,17 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
             persistedValues[1] = (bpm >> 7) & 0x7f
           }
           if (message.length === 7 && message[0] === 0xf0 && message[3] === 123) {
+            const mode = window.__soundSettingsReplyMode
+            if (mode === 'none') return
             // Envelope copied from a real 1.9.8 device reply (47 bytes, f0 14 0d 7b …),
             // not invented — an invented frame is what hid this bug until 2026-09-02.
             const response = [
-              0xf0, 0x14, 0x0d, 123, 1, 1, 1, message[5], 1,
+              0xf0, 0x14, 0x0d, 123, 1, 1, 1,
+              mode === 'wrong_nonce' ? (message[5] + 1) & 127 : message[5],
+              mode === 'dirty' ? 3 : mode === 'unknown_flags' ? 5 : 1,
               7, 0, 0, 0, 0, 7, 0, 0, 0, 0, ...persistedValues, 0xf7
             ]
+            if (mode === 'mismatch') response[23] = (response[23] + 1) & 127
             setTimeout(() => input.onmidimessage?.({data: Uint8Array.from(response)}), 0)
           }
         }
@@ -593,6 +766,14 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     const page = await context.newPage()
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
+    if (process.argv.includes('--settings-only')) {
+      const evidence = process.env.BIOTRON_TEST_EVIDENCE_DIR
+      if (evidence) fs.mkdirSync(evidence, {recursive: true})
+      await verifySettingsFailures(page, origin)
+      await verifyAllSettings(page, origin)
+      assert.deepStrictEqual(errors, [])
+      return
+    }
     if (process.argv.includes('--visual-only')) {
       const evidence = process.env.BIOTRON_TEST_EVIDENCE_DIR
       if (evidence) fs.mkdirSync(evidence, {recursive: true})
@@ -1054,6 +1235,8 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     assert(telemetryEvents.some(event => event.event_name === 'session.started' && event.service_name === 'biotron'))
     assert(telemetryEvents.every(event => !('raw_midi' in event) && !('device_name' in event)))
     await verifyGardenStates(page, origin)
+    await verifySettingsFailures(page, origin)
+    await verifyAllSettings(page, origin)
     assert.deepStrictEqual(errors, [])
     if (realtimeSoak) writeSoakEvidence('PASS', 'suite-complete', realtimeSoak)
     console.log(`Sound browser verified: first-play Biotron reveal, Play → Settings → Speed live-save continuity, permission/audio-only/no-audio fallbacks, 7 variants, ${devtools ? '6x-throttled' : 'unthrottled (CDP NOT SUPPORTED)'} Low CPU start ${constrainedStartMilliseconds} ms and burst ${constrainedBurstMilliseconds.toFixed(1)} ms, exclusive two-tab sound handoff, 100/100 lifecycle cycles in ${cycleMilliseconds} ms, 1000 burst ${burstMilliseconds.toFixed(1)} ms, 20000 soak ${soakMilliseconds.toFixed(1)} ms, optional real-time soak ${realtimeSoak ? `${realtimeSoak.elapsedMilliseconds} ms` : 'not requested'}, heap delta ${heapGrowth}, disconnect/background recovery and retryable release.`)
@@ -1065,6 +1248,10 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
       for (const context of browser.contexts()) for (const tab of context.pages()) {
         const prefix = path.join(evidenceDirectory, `sound-fault-${Date.now()}-${++number}`)
         try {
+          fs.writeFileSync(`${prefix}.json`, JSON.stringify({error: error.stack, beforeCleanup: true,
+            url: tab.url(), browser: browser.version(), fixture: await tab.evaluate(() => ({
+              sent: window.__soundMidiSent, values: window.__soundSettingsSnapshot?.(), replyMode: window.__soundSettingsReplyMode
+            }))}, null, 2))
           fs.writeFileSync(`${prefix}.txt`, `${tab.url()}\n${await tab.locator('body').innerText({timeout: 1500})}`)
           await tab.screenshot({path: `${prefix}.png`, fullPage: true, timeout: 2000})
         } catch (captureError) {

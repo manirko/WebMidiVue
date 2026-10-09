@@ -186,36 +186,48 @@ def node_version(executable):
 
 
 def run_autotest(root, run, browser, executable, node):
- # Reuse the project's exact audition suite; no second engine or MIDI client.
- script=root/'automation/scripts/test-audition-browser.js'
- if not script.is_file():raise ValueError('This packet has no autonomous suite')
+ # Reuse existing audition and sound/Settings suites; no native MIDI client.
+ scripts=[root/'automation/scripts/test-audition-browser.js',root/'automation/scripts/test-sound-browser.js']
+ if not all(script.is_file() for script in scripts):raise ValueError('This packet has no complete autonomous suite')
  env={**os.environ, 'NODE_PATH':str(root/'vendor'), 'BIOTRON_QA_DIST_ROOT':str(root/'runtime'),
       'BIOTRON_QA_BROWSER':'msedge' if browser=='edge' else 'chrome',
       ('EDGE_PATH' if browser=='edge' else 'CHROME_PATH'):executable,
       'AUDITION_BROWSER_OUTPUT':str(run/'browser'), 'AUDITION_BROWSER_TIMEOUT_MS':'540000'}
- command=[node,str(script)]
- write_json(run/'autotest-config.json',{'at':utc(),'command':command,'browser':browser,'executable':executable,'web_commit':WEB_COMMIT,'native_midi':'NOT_USED; isolated synthetic fixture','physical_result':'NOT_RUN'})
+ commands=[[node,str(scripts[0])],[node,str(scripts[1]),'--settings-only']]
+ write_json(run/'autotest-config.json',{'at':utc(),'commands':commands,'browser':browser,'executable':executable,'web_commit':WEB_COMMIT,'native_midi':'NOT_USED; isolated synthetic fixture','physical_result':'NOT_RUN'})
  fault=None;code=None;cleanup='NOT_CHECKED';interrupted=False
- with (run/'autotest.log').open('w',encoding='utf-8') as log:
-  try:code=subprocess.run(command,cwd=root/'automation',env=env,stdout=log,stderr=subprocess.STDOUT,timeout=600).returncode
-  except subprocess.TimeoutExpired:
-   cleanup='NOT_CONFIRMED';fault='Suite exceeded 600 seconds. Stop further autotest/capture until owned-process cleanup is confirmed.'
-  except KeyboardInterrupt:
-   interrupted=True;cleanup='NOT_CONFIRMED';fault='Suite interrupted. Stop further autotest/capture until owned-process cleanup is confirmed.'
-  except OSError as error:
-   cleanup='NOT_CONFIRMED';fault='Suite execution error: '+str(error)+'. Stop further autotest/capture until owned-process cleanup is confirmed.'
- if code!=0:fault=fault or 'Autonomous suite failed; keep the first fault and log.'
- if not fault:
-  try:
-   progress=json.loads((run/'browser/progress.json').read_text(encoding='utf-8'))
-   keys=json.loads((run/'browser/keyboard-observations.json').read_text(encoding='utf-8'))
-   if progress[-1]['stage']!='PASS' or len({(x['bank'],x['id']) for x in keys})!=43:
-    fault='Suite exited without complete PASS and 43 keyboard observations.'
-  except (OSError,ValueError,KeyError,IndexError,TypeError):fault='Suite evidence is missing or incomplete.'
+ for index,command in enumerate(commands):
+  lane_env={**env}
+  if index==1:
+   (run/'settings').mkdir()
+   lane_env['BIOTRON_TEST_EVIDENCE_DIR']=str(run/'settings')
+  with (run/('autotest.log' if index==0 else 'settings.log')).open('w',encoding='utf-8') as log:
+   try:code=subprocess.run(command,cwd=root/'automation',env=lane_env,stdout=log,stderr=subprocess.STDOUT,timeout=600).returncode
+   except subprocess.TimeoutExpired:
+    cleanup='NOT_CONFIRMED';fault='Suite exceeded 600 seconds. Stop further autotest/capture until owned-process cleanup is confirmed.'
+   except KeyboardInterrupt:
+    interrupted=True;cleanup='NOT_CONFIRMED';fault='Suite interrupted. Stop further autotest/capture until owned-process cleanup is confirmed.'
+   except OSError as error:
+    cleanup='NOT_CONFIRMED';fault='Suite execution error: '+str(error)+'. Stop further autotest/capture until owned-process cleanup is confirmed.'
+  if code!=0:fault=fault or 'Autonomous suite failed; keep the first fault and log.'
+  if not fault:
+   try:
+    if index==0:
+     progress=json.loads((run/'browser/progress.json').read_text(encoding='utf-8'))
+     keys=json.loads((run/'browser/keyboard-observations.json').read_text(encoding='utf-8'))
+     if progress[-1]['stage']!='PASS' or len({(x['bank'],x['id']) for x in keys})!=43:
+      fault='Suite exited without complete PASS and 43 keyboard observations.'
+    else:
+     rows=json.loads((run/'settings/settings-matrix.json').read_text(encoding='utf-8'))['rows']
+     boundaries=json.loads((run/'settings/settings-boundaries.json').read_text(encoding='utf-8'))
+     if len({x['field'] for x in rows if x['status']=='PASS'})!=26 or any(x['status'] not in ['PASS','UNCHANGED_BASELINE'] for x in rows) or len(boundaries)!=17 or any(x['status']!='PASS' for x in boundaries):
+      fault='Settings suite exited without 26 changed commands and 17 boundary/failure cases.'
+   except (OSError,ValueError,KeyError,IndexError,TypeError):fault='Suite evidence is missing or incomplete.'
+  if fault:break
  if fault:write_json(run/'first-autotest-fault.json',{'at':utc(),'message':fault,'exit_code':code,'cleanup':cleanup,'status':'INTERRUPTED' if interrupted else 'FAIL_OR_INCONCLUSIVE; not physical acceptance'})
  write_json(run/'autotest-summary.json',{'at':utc(),'status':'INTERRUPTED' if interrupted else 'FAIL' if fault else 'PASS_SOFTWARE_ONLY','exit_code':code,'cleanup':cleanup,'web_commit':WEB_COMMIT,'browser':browser,'physical_windows_result':'NOT_RUN','customer_release':False,'error':fault})
  if fault:raise ValueError(fault+' Evidence: '+str(run))
- print('Software tests passed. USB and audible sound remain for the manual steps. Evidence:',run)
+ print('Software sound and Settings tests passed. USB and audible sound remain for the manual steps. Evidence:',run)
 
 
 def main():

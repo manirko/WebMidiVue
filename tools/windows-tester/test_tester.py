@@ -176,10 +176,18 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
  def autonomous_fixture(self, run, mode):
   (self.root/'automation/scripts').mkdir(parents=True,exist_ok=True)
   (self.root/'automation/scripts/test-audition-browser.js').write_text('// command fixture only')
+  (self.root/'automation/scripts/test-sound-browser.js').write_text('// settings fixture only')
   def execute(command, **kwargs):
+   if command[-1]=='--settings-only':
+    observed=run/'settings'
+    if mode=='settings_timeout':raise subprocess.TimeoutExpired(command,600)
+    if mode=='settings_fail':return subprocess.CompletedProcess(command,1)
+    tester.write_json(observed/'settings-matrix.json',{'rows':[{'field':str(i),'status':'PASS'} for i in range(25 if mode=='settings_early' else 26)]})
+    tester.write_json(observed/'settings-boundaries.json',[{'status':'PASS'} for i in range(17)])
+    return subprocess.CompletedProcess(command,0)
    observed=run/'browser';observed.mkdir()
    tester.write_json(observed/'progress.json',[{'stage':'PASS'}])
-   tester.write_json(observed/'keyboard-observations.json',[{'bank':'fixture','id':str(i)} for i in range(43 if mode=='pass' else 42)])
+   tester.write_json(observed/'keyboard-observations.json',[{'bank':'fixture','id':str(i)} for i in range(43 if mode=='pass' or mode.startswith('settings_') else 42)])
    if mode=='timeout':raise subprocess.TimeoutExpired(command,600)
    if mode=='fail':tester.write_json(observed/'failure.json',{'error':'original product fault'})
    return subprocess.CompletedProcess(command,1 if mode=='fail' else 0)
@@ -190,7 +198,10 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
    run=tester.new_run(self.root,'auto-'+browser)
    with mock.patch.object(tester.subprocess,'run',side_effect=self.autonomous_fixture(run,'pass')) as call:
     tester.run_autotest(self.root,run,browser,'C:/Browser With Spaces/app.exe','node')
-   args,kwargs=call.call_args
+   args,kwargs=call.call_args_list[0]
+   self.assertEqual(call.call_count,2)
+   self.assertEqual(call.call_args_list[1].args[0], ['node',str(self.root/'automation/scripts/test-sound-browser.js'),'--settings-only'])
+   self.assertEqual(call.call_args_list[1].kwargs['env']['BIOTRON_TEST_EVIDENCE_DIR'],str(run/'settings'))
    self.assertEqual(args[0],['node',str(self.root/'automation/scripts/test-audition-browser.js')])
    self.assertEqual(kwargs['cwd'],self.root/'automation')
    self.assertEqual(kwargs['timeout'],600)
@@ -203,7 +214,7 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
    self.assertEqual(summary['physical_windows_result'],'NOT_RUN')
 
  def test_autonomous_failure_timeout_or_early_exit_cannot_pass(self):
-  for mode in ['fail','timeout','early']:
+  for mode in ['fail','timeout','early','settings_fail','settings_timeout','settings_early']:
    run=tester.new_run(self.root,'auto-'+mode)
    with mock.patch.object(tester.subprocess,'run',side_effect=self.autonomous_fixture(run,mode)):
     with self.subTest(mode=mode),self.assertRaises(ValueError):tester.run_autotest(self.root,run,'chrome','fixture','node')

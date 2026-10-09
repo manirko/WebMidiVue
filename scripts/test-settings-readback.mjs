@@ -37,6 +37,11 @@ assert.equal(parseSettingsResponse(response.slice(0, -1), 42), null)
 const malformed = [...response]
 malformed[20] = 128
 assert.equal(parseSettingsResponse(malformed, 42), null)
+for (const flags of [4, 5, 7, 8, 127]) {
+  const unknownFlags = [...response]
+  unknownFlags[8] = flags
+  assert.equal(parseSettingsResponse(unknownFlags, 42), null, `unknown settings flags ${flags} must be rejected`)
+}
 
 const commands = {}
 for (const name of [

@@ -40,21 +40,17 @@ export default {
   },
 
   methods: {
-    checkLimit() {
-      if (this.rawValue > this.maxValue) {
-        this.rawValue = this.maxValue
-      }
-      if (this.rawValue < this.minValue) {
-        this.rawValue = this.minValue
-      }
-    },
     changed(event) {
-      this.checkLimit()
+      if (event.target.value === '' || !Number.isFinite(Number(event.target.value))) {
+        this.rawValue = this.tableValues === undefined ? this.commandObject.value : this.tableTranslate.indexOf(String(this.commandObject.value))
+        return
+      }
+      this.rawValue = Math.max(this.minValue, Math.min(this.maxValue, Math.round(Number(event.target.value))))
       if (this.tableValues !== undefined) {
-        this.commandObject.set_value(parseInt(this.tableTranslate[parseInt(event.target.value)]))
+        this.commandObject.set_value(parseInt(this.tableTranslate[this.rawValue]))
       }
       else {
-        this.commandObject.set_value(parseInt(event.target.value))
+        this.commandObject.set_value(this.rawValue)
       }
       this.$emit('InputChanged', this.commandObject)
     }

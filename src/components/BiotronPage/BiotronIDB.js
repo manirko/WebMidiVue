@@ -10,7 +10,7 @@ const foldMinusOne = (arr, val) => { arr.push(val - 1) }
 // key → [number_command, max_value, min_value, custom_fold]; omitted = SysExCommand defaults
 // (max 127, min 0, sendable true). The key is the command name: save/load presets rely on it.
 const BIOTRON_COMMANDS = {
-    plantBpm: [0, 1000, undefined, fold127], lightBpm: [9, 30], noteOffPercent: [12, 100],
+    plantBpm: [0, 1000, 1, fold127], lightBpm: [9, 30], noteOffPercent: [12, 100],
     noteDistance: [1, 100], firstValue: [2, 100], smoothness: [3, 99], scale: [4],
     minPlantVelocity: [15], maxPlantVelocity: [5], minLightVelocity: [17], maxLightVelocity: [6],
     randomness: [10], same_note_plant: [11, 10], same_note_light: [24, 10], range_light_note: [13, 36],
