@@ -82,8 +82,8 @@
         <AudioCompare v-if="paletteVisited" />
       </details>
       <label v-if="revealProfile.id === 'biotron'" class="sound-lab__quality">
-        <input type="checkbox" aria-label="Low CPU" :checked="lowCpu" @change="changeQuality" :disabled="starting || releaseBlocked"> Low CPU
-        <small>4 voices instead of 8. Changing this stops sound.</small>
+        <input type="checkbox" aria-label="Limit to 4 notes at once" aria-describedby="sound-quality-help" :checked="lowCpu" @change="changeQuality" :disabled="starting || releaseBlocked"> Limit to 4 notes at once
+        <small id="sound-quality-help">When on: up to 4 notes. Simulated room reflections (reverb) are off. Echo settings stay the same. When off: up to 8 notes. Switching stops sound.</small>
       </label>
       <section v-if="revealProfile.id !== 'biotron' && revealStage === 'revealed'" class="sound-lab__after-reveal" :aria-label="`Continue with ${revealProfile.productName}`">
         <button type="button" class="btn btn-primary" @click="revealExpanded = !revealExpanded">
@@ -122,11 +122,11 @@
           type="checkbox"
           :checked="lowCpu" @change="changeQuality"
           :disabled="starting || releaseBlocked"
-          aria-label="Low CPU — use if sound crackles"
+          aria-label="Limit to 4 notes at once" aria-describedby="sound-quality-help"
         >
-        Low CPU
+        Limit to 4 notes at once
       </label>
-      <small>Low CPU uses 4 voices; standard uses 8. Changing this stops sound. Press Play to start again.</small>
+      <small id="sound-quality-help">When on: up to 4 notes. Simulated room reflections (reverb) are off. Echo settings stay the same. When off: up to 8 notes. Switching stops sound.</small>
       <label class="sound-lab__volume" for="sound-lab-volume">
         <span>Volume</span>
         <input

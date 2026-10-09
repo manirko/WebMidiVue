@@ -225,7 +225,16 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await iphone.getByText(/Local preset — changes stay/).waitFor()
   await iphone.getByText('Browser & phone compatibility', {exact: true}).click()
   assert.strictEqual(await iphone.getByRole('link', {name: 'MIDIWeb Browser', exact: true}).getAttribute('href'), 'https://apps.apple.com/us/app/midiweb-browser/id6757226617')
+  assert(await iphone.getByRole('button', {name: 'Check saved settings', exact: true}).isDisabled())
+  const tempo = iphone.getByRole('spinbutton', {name: '🌱 The beat value', exact: true})
+  const previousTempo = Number(await tempo.inputValue())
+  const changedTempo = previousTempo < Number(await tempo.getAttribute('max')) ? previousTempo + 1 : previousTempo - 1
+  await tempo.fill(String(changedTempo)); await tempo.press('Tab')
+  await iphone.getByText('Preset edited in browser. Apply preset to Biotron to hear and save it.', {exact: true}).waitFor()
   assert(await iphone.getByRole('button', {name: 'Apply preset to Biotron', exact: true}).isDisabled())
+  await iphone.reload({waitUntil: 'domcontentloaded'})
+  await iphone.getByText(/Local preset — changes stay/).waitFor()
+  assert.strictEqual(Number(await tempo.inputValue()), changedTempo, 'no-MIDI local preset was not retained')
   await iphone.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
   await iphone.getByRole('button', {name: 'Play with keyboard', exact: true}).waitFor()
   assert(await iphone.getByRole('button', {name: 'Start listening'}).isDisabled())
@@ -516,14 +525,14 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await secondPage.locator('.sound-lab[data-tab-lease="free"]').waitFor()
     await secondPage.close()
 
-    await page.getByLabel('Low CPU').check()
+    await page.getByLabel('Limit to 4 notes at once').check()
     if (devtools) await devtools.send('Emulation.setCPUThrottlingRate', {rate: 6})
     const constrainedStart = Date.now()
     await page.getByRole('button', {name: 'Start sound'}).click()
     await page.locator('.sound-lab[data-audio-state="running"][data-quality="safe"][data-tab-lease="held"]').waitFor()
     const constrainedStartMilliseconds = Date.now() - constrainedStart
     assert(constrainedStartMilliseconds < 5000, `Low CPU start took ${constrainedStartMilliseconds} ms`)
-    assert.strictEqual(await page.getByLabel('Low CPU').isDisabled(), false)
+    assert.strictEqual(await page.getByLabel('Limit to 4 notes at once').isDisabled(), false)
     for (const code of ['KeyA', 'KeyW', 'KeyS', 'KeyE', 'KeyD', 'KeyF', 'KeyT', 'KeyG']) {
       await page.dispatchEvent('body', 'keydown', {code, key: code})
     }
@@ -545,7 +554,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await page.locator('.sound-lab[data-active-voices="0"]').waitFor()
     await page.getByRole('button', {name: 'Stop & release'}).click()
     if (devtools) await devtools.send('Emulation.setCPUThrottlingRate', {rate: 1})
-    await page.getByLabel('Low CPU').uncheck()
+    await page.getByLabel('Limit to 4 notes at once').uncheck()
 
     await page.getByRole('button', {name: 'Start sound'}).click()
     await page.locator('.sound-lab[data-audio-state="running"][data-quality="standard"][data-tab-lease="held"]').waitFor()

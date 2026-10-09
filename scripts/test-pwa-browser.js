@@ -193,12 +193,20 @@ async function controllerVersion(page) {
   assert.strictEqual(manifest.start_url, './#/biotron/play')
   assert.strictEqual(manifest.scope, './')
   assert.strictEqual(manifest.display, 'standalone')
+  let installabilityChecked = false
   if (context.browser().browserType().name() === 'chromium') {
     const devtools = await context.newCDPSession(page)
     const manifestReport = await devtools.send('Page.getAppManifest')
     assert.deepStrictEqual(manifestReport.errors || [], [], 'Chromium rejected the generated PWA manifest')
-    const installability = await devtools.send('Page.getInstallabilityErrors')
-    assert.deepStrictEqual(installability.installabilityErrors || [], [], 'Chromium reports PWA installability errors')
+    try {
+      const installability = await devtools.send('Page.getInstallabilityErrors')
+      assert.deepStrictEqual(installability.installabilityErrors || [], [], 'Chromium reports PWA installability errors')
+      installabilityChecked = true
+    } catch (error) {
+      if (process.env.BIOTRON_QA_BROWSER !== 'opera' ||
+          !/Protocol error \(Page.getInstallabilityErrors\): PWA not implemented in Opera$/.test(error.message)) throw error
+      console.log('NOT SUPPORTED: Opera CDP installability oracle; service worker/offline/retry checks still run')
+    }
   } else console.log('NOT SUPPORTED: Chromium CDP installability oracle; real service worker/offline/retry checks still run')
   console.log('1/7 online install fixture, active precache, manifest and MIDI denial/retry verified; native install/permissions are separate')
 
@@ -471,7 +479,7 @@ async function controllerVersion(page) {
   await page.getByText(/Offline mode — Settings are working without internet/i).waitFor({state: 'visible', timeout: 10000})
   console.log('7/7 Retry repairs offline setup and the same profile launches offline again')
 
-  console.log(`Browser PWA verified across persistent-profile restarts: offline app shell, simulated permission/retry and MIDI setting write, firmware isolation and controlled update. ${context.browser().browserType().name() === 'chromium' ? 'CDP manifest/installability checks ran.' : 'Native installability NOT SUPPORTED by this driver; OS installation NOT RUN.'}`)
+  console.log(`Browser PWA verified across persistent-profile restarts: offline app shell, simulated permission/retry and MIDI setting write, firmware isolation and controlled update. ${installabilityChecked ? 'CDP manifest/installability checks ran; OS installation NOT RUN.' : context.browser().browserType().name() === 'chromium' ? 'CDP manifest checked; installability oracle NOT SUPPORTED; OS installation NOT RUN.' : 'CDP installability oracle NOT SUPPORTED; OS installation NOT RUN.'}`)
 })().catch(error => {
   console.error(error)
   process.exitCode = 1

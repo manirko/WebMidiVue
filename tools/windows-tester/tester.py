@@ -27,7 +27,7 @@ ROLLBACK_SHA = '823d044374268462d39b13c0e65dc2676cda2fb3d5162edba78aedccb0a09f3d
 UF2_SHA = '18a73113ae75ccd68d244a2d90d1e902848a8473452e65b07a2173883abe6d60'
 CASES = {
  'W01': 'Exact web, firmware, PCB, OS, browser and audio route identity',
- 'W02': 'Device-free Play Sound palette, computer keyboard/Low CPU, then local preset and explicit Apply',
+ 'W02': 'Device-free Play Sound palette, computer keyboard/Limit to 4 notes at once, then local preset and explicit Apply',
  'W03': 'Real plant/light sound, held notes, Stop and subsequent incoming notes',
  'W04': 'Chrome and Edge sustained known stimulus; preserve first freeze',
  'W05': 'Real DAW MIDI clip: On/Off, releases and audible receiver behavior',

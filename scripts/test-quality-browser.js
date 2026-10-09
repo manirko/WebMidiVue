@@ -214,7 +214,7 @@ async function auditProfile(browser, origin, profile) {
   assert(await sound.evaluate(element => element.open), `${profile.name}: Sound did not open`)
   assert.equal(await sound.getByLabel('Sound', {exact: true}).locator('option').count(), 7,
     `${profile.name}: Classic sound choices are missing`)
-  await page.getByLabel('Low CPU', {exact: true}).waitFor()
+  await page.getByLabel('Limit to 4 notes at once', {exact: true}).waitFor()
   await page.getByLabel('Keyboard octave', {exact: true}).waitFor()
   await auditExpanded('Play Sound open')
 

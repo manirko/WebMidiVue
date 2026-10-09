@@ -162,6 +162,38 @@ test('closed or releasing audio is never silently re-enabled', async () => {
   await target.handleVisibility()
 })
 
+test('changing note limit names the available restart action after Stop resets keyboard intent', async () => {
+  for (const [revealMode, keyboardOn, midi, examplePlaying, label] of [
+    [false, false, true, false, 'Start sound'],
+    [true, true, true, false, 'Play with keyboard'],
+    [true, false, true, false, 'Start listening'],
+    [true, false, false, false, 'Play with keyboard'],
+    [true, false, true, true, 'Listen to example'],
+    [false, false, true, true, 'Listen to example']
+  ]) {
+    const {target} = fixture()
+    Object.assign(target, {revealMode, keyboardOn, examplePlaying, capabilities: {midi}, lowCpu: false})
+    target.revealProfile.startLabel = 'Start listening'
+    let stopped = false
+    target.stop = async () => { stopped = true; target.keyboardOn = target.examplePlaying = false; target.engine = null }
+    await target.changeQuality({target: {checked: true}})
+    assert(stopped)
+    assert.equal(target.lowCpu, true)
+    assert(target.status.includes(`Press ${label} to start again.`), target.status)
+    assert.match(target.status, /Up to 4 notes at once/)
+  }
+})
+
+test('failed Stop preserves the note limit and failure message instead of offering restart', async () => {
+  const {target} = fixture()
+  Object.assign(target, {capabilities: {midi: true}, lowCpu: true})
+  target.revealProfile.startLabel = 'Start listening'
+  target.stop = async () => { target.releaseBlocked = true; target.status = 'Release did not finish' }
+  await target.changeQuality({target: {checked: false}})
+  assert.equal(target.lowCpu, true)
+  assert.equal(target.status, 'Release did not finish')
+})
+
 test('explicit calibration ends visibly and ignores a late reply after timeout', () => {
   const {target, context} = fixture()
   let deadline

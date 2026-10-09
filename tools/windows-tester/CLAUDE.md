@@ -19,7 +19,7 @@ Rollback1.10.9 SHA256823d044374268462d39b13c0e65dc2676cda2fb3d5162edba78aedccb0a
 2. Сохрани actual environment/версии/PCB/звуковой маршрут в results. Если PCB или
    исходная firmware неизвестна, запиши UNKNOWN, а не предполагай Fibonacci/A08.
 3. Сначала `serve --browser chrome`, W01–W03 и preset backup. Откроется Play:
-   Sound, обычная компьютерная клавиатура и Low CPU доступны до прибора/Start listening.
+   Sound, обычная компьютерная клавиатура и Limit to 4 notes at once доступны до прибора/Start listening.
    Начать с keyboard; реальное подключение отдельно. Текстовые поля не играют. Реальные разрешения,
    касание, USB и слушание выполняет Сергей: давай одну команду за раз, указывая
    будет ли запись настроек/перезагрузка/прошивка. Не выставляй synth/mute громкость
@@ -40,7 +40,7 @@ Rollback1.10.9 SHA256823d044374268462d39b13c0e65dc2676cda2fb3d5162edba78aedccb0a
    и Classic. Settings -> Experiments содержит10 Calibration cues; открытие панели
    не выбирает cue. Один experiment slot: cue заменяет прежний выбор, plant notes
    используют последний Classic. Native details открываются независимо. Keyboard/
-   Low CPU находятся на Play.36 WAV/примеры — только для реального человеческого
+   Limit to 4 notes at once находятся на Play.36 WAV/примеры — только для реального человеческого
    сравнения, не для автоматического LISTENED/APPROVED; записать выбор/«ни один» и причины.
 7. W13 отдельно на реальном телефоне при доступном USB. На iPhone/unsupported
    browser записывай actual MIDI capability/шаг; desktop viewport не phone PASS.

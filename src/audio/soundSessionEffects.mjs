@@ -135,10 +135,11 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
     async changeQuality(event) {
       if (this.starting || this.releaseBlocked) { event.target.checked = this.lowCpu; return }
       const previous = this.lowCpu, safe = event.target.checked
+      const restartLabel = this.examplePlaying ? 'Listen to example' : !this.revealMode ? 'Start sound' : (this.keyboardOn || !this.capabilities.midi ? 'Play with keyboard' : this.revealProfile.startLabel)
       this.lowCpu = safe
       if (this.engine) await this.stop()
       if (this.releaseBlocked) { this.lowCpu = previous; return }
-      this.status = `${safe ? 'Low CPU: 4 voices' : 'Standard: 8 voices'}. Press Play to start again.`
+      this.status = `Up to ${safe ? 4 : 8} notes at once. Sound stopped. Press ${restartLabel} to start again.`
     },
     applySelectedSound() {
       const engine = this.engine, sound = this.selectedSound

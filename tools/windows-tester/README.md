@@ -39,7 +39,7 @@ py -3 tester.py serve --browser chrome
 Откроется отдельное тестовое окно по `http://127.0.0.1:8765/#/biotron/play`.
 Начать без прибора: открыть Sound на Play, выбрать звук и Play with keyboard.
 Клавиши — физические позиции A S D F G H J K / W E T Y U, без экранной клавиатуры;
-текстовые поля не должны играть. Low CPU находится на Play; смена останавливает
+текстовые поля не должны играть. Limit to 4 notes at once находится на Play; смена останавливает
 звук, после неё запустить снова. Для Biotron выбрать Start listening; реальные
 MIDI/SysEx permissions подтверждает Сергей. Сначала небольшая
 системная громкость. Для фоновых тестов звук может продолжиться/остановиться:
@@ -113,7 +113,7 @@ Host/build identity не заменяют совместимость платы,
 | ID | Проверка и ожидаемое доказательство |
 |---|---|
 | W01 | PCB, исходная firmware version/hash если известен, Windows/build, browser version, DAW/version, MAIN/EXTRA, USB adapter и audio output. В диагностиках должен быть exact web из final packet-manifest.json. Неизвестное так и записать. |
-| W02 | Без прибора: Sound на Play доступен до Start listening; Classic и эксперименты, обычные клавиши/отпускание, Low CPU -> Stop/restart. Затем локальный preset; подключение не затирает draft, Apply отдельно. Восстановить исходный preset. |
+| W02 | Без прибора: Sound на Play доступен до Start listening; Classic и эксперименты, обычные клавиши/отпускание, Limit to 4 notes at once -> Stop/restart. Затем локальный preset; подключение не затирает draft, Apply отдельно. Восстановить исходный preset. |
 | W03 | Plant/light: реальное звучание, короткая/удержанная нота, отпускание. Stop не возобновляет звук от следующих входных нот; повторный Play работает. Проверить аппаратный touch Mute отдельно. |
 | W04 | Chrome и Edge по одному: несколько минут заданного стимула и Start/Stop. При зависании записать время, действие, первое сообщение/trace, звук, recovery; затем отдельная попытка. |
 | W05 | Ableton/REAPER: MIDI clip с On/Off и реальным звуком на названном receiver. MAIN и EXTRA отдельно; не считать отсутствие EXTRA провалом успешного MAIN music route. |
@@ -123,7 +123,7 @@ Host/build identity не заменяют совместимость платы,
 | W09 | Проверить installed version и Download & check/hash, same/legacy/no-reply. Текущий web target — frozen1.10.10. Candidate1.10.11 отдельный; browser W10 для него BLOCKED. Не обходить hash guard и не нажимать BOOT/write. |
 | W10 | СЕЙЧАС browser flash candidate1.10.11 BLOCKED: updater закреплён на frozen1.10.10. Отдельная будущая ручная процедура — только с явным firmware-owner approval exact1.10.11, совместимой платой и своим backup:1.10.11 -> readback/sound -> согласованный1.10.9 rollback -> readback/sound -> exact1.10.11 reflash. Helper не разрешает эту процедуру. Frozen1.10.10 не менять; никаких erase/power cut/raw sector. |
 | W11 | Play -> Sound:10 Timbres,10 High-note treatments,6 Handpan (+7 Classic). Settings -> Experiments -> Calibration cues:10, только явный выбор; открытие панели не выбирает cue. Примеры, keyboard и реальная игра/Stop/Start при одинаковых volume/quality/output. Выбран один experiment slot: cue заменяет прежний эксперимент, обычные plant notes возвращаются к последнему Classic. Cue — звук, не новый sensor algorithm. Записать выбор/«ни один» и причины;36 WAV не дают LISTENED/APPROVED. |
-| W12 | Native details Sound/Plant sensor/More fun/Experiments открываются независимо. Закрытие Experiments не закрывает другие и не теряет выбранный cue. Слайдеры, Humanize built-ins1/user0, компактность, feedback Copy и exact diagnostics до/после инцидента. Keyboard/Low CPU только на Play. Ничего не отправлять. |
+| W12 | Native details Sound/Plant sensor/More fun/Experiments открываются независимо. Закрытие Experiments не закрывает другие и не теряет выбранный cue. Слайдеры, Humanize built-ins1/user0, компактность, feedback Copy и exact diagnostics до/после инцидента. Keyboard/Limit to 4 notes at once только на Play. Ничего не отправлять. |
 | W13 | Если есть телефон+USB: отдельная фактическая проверка своего browser/OS/adapter, sound/settings/reconnect. Windows capture или эмулятор её не заменяют. |
 | W14 | FB44: сменить Plant channel при реально активном calibration cue; Off должен уйти на исходный канал/ноту, следующий cue — на новый. Сохранить DAW On/Off clip, audible outcome и способ отмены; UI label/host PASS этого не доказывают. |
 

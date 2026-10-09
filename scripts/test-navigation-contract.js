@@ -36,9 +36,9 @@ assert(taskNav.includes("{id: 'settings', label: 'Settings'"), 'device tasks mus
 assert(taskNav.includes(':aria-current="task.id === activeTask ? \'page\' : null"'),
   'the selected device task must be exposed accessibly')
 assert(biotron.includes('active-task="settings"'), 'Biotron settings must show Settings as current')
-assert(biotron.includes('biotron-settings-beta') && biotron.includes('Shape your Biotron') &&
-  biotron.includes('Edit a local preset, or connect Biotron to shape its music live.'),
-  'the beta settings page must preserve the outcome-first visual hierarchy')
+assert(biotron.includes('biotron-settings-beta') && biotron.includes("betaBuild ? 'Settings'") &&
+  biotron.includes('Change settings in this browser. Connect Biotron to change settings on the device.'),
+  'the beta settings page must name its task and distinguish local settings from device settings')
 assert(biotron.includes("betaBuild ? 'preset-actions'"),
   'the beta preset actions must use the responsive action grid')
 assert(biotron.includes('play-route="/biotron/play"'), 'Biotron settings must link directly to Play')
