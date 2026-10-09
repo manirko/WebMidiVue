@@ -379,13 +379,8 @@ async function verifyAllSettings(page, origin) {
 }
 
 async function verifyGardenStates(page, origin) {
-  const captionBelowSphere = async () => {
-    const bounds = await page.locator('.garden-visual').evaluate(element => {
-      const box = selector => { const b = element.querySelector(selector).getBoundingClientRect(); return {top: b.top, bottom: b.bottom} }
-      return {frame: box('iframe'), caption: box('.garden-state'), hint: box('.garden-drag-hint')}
-    })
-    assert(bounds.caption.top >= bounds.frame.bottom, `Status text overlaps sphere: ${JSON.stringify(bounds)}`)
-    assert(bounds.hint.top >= bounds.caption.bottom, `Drag hint overlaps status: ${JSON.stringify(bounds)}`)
+  const visualHasNoText = async () => {
+    assert.equal((await page.locator('.garden-visual').innerText()).trim(), '', 'Sphere must have no text over or under it; status belongs beside it')
   }
   await page.addInitScript(() => {
     document.addEventListener('click', event => {
@@ -409,8 +404,8 @@ async function verifyGardenStates(page, origin) {
   await page.waitForFunction(() => window.__soundInput.connection === 'opening')
   const milliseconds = await page.evaluate(() => window.__visualStartMs)
   assert(milliseconds >= 0 && milliseconds < 250, `Visual start feedback took ${milliseconds}ms`)
-  assert.equal(await visual.locator('.garden-state').innerText(), 'Starting…')
-  await captionBelowSphere()
+  await page.locator('.sound-lab__reveal-copy').getByRole('heading', {name: 'Starting…', exact: true}).waitFor()
+  await visualHasNoText()
   assert.notEqual(await visual.evaluate(element => getComputedStyle(element, '::before').animationName), 'none')
   const evidence = process.env.BIOTRON_TEST_EVIDENCE_DIR
   if (evidence) await page.screenshot({path: path.join(evidence, 'garden-connecting.png'), timeout: 2000})
@@ -433,14 +428,14 @@ async function verifyGardenStates(page, origin) {
   await state('ready').waitFor()
   await page.evaluate(() => window.__setSoundInputState('disconnected'))
   await state('attention').waitFor()
-  assert.equal(await visual.locator('.garden-state').innerText(), 'Connection lost')
+  await page.locator('.sound-lab__connect-notice').getByText('Connection lost', {exact: true}).waitFor()
   await page.waitForFunction(() => getComputedStyle(document.querySelector('.garden-visual iframe')).opacity === '0.4')
   assert.equal(await page.locator('.sound-lab').getAttribute('data-active-voices'), '0')
   if (evidence) await page.screenshot({path: path.join(evidence, 'garden-disconnected.png'), timeout: 2000})
   await page.locator('.sound-palette > summary').click()
   await page.getByRole('button', {name: 'Play with keyboard', exact: true}).click()
   await state('ready').waitFor()
-  assert.equal(await visual.locator('.garden-state').innerText(), 'Ready to play')
+  await visualHasNoText()
   await page.locator('h1').click()
   await page.keyboard.down('a')
   await page.locator('.sound-lab[data-active-voices="1"]').waitFor()
@@ -459,16 +454,16 @@ async function verifyGardenStates(page, origin) {
   assert.equal(await visual.evaluate(element => getComputedStyle(element, '::before').animationName), 'none')
   await page.getByRole('button', {name: 'Open visual fullscreen', exact: true}).click()
   await page.getByRole('dialog', {name: 'Biotron visual fullscreen'}).waitFor()
-  await captionBelowSphere()
+  await visualHasNoText()
   await page.getByRole('button', {name: 'Exit fullscreen', exact: true}).click()
   assert.equal(await page.getByRole('dialog', {name: 'Biotron visual fullscreen'}).count(), 0)
   assert.notEqual(await page.evaluate(() => document.body.style.overflow), 'hidden')
   for (const size of [{width: 844, height: 390}, {width: 1440, height: 900}]) {
     await page.setViewportSize(size)
-    await captionBelowSphere()
+    await visualHasNoText()
     await page.getByRole('button', {name: 'Open visual fullscreen', exact: true}).click()
-    await captionBelowSphere()
-    if (evidence) await page.screenshot({path: path.join(evidence, `garden-caption-${size.width}.png`), timeout: 2000})
+    await visualHasNoText()
+    if (evidence) await page.screenshot({path: path.join(evidence, `garden-clean-${size.width}.png`), timeout: 2000})
     await page.getByRole('button', {name: 'Exit fullscreen', exact: true}).click()
   }
   await page.evaluate(() => window.__finishSoundOpen())
@@ -501,7 +496,7 @@ async function verifyPlantSignal(page, origin) {
   await save('Active sensor stays ready through multiple silent polls')
   await page.evaluate(() => { window.__soundSensorState = 0 })
   await page.getByRole('heading', {name: 'Waiting for plant signal', exact: true}).waitFor()
-  assert.equal(await page.locator('.garden-state').innerText(), 'Waiting for plant signal')
+  assert.equal(await page.getByRole('heading', {name: 'Waiting for plant signal', exact: true}).count(), 1, 'One plant-signal notice beside the sphere')
   await page.getByText('Device connected', {exact: true}).waitFor()
   assert.equal(await page.locator('.sound-lab').getAttribute('data-audio-state'), 'running')
   assert((await page.locator('.sound-lab__reveal-copy').innerText()).includes('Check both contacts on the plant'))
@@ -542,7 +537,7 @@ async function verifyPlantSignal(page, origin) {
   await page.locator('.sound-lab[data-plant-state="0"]').waitFor()
   await save('Settings stops polling; Play resumes a fresh read')
   await page.evaluate(() => window.__setSoundInputState('disconnected'))
-  await page.locator('.garden-state', {hasText: 'Connection lost'}).waitFor()
+  await page.locator('.sound-lab__connect-notice').getByText('Connection lost', {exact: true}).waitFor()
   assert.equal(await page.locator('.sound-lab').getAttribute('data-plant-state'), null)
   const disconnectedCount = await reads(); await page.waitForTimeout(2100)
   assert.equal(await reads(), disconnectedCount)

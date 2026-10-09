@@ -31,10 +31,10 @@
       </header>
 
       <section class="sound-lab__reveal" aria-labelledby="device-reveal-title">
-        <GardenVisual ref="garden" :stage="visualStage" :message="plantSignalMissing ? 'Waiting for plant signal' : visualStage === 'attention' ? revealIssue?.title || (releaseBlocked ? 'Release did not finish' : '') : ''" />
+        <GardenVisual ref="garden" :stage="visualStage" />
         <div class="sound-lab__reveal-copy">
           <small v-if="recognizedInput && revealStage !== 'intro'" class="sound-lab__recognized" :title="recognizedInput">Device connected</small>
-          <h2 id="device-reveal-title">{{ plantSignalMissing ? revealCopy.heading : revealStage === 'revealed' ? (midiActive ? 'Notes arriving' : 'Ready for the next note') : revealCopy.heading }}</h2>
+          <h2 id="device-reveal-title" aria-live="polite">{{ revealHeading }}</h2>
           <p>{{ revealCopy.instruction }}</p>
           <details v-if="revealStage === 'intro'" class="play-help"><summary>Connection steps</summary><ol><li>Push both contact cables onto the device’s CONTACT PINS.</li><li>Clip them to two separate points on the same plant.</li><li>Connect USB with a data cable, then press Start listening.</li></ol><a href="/midi-access.html" target="_blank" rel="noopener">Browser permission help</a></details>
 
@@ -238,6 +238,11 @@ export default {
     plantSignalMissing() {
       return this.revealMode && this.revealProfile.id === 'biotron' && this.controlsVisible && !this.revealIssue && !this.releaseBlocked &&
         this.plantSignalState === 0 && !this.keyboardOn && !this.examplePlaying && this.audioState === 'running' && ['ready', 'revealed'].includes(this.revealStage)
+    },
+    revealHeading() {
+      if (this.starting && this.visualStage === 'connecting') return 'Starting…'
+      if (this.plantSignalMissing || this.revealStage !== 'revealed') return this.revealCopy.heading
+      return this.midiActive ? 'Notes arriving' : 'Ready for the next note'
     },
     visualStage() {
       if (this.releaseBlocked || (this.revealIssue && !this.keyboardOn && !this.examplePlaying) || this.audioState === 'error') return 'attention'

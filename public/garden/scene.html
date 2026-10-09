@@ -679,7 +679,7 @@ let manualUntil = 0;
 let calibrationMix = 0;
 let calibrationTime = 0;
 renderer.domElement.style.cursor = 'grab';
-controls.addEventListener('start',()=>{manualDrag=true;renderer.domElement.style.cursor='grabbing';parent.postMessage({type:'garden-interaction'},location.origin)});
+controls.addEventListener('start',()=>{manualDrag=true;renderer.domElement.style.cursor='grabbing'});
 controls.addEventListener('end',()=>{manualDrag=false;manualUntil=performance.now()+3500;renderer.domElement.style.cursor='grab'});
 addEventListener('keydown',e=>{if(e.key==='Escape')parent.postMessage({type:'garden-exit'},location.origin)});
 let motionPaused = matchMedia('(prefers-reduced-motion: reduce)').matches;
