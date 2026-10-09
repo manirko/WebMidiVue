@@ -47,10 +47,21 @@ function observeAudio() {
     midiAvailable: typeof navigator.requestMIDIAccess === 'function',
     contextsCreated: created,
     contextObservationTruncated: created > 64,
-    audio: contexts.map(ref => ref.deref()).filter(Boolean).map(context => ({
-      state: context.state, time: context.currentTime, sampleRate: context.sampleRate,
+    audio: contexts.map((ref,id) => ({context:ref.deref(),id})).filter(x=>x.context).map(({context,id}) => ({
+      id, state: context.state, time: context.currentTime, sampleRate: context.sampleRate,
       baseLatency: context.baseLatency, outputLatency: context.outputLatency ?? null
     }))
+  })
+}
+
+// A positive clock value alone may be stale. Require advancement in one context.
+function hasAdvancingDspClock(rows) {
+  if (rows.length < 2) return false
+  const prior = new Map(rows.at(-2).snapshot.audio.map(audio => [audio.id,audio]))
+  return rows.at(-1).snapshot.audio.some(audio => {
+    const previous = prior.get(audio.id)
+    return Number.isInteger(audio.id) && audio.state === 'running' && previous?.state === 'running' &&
+      Number.isFinite(previous.time) && previous.time >= 0 && Number.isFinite(audio.time) && audio.time > previous.time
   })
 }
 
@@ -108,20 +119,30 @@ function observeAudio() {
       await page.getByRole('button',{name:'Listen to example',exact:true}).click()
       await page.getByRole('button',{name:'Stop example',exact:true}).waitFor()
     }
-    const duration = config.smoke ? 2000 : config.seconds*1000
-    const end = performance.now()+duration
+    const minimumEnd = performance.now()+2000
+    const end = performance.now()+(config.smoke ? 10000 : config.seconds*1000)
+    const smokeRows = []
+    const budget = () => config.smoke ? Math.max(1,Math.min(5000,end-performance.now())) : 5000
+    const withinDeadline = () => {if (config.smoke && performance.now() >= end) throw new Error('Smoke observation deadline exceeded')}
     while (!interrupted && !page.isClosed() && performance.now()<end) {
       const before = performance.now()
-      const snapshot = await bounded(page.evaluate(() => window.__biotronFieldSnapshot()),'page heartbeat')
-      const metrics = await bounded(cdp.send('Performance.getMetrics'),'browser metrics')
+      const snapshot = await bounded(page.evaluate(() => window.__biotronFieldSnapshot()),'page heartbeat',budget())
+      withinDeadline()
+      const metrics = await bounded(cdp.send('Performance.getMetrics'),'browser metrics',budget())
+      withinDeadline()
       const selected = Object.fromEntries(metrics.metrics.filter(x => ['JSHeapUsedSize','JSHeapTotalSize','Nodes','Documents','TaskDuration'].includes(x.name)).map(x=>[x.name,x.value]))
-      append('samples.jsonl',{sample:++samples,roundTripMilliseconds:Math.round(performance.now()-before),snapshot,metrics:selected})
+      const row = {sample:++samples,roundTripMilliseconds:Math.round(performance.now()-before),snapshot,metrics:selected}
+      append('samples.jsonl',row)
+      if (config.smoke) {
+        smokeRows.push(row)
+        if (performance.now() >= minimumEnd && hasAdvancingDspClock(smokeRows)) break
+      }
       await new Promise(resolve => setTimeout(resolve,1000))
     }
     closedEarly = page.isClosed() && performance.now()<end
     if (config.smoke) {
-      const rows=fs.readFileSync(output('samples.jsonl'),'utf8').trim().split('\n').map(JSON.parse)
-      if (!rows.some(x=>x.snapshot.audio.some(a=>a.state==='running' && a.time>0))) throw new Error('Smoke did not observe running real DSP clock')
+      withinDeadline()
+      if (!hasAdvancingDspClock(smokeRows)) throw new Error('Smoke did not observe running real DSP clock')
       await page.getByRole('button',{name:'Stop example',exact:true}).click()
     }
     if (!page.isClosed()) await bounded(page.screenshot({path:output('last-page.png')}),'final screenshot')

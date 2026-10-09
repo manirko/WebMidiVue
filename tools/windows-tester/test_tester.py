@@ -1,5 +1,6 @@
 """Packet safety and Windows path contract; these are not actual Windows acceptance."""
 import importlib.util
+import subprocess
 import json
 from pathlib import Path
 import tempfile
@@ -115,6 +116,51 @@ class PacketTests(unittest.TestCase):
    self.assertFalse(data['customer_release'])
   (run/'dangerous.exe').write_text('unexpected')
   with self.assertRaisesRegex(ValueError,'Unexpected'):tester.export_results(self.root)
+ def run_capture_fixture(self, mode):
+  # Execute the real JS launcher with deterministic browser/time adapters.
+  # No actual browser, MIDI, audio graph, network or permissions in this oracle.
+  script=r"""
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const [source,root,mode]=process.argv.slice(1);let clock=0,index=0,exit;
+const config={root,run:root,origin:'http://fixture',profile:root,executable:'fixture',smoke:true,web_commit:'fixture',seconds:30};
+fs.writeFileSync(path.join(root,'config.json'),JSON.stringify(config));
+const locator={waitFor:async()=>{},click:async()=>{},count:async()=>6,locator:()=>locator};
+const page={setDefaultTimeout(){},on(){},goto:async()=>{},isClosed:()=>false,screenshot:async()=>{},locator:()=>locator,
+ getByLabel:()=>({...locator,count:async()=>1}),getByRole:(role,args)=>({...locator,count:async()=>args.name==='Calibration sounds'?0:1}),
+ evaluate:async()=>{index++;let audio=[];
+  if(mode==='late' && index>=3)audio=[{id:0,state:'running',time:(index-3)/10}];
+  if(mode==='frozen')audio=[{id:0,state:'running',time:1}];
+  if(mode==='suspended')audio=[{id:0,state:'suspended',time:index/10}];
+  if(mode==='writeoverrun')audio=[{id:0,state:'running',time:index/10}];
+  if(mode==='different')audio=[{id:index,state:'running',time:index/10}];
+  if(mode==='stopped')audio=[{id:0,state:index<=2?'running':'suspended',time:Math.min(index,2)/10}];
+  if(mode==='overrun' && index>=9){if(index===10)clock+=4000;audio=[{id:0,state:'running',time:index-9}];}
+  return {audio};}};
+const context={addInitScript:async()=>{},pages:()=>[page],newCDPSession:async()=>({send:async name=>name==='Performance.getMetrics'?{metrics:[]}:{} }),tracing:{start:async()=>{},stop:async()=>{}},close:async()=>{}};
+const fixtureFs={...fs,appendFileSync(file,data){fs.appendFileSync(file,data);if(mode==='writeoverrun' && index===3)clock+=11000;}};
+const sandbox={require:name=>name==='node:fs'?fixtureFs:name==='node:path'?path:name==='node:perf_hooks'?{performance:{now:()=>clock}}:{chromium:{launchPersistentContext:async()=>context}},
+ process:{argv:['node','capture',path.join(root,'config.json')],on(){},exit:code=>{exit=code}},console:{log(){}},
+ fetch:async()=>({ok:true,json:async()=>({source_commit:'fixture'})}),AbortSignal:{timeout(){}},WeakRef,
+ setTimeout:(fn,ms)=>{if(ms===1000)queueMicrotask(()=>{clock+=ms;fn()});return 1},clearTimeout(){}};
+vm.runInNewContext(fs.readFileSync(source,'utf8'),sandbox,{filename:source});
+setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');process.stdout.write(JSON.stringify({exit,summary:JSON.parse(fs.readFileSync(path.join(root,'capture-summary.json'),'utf8')),samples:index})+'\n')});
+"""
+  result=subprocess.run(['node','-e',script,str(Path(__file__).with_name('capture-browser.cjs')),tempfile.mkdtemp(prefix='capture-fixture-',dir=self.root),mode],capture_output=True,text=True,timeout=10,check=True)
+  return json.loads(result.stdout)
+ def test_smoke_waits_for_delayed_real_clock(self):
+  result=self.run_capture_fixture('late')
+  self.assertEqual(result['exit'],0)
+  self.assertEqual(result['summary']['status'],'SMOKE_PASS_NOT_PHYSICAL_ACCEPTANCE')
+  self.assertGreaterEqual(result['samples'],4)
+  self.assertLessEqual(result['samples'],10)
+ def test_smoke_rejects_absent_frozen_or_foreign_clocks(self):
+  for mode in ['missing','frozen','suspended','different','stopped','overrun','writeoverrun']:
+   with self.subTest(mode=mode):
+    result=self.run_capture_fixture(mode)
+    self.assertEqual(result['exit'],1)
+    self.assertEqual(result['summary']['status'],'CAPTURE_FAULT')
+    self.assertLessEqual(result['samples'],10)
+
  def test_new_attempt_never_overwrites_first_failure(self):
   first=tester.new_run(self.root,'failure');tester.write_json(first/'first-fault.json',{'error':'first'})
   second=tester.new_run(self.root,'retry')
