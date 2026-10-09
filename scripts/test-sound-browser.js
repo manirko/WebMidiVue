@@ -175,6 +175,8 @@ async function verifySettingsActions(page, origin) {
   for (let scale = 0; scale <= 12; scale++) {
     const marker = await page.evaluate(() => window.__soundMidiSent.length)
     await sections['Plant sensor'].getByRole('combobox', {name: '🎼 Scale', exact: true}).selectOption(String(scale))
+    await page.waitForFunction(({marker, scale}) => window.__soundMidiSent.slice(marker).some(message => message[3] === 4 && message[4] === scale), {marker, scale})
+    await page.waitForFunction(marker => window.__soundMidiSent.slice(marker).some(message => message[3] === 123), marker)
     await page.getByText('Saved on Biotron.', {exact: true}).waitFor()
     assert.deepStrictEqual(await page.evaluate(start => window.__soundMidiSent.slice(start).filter(message => message[3] !== 123), marker),
       [[240, 20, 13, 4, scale, 247]])
