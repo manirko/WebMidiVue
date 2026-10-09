@@ -395,7 +395,7 @@ async function verifyGardenStates(page, origin) {
     }, true)
   })
   await page.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
-  // Same-hash navigation keeps the previous fixture's disconnected port. Start this case in a fresh document.
+  // Start this standalone case in a fresh document, independent of earlier MIDI fixtures.
   await page.reload({waitUntil: 'domcontentloaded'})
   const visual = page.locator('.garden-visual')
   const state = value => visual.and(page.locator(`[data-state="${value}"]`))

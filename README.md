@@ -8,6 +8,12 @@ The same SoundLab session survives Play/Settings; musical choices do not write f
 
 Pipeline: MIDI or physical key codes → shared SoundLab → Elementary worklet → master output;
 settings use the separate MIDI request/readback flow; Vue Router owns navigation cleanup.
+Live Biotron play reads the existing sensor status (125/5) every two seconds,
+only in the foreground plant session. Firmware Sleep shows **Waiting for plant signal**;
+it does not prove a detached contact. Missing or invalid replies leave the state
+unknown and stop polling. Stop waits for pending port cleanup. This watch sends
+no settings or calibration writes; the existing Start listening calibration is unchanged.
+All play messages belong beside the sphere; the sphere contains no text.
 Read [the tester loop](docs/BIOTRON-TESTER-LOOP.md) for commands and evidence rules,
 [the QA contract](docs/BIOTRON-COMPREHENSIVE-QA.md) for gates, and
 [the architecture map](docs/WEB-TEST-STRATEGY.md) for the remaining checks.
@@ -134,6 +140,10 @@ These four lanes keep their assertions and use that directory instead of `dist`.
 Verify the artifact manifest before and after the run; record its source identity
 separately from the tester's Git commit. Leave this override unset for the full
 runner and its production/general-beta/frozen-firmware isolation gates.
+The existing `test:sound:browser -- --visual-only` subset includes sensor-status,
+cancel/late-output cleanup and sphere states. For installed test engines, set
+`PLAYWRIGHT_BROWSERS_PATH` to their actual cache before selecting Firefox or WebKit;
+these engines do not certify the installed Firefox app or Safari.
 
 That single command derives the visible build ID from `HEAD`, runs the complete
 Biotron release gate, including all 36 audition variants, their standard/safe DSP
