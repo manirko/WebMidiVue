@@ -24,6 +24,8 @@ const server=createStaticServer(path.resolve(process.env.BIOTRON_QA_DIST_ROOT||p
 const artifacts=process.env.AUDITION_BROWSER_OUTPUT||`/private/tmp/biotron-audition-browser-${Date.now()}`
 fs.mkdirSync(artifacts,{recursive:true})
 let page,stage='launch',starts=0
+const shortGateFault=process.env.AUDITION_SHORT_GATE_FAULT||'none'
+assert(['none','late','silent'].includes(shortGateFault),'AUDITION_SHORT_GATE_FAULT must be none, late or silent')
 const deadlineMs=Number(process.env.AUDITION_BROWSER_TIMEOUT_MS||300000)
 assert(Number.isFinite(deadlineMs)&&deadlineMs>0,'AUDITION_BROWSER_TIMEOUT_MS must be finite and positive')
 const progress=[]
@@ -70,6 +72,27 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
     if(destination===this.context.destination)window.__comparisonOutput=this
     return connect.call(this,destination,...args)
    }
+   window.__comparisonSpectrum=fundamental=>{
+    const node=window.__comparisonOutput,analyser=window.__comparisonAnalyser
+    const samples=new Float32Array(analyser.fftSize)
+    analyser.getFloatTimeDomainData(samples)
+    const spectrum=new Float32Array(analyser.frequencyBinCount)
+    analyser.getFloatFrequencyData(spectrum)
+    const lowBand=Array.from(spectrum).reduce((sum,db,index)=>{
+     const hz=index*node.context.sampleRate/analyser.fftSize
+     return sum+(hz>145&&hz<185 ? 10**(db/10) : 0)
+    },0)
+    const modes=[1,2,3].map(ratio=>Array.from(spectrum).reduce((sum,db,index)=>{
+     const hz=index*node.context.sampleRate/analyser.fftSize
+     return sum+(Math.abs(hz-fundamental*ratio)<20 ? 10**(db/10) : 0)
+    },0))
+    return {lowBand,modes,sound:document.querySelector('.sound-lab').dataset.sound,
+     count:Number(document.querySelector('.sound-lab').dataset.activeVoices),
+     level:window.__biotronTrace.filter(event=>event.kind==='in'&&event.data?.level!==undefined).at(-1)?.data.level,
+     rms:Math.sqrt(samples.reduce((sum,value)=>sum+value*value,0)/samples.length),
+     peak:samples.reduce((peak,value)=>Math.max(peak,Math.abs(value)),0),
+     nonFinite:samples.filter(value=>!Number.isFinite(value)).length}
+   }
    const Native=window.AudioContext
    window.AudioContext=class extends Native{
     constructor(...args){super(...args);window.__comparisonContexts.push(this)
@@ -89,7 +112,8 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
    Object.defineProperty(navigator,'requestMIDIAccess',{configurable:true,value:async()=>{window.__comparisonMidiRequests++;if(!window.__enableComparisonMidi)throw new Error('example must not request MIDI');return access}})
   })
   page=await context.newPage();const errors=[];page.setDefaultTimeout(8000)
-  await context.tracing.start({screenshots:true,snapshots:true})
+  await context.tracing.start({screenshots:false,snapshots:false})
+  fs.writeFileSync(path.join(artifacts,'capture-scope.json'),JSON.stringify({trace:'Protocol events only; first-fault screenshot separate to avoid delaying spectral capture',shortGateFault,physicalMidi:'Synthetic provider only; no native MIDI delegated'},null,2))
   page.on('pageerror',error=>errors.push(error.message))
   const palette=tab=>tab.locator('.sound-palette')
   const panel=(tab=page)=>tab.locator('.audio-compare:visible')
@@ -255,29 +279,14 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   }
   const actual=async(fundamental=164.81)=>page.evaluate(async fundamental=>{
    const node=window.__comparisonOutput
-   if(!window.__comparisonAnalyser || window.__comparisonAnalyser.context!==node.context){
+   if(!window.__comparisonAnalyser || window.__comparisonAnalyserSource!==node){
+    if(window.__comparisonAnalyserSource)try{window.__comparisonAnalyserSource.disconnect(window.__comparisonAnalyser)}catch{/* old context already closed */}
     window.__comparisonAnalyser=node.context.createAnalyser();window.__comparisonAnalyser.fftSize=8192;window.__comparisonAnalyser.smoothingTimeConstant=0;node.connect(window.__comparisonAnalyser)
-    // A new analyser has an empty PCM buffer until audio has flowed through it.
+    window.__comparisonAnalyserSource=node
+    // Warm before the short gate; a new analyser starts with an empty PCM buffer.
     await new Promise(resolve=>setTimeout(resolve,220))
    }
-   const samples=new Float32Array(window.__comparisonAnalyser.fftSize)
-   window.__comparisonAnalyser.getFloatTimeDomainData(samples)
-   const spectrum=new Float32Array(window.__comparisonAnalyser.frequencyBinCount)
-   window.__comparisonAnalyser.getFloatFrequencyData(spectrum)
-   const lowBand=Array.from(spectrum).reduce((sum,db,index)=>{
-    const hz=index*node.context.sampleRate/window.__comparisonAnalyser.fftSize
-    return sum+(hz>145&&hz<185 ? 10**(db/10) : 0)
-   },0)
-   const modes=[1,2,3].map(ratio=>Array.from(spectrum).reduce((sum,db,index)=>{
-    const hz=index*node.context.sampleRate/window.__comparisonAnalyser.fftSize
-    return sum+(Math.abs(hz-fundamental*ratio)<20 ? 10**(db/10) : 0)
-   },0))
-   return {lowBand,modes,sound:document.querySelector('.sound-lab').dataset.sound,
-    count:Number(document.querySelector('.sound-lab').dataset.activeVoices),
-    level:window.__biotronTrace.filter(event=>event.kind==='in'&&event.data?.level!==undefined).at(-1)?.data.level,
-    rms:Math.sqrt(samples.reduce((sum,value)=>sum+value*value,0)/samples.length),
-    peak:samples.reduce((peak,value)=>Math.max(peak,Math.abs(value)),0),
-    nonFinite:samples.filter(value=>!Number.isFinite(value)).length}
+   return window.__comparisonSpectrum(fundamental)
   },fundamental)
   mark('Low CPU can change safely; same-bank preview keeps the existing engine')
   const qualityMidiRequests=await page.evaluate(()=>window.__comparisonMidiRequests)
@@ -498,7 +507,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
    await page.evaluate(()=>window.__emitComparisonMidi([0x80,96,0]))
    await page.waitForFunction(()=>Number(document.querySelector('.sound-lab').dataset.activeVoices)===0)
   }
-  // Hearable renderer output after a real 27ms MIDI gate, not only a new label
+  // Renderer output after a requested 27ms MIDI gate (actual timing recorded), not only a label
   // or a held voice. All three handpan modes must survive the Note Off.
   await selectBank('Handpan')
   const handpan=[]
@@ -506,19 +515,22 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
    await selection().selectOption(option.id)
    await page.locator(`.sound-lab[data-sound="${option.preset.name}"]`).waitFor({state:'attached'})
    await page.waitForTimeout(3100) // Previous modal release must not certify the next sound's spectrum.
-   const timing=await page.evaluate(async()=>{
+   const fundamental=440*2**((62-69)/12+option.preset.cv.octave)
+   await actual(fundamental) // Establish the analyser before Note On, never after a short ring has decayed.
+   const {timing,sampledAt,...state}=await page.evaluate(async({fundamental,fault})=>{
     const context=window.__comparisonContexts.at(-1),wall=performance.now(),on=context.currentTime
-    window.__emitComparisonMidi([0x90,62,98])
+    if(fault!=='silent')window.__emitComparisonMidi([0x90,62,98])
     await new Promise(resolve=>setTimeout(resolve,27))
     const off=context.currentTime,wallGate=performance.now()-wall
     window.__emitComparisonMidi([0x80,62,0])
-    return {on,off,wallGate,sampleRate:context.sampleRate} // Audio seconds; wallGate milliseconds.
-   })
-   await page.waitForTimeout(80)
-   const state=await actual(440*2**((62-69)/12+option.preset.cv.octave))
-   const sampledAt=await page.evaluate(()=>window.__comparisonContexts.at(-1).currentTime)
+    await new Promise(resolve=>setTimeout(resolve,fault==='late'?580:80))
+    // Capture in this browser task; traced RPCs must not move the spectral window.
+    const state=window.__comparisonSpectrum(fundamental),sampledAt=context.currentTime
+    return {...state,timing:{on,off,wallGate,sampleRate:context.sampleRate},sampledAt}
+   },{fundamental,fault:shortGateFault})
    handpan.push({id:option.id,...state,timing,sampledAt})
    fs.writeFileSync(path.join(artifacts,'handpan-midi.json'),JSON.stringify(handpan,null,2))
+   assert(sampledAt-timing.off>=.05&&sampledAt-timing.on<.25,option.id+': short-gate spectral capture was late or premature')
    assert.equal(state.count,0,option.id+': short MIDI note remained held')
    assert(state.rms>.001&&state.modes.every(energy=>energy>1e-7),option.id+': short note did not leave three audible rings '+JSON.stringify(state))
   }
