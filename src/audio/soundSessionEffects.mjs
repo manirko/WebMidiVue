@@ -168,7 +168,7 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
         if (!this.releaseBlocked) this.status = message
         return
       }
-      const engine = this.engine, {variant, events, duration} = this.audition
+      const engine = this.engine, {variant, events, duration} = this.exampleSelection
       const schedule = (task, seconds) => {
         const timer = window.setTimeout(() => { this.exampleTimers.delete(timer); task() }, seconds * 1000)
         this.exampleTimers.add(timer)
@@ -176,7 +176,7 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
       this.status = `Example: ${variant.label}`
       for (const event of events) schedule(() => {
         if (engine !== this.engine || !this.examplePlaying) return
-        if (event.type === 'on') engine.noteOn('audition', 0, event.note, event.velocity, engine.context.currentTime, this.audition.variant.level ?? 1)
+        if (event.type === 'on') engine.noteOn('audition', 0, event.note, event.velocity, engine.context.currentTime, this.exampleSelection.variant.level ?? 1)
         else engine.noteOff('audition', 0, event.note)
         this.voiceCount = engine.activeVoiceCount
       }, event.at)
@@ -239,7 +239,7 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
           }, 25000)
         }
         updateSoundSession({calibrating: active})
-        if (active) Object.assign(this, {revealStage: calibration.state === 'waiting' ? 'settling' : 'calibrating', status: calibration.state === 'waiting' ? 'Connected — waiting for calibration to begin' : this.revealProfile.calibratingStatus})
+        if (active) Object.assign(this, {revealStage: calibration.state === 'waiting' ? 'settling' : 'calibrating', status: calibration.state === 'waiting' ? 'Waiting for a stable plant signal — check both clips and cables' : this.revealProfile.calibratingStatus})
         else this.finishCalibration()
         return
       }

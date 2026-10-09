@@ -170,6 +170,8 @@ test('explicit calibration ends visibly and ignores a late reply after timeout',
   target.handleRevealMessage({calibration: {nonce: 7, state: 'waiting'}})
   assert.equal(target.revealStage, 'settling')
   assert.equal(target.explicitCalibration, true)
+  assert.match(target.status, /Waiting for a stable plant signal.*check both clips and cables/)
+  assert.doesNotMatch(target.status, /missing|absent|failed/i)
   deadline()
   assert.equal(target.revealStage, 'intro')
   assert.equal(target.firstSoundOutcome, 'not_yet')

@@ -12,9 +12,10 @@
       <h1 class="text-center" :aria-label="betaBuild ? 'Settings' : null">{{ betaBuild ? 'Shape your Biotron' : 'Biotron settings' }}</h1>
       <p v-if="betaBuild" class="settings-hero__intro">Connect Biotron, then shape how it listens, plays, and responds.</p>
     </header>
-    <div v-if="betaBuild && soundSession.running" class="alert alert-success py-2" role="status">
-      🔊 Sound stays on while you adjust settings. Listen as you adjust each setting.
+    <div v-if="betaBuild && (soundPlayer?.engine || soundPlayer?.midi || soundPlayer?.starting || soundPlayer?.releaseBlocked)" class="alert py-2" :class="soundPlayer?.releaseBlocked ? 'alert-warning' : 'alert-success'" role="status">
+      {{ soundPlayer?.releaseBlocked ? 'Release did not finish. Retry Stop.' : soundPlayer?.starting ? 'Connecting sound…' : soundSession.running ? 'Sound stays on while you adjust settings.' : 'Sound is paused. Use Play to resume or stop here.' }}
       <router-link to="/biotron/play" class="alert-link ms-1">Sound &amp; volume</router-link>
+      <button type="button" class="btn btn-outline-dark btn-sm ms-2" @click="soundPlayer.stop()">{{ soundPlayer?.releaseBlocked ? 'Retry release' : soundPlayer?.starting ? 'Cancel connection' : 'Stop & release' }}</button>
     </div>
     <section :class="{'beta-connect-card': betaBuild}" aria-label="Connect Biotron">
     <DeviceSelector
@@ -57,8 +58,8 @@
     </section>
     <BootstrapCollapse v-if="betaBuild" name_of_collapse="Experiments" :open_by_default="$route.query.experiments === '1'">
       <template v-slot:objects>
-        <GroupOfCommands name-of-group="Sound experiments">
-          <template v-slot:objects><AudioCompare embedded /></template>
+        <GroupOfCommands name-of-group="Calibration cues">
+          <template v-slot:objects><AudioCompare calibration-only /></template>
         </GroupOfCommands>
         <GroupOfCommands name-of-group="Calmer plant response">
           <template v-slot:objects>
@@ -456,10 +457,9 @@ export default  {
     },
   },
   computed: {
+    soundPlayer() { return getSoundController() },
     legacyFirmware() { return /^1\.[0-8]\.\d+$/.test(this.firmwareVersion || "") },
-    soundSession() {
-      return soundSessionState
-    },
+    soundSession() { return soundSessionState },
     calibrationBusy() {
       return ["starting", "waiting", "measuring"].includes(this.calibrationState)
     },

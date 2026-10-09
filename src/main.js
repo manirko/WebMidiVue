@@ -1,7 +1,6 @@
 import { createApp } from 'vue'
 import {createRouter, createWebHashHistory} from 'vue-router'
 import App from './App.vue'
-import "bootstrap/js/dist/collapse"
 import "bootstrap/js/dist/modal"
 import "bootstrap/dist/css/bootstrap.min.css"
 import HomeComponent from "@/components/HomeComponent.vue";
@@ -64,7 +63,7 @@ if (betaBuild) {
         meta: {requiresAudio: true, productName: 'Biotron', firstPlay: true}
     })
     routes.push({path: '/sound', component: SoundLab, meta: {requiresAudio: true, productName: 'Playtronica Sound'}})
-    routes.push({path: '/biotron/compare', component: () => import(/* webpackChunkName: "biotron-auditions" */ '@audio-compare'), meta: {requiresAudio: true, productName: 'Biotron sound comparison'}})
+    routes.push({path: '/biotron/compare', redirect: '/biotron/play?sound=1'})
 }
 
 const router = createRouter({

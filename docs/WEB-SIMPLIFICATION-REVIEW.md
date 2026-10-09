@@ -1,6 +1,6 @@
 # Web Settings simplification review
 
-Status: isolated beta branch; no production deploy. Updated 2026-10-05.
+Status: isolated beta branch; no production deploy. Updated 2026-10-09.
 Current audit snapshot and execution handoff: see “Implementation handoff — 2026-10-05” below.
 
 ## Normative engineering contract
@@ -38,7 +38,10 @@ must also leave the project easier to explain, test, remove and maintain.
   and after. Growth requires a named reason and human review of the ratchet.
 - A production Vue file may not silently grow beyond 850 lines. Split by a real
   responsibility, not by arbitrary fragments.
-- Product source is capped at 64 files and 10,242 lines at the enforced baseline.
+- Product source is capped at 70 files and 10,679 lines. The 9 October sound
+  palette/native-disclosure pass lowers the previous enforced 10,734-line cap;
+  file and largest-file limits stay unchanged. The earlier 64-file/10,242-line
+  figure predates the bounded audition, keyboard and diagnostic work.
   A feature that crosses the cap must remove equivalent debt or explicitly
   update this contract in a separate reviewed commit.
 - A new dependency needs: browser/runtime purpose, why the platform cannot do

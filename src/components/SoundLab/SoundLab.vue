@@ -27,8 +27,6 @@
         <small>{{ revealProfile.eyebrow }}</small>
         <h1>{{ revealProfile.title }}</h1>
         <p>{{ revealProfile.promise }}</p>
-        <router-link v-if="revealProfile.id === 'biotron'" class="btn btn-outline-primary" to="/biotron?experiments=1">Sound experiments</router-link>
-        <small v-if="audition" class="d-block mt-2">Selected: {{ audition.variant.label }}</small>
       </header>
 
       <section class="sound-lab__reveal" aria-labelledby="device-reveal-title">
@@ -54,18 +52,12 @@
             >{{ revealStage === 'intro' ? revealProfile.startLabel : 'Resume sound' }}</button>
             <button v-if="permissionPending" type="button" class="btn btn-outline-secondary" @click="cancelMidiPermission()">Cancel MIDI request</button>
             <button
-              v-if="engine || midi"
+              v-if="engine || midi || starting || releaseBlocked"
               type="button"
               class="btn btn-outline-dark"
               @click="stop"
               :disabled="starting && !midiOpening && !audioStarting"
-            >Stop &amp; release</button>
-            <button
-              v-if="engine && revealStage !== 'intro'"
-              type="button"
-              class="btn btn-outline-danger"
-              @click="stop"
-            >Stop listening</button>
+            >{{ releaseBlocked ? 'Retry release' : starting ? 'Cancel connection' : 'Stop & release' }}</button>
           </div>
           <label class="sound-lab__volume" for="biotron-play-volume">
             <span>Volume</span>
@@ -85,7 +77,15 @@
       </section>
       <small class="garden-credit">Visual adapted from <a href="https://dasprinzip.com/tinker/day41/" target="_blank" rel="noopener">Garden Anomaly · Frank Reitberger</a>. Volume adapted from <a href="https://reactbits.dev/micro/wake-slider" target="_blank" rel="noopener">React Bits · David Haz</a>.</small>
 
-      <section v-if="revealStage === 'revealed'" class="sound-lab__after-reveal" :aria-label="`Continue with ${revealProfile.productName}`">
+      <details v-if="revealProfile.id === 'biotron'" class="sound-palette" :open="$route.query.sound === '1'" @toggle="paletteVisited ||= $event.target.open">
+        <summary><span>Sound</span><small>{{ selectedSound.name }}</small></summary>
+        <AudioCompare v-if="paletteVisited" />
+      </details>
+      <label v-if="revealProfile.id === 'biotron'" class="sound-lab__quality">
+        <input type="checkbox" aria-label="Low CPU" :checked="lowCpu" @change="changeQuality" :disabled="starting || releaseBlocked"> Low CPU
+        <small>4 voices instead of 8. Changing this stops sound.</small>
+      </label>
+      <section v-if="revealProfile.id !== 'biotron' && revealStage === 'revealed'" class="sound-lab__after-reveal" :aria-label="`Continue with ${revealProfile.productName}`">
         <button type="button" class="btn btn-primary" @click="revealExpanded = !revealExpanded">
           {{ revealExpanded ? 'Hide sounds' : 'Choose a sound' }}
         </button>
@@ -191,6 +191,7 @@
 import {markRaw, defineAsyncComponent} from 'vue'
 const GardenVisual = defineAsyncComponent(() => import(/* webpackChunkName: "garden-visual" */ './GardenVisual.vue'))
 const WakeVolume = defineAsyncComponent(() => import(/* webpackChunkName: "garden-visual" */ './WakeVolume.vue'))
+const AudioCompare = defineAsyncComponent(() => import(/* webpackChunkName: "biotron-auditions" */ '@audio-compare'))
 import {noteForKeyboardCode, blocksKeyboardNotes} from '@/audio/core.mjs'
 import {createRealtimeElementarySynth as createRealtimeSynth, DEFAULT_VOLUME, normalizeVolume} from '@/audio/elementary/engine.mjs'
 import {registerSoundController, soundSessionState, unregisterSoundController, updateSoundSession, selectSoundExperiment, restoreSoundExperiment} from '@/audio/sessionState.mjs'
@@ -225,7 +226,7 @@ function audioWithin(task, milliseconds, message) {
 const resumeAudioWithin = engine => audioWithin(engine.resume(), 3500, 'Audio resume timed out.')
 export default {
   name: 'SoundLab',
-  components: {CompatibilityNotice, DeviceTaskNav, DiagnosticCopy, GardenVisual, WakeVolume, KeyboardControls},
+  components: {CompatibilityNotice, DeviceTaskNav, DiagnosticCopy, GardenVisual, WakeVolume, KeyboardControls, AudioCompare},
   props: {
     mode: {type: String, default: 'lab'},
     profileId: {type: String, default: ''},
@@ -239,6 +240,7 @@ export default {
       return this.audition && (this.audition.bankId !== 'calibration' || cue)
         ? this.audition.variant.preset : this.variants[this.currentVariant]
     },
+    exampleSelection() { return this.audition || {...resolveAudition('timbres', 'tone-reference'), variant: {label: this.selectedSound.name, level: 1}} },
     revealProfile() { return getRevealProfile(this.profileId) },
     revealCopy() {
       const stage = ['intro', 'settling', 'calibrating', 'ready'].includes(this.revealStage)
@@ -292,6 +294,7 @@ export default {
       tabLeaseState: 'free',
       revealStage: 'intro',
       revealExpanded: false,
+      paletteVisited: this.$route.query.sound === '1',
       recognizedInput: '',
       revealIssue: null,
       midiActive: false,
@@ -654,6 +657,9 @@ export default {
 .sound-lab__diagnostic { margin-top: .5rem; }
 .sound-lab__quality { display: inline-flex; min-height: 44px; align-items: center; gap: .4rem; margin: 0; padding: 0 .35rem; white-space: nowrap; }
 .sound-lab__quality input { width: 1.1rem; height: 1.1rem; }
+.sound-palette { max-width:760px; margin:1.5rem auto .5rem; padding:1rem 1.25rem; border:1px solid var(--ui-control-border); border-radius:var(--ui-radius); background:#fff; }
+.sound-palette summary { min-height:44px; cursor:pointer; align-content:center; font-weight:600; }
+.sound-palette summary small { float:right; max-width:70%; color:#625e58; font-weight:400; }
 
 .sound-lab__volume { display: inline-grid; grid-template-columns: auto minmax(130px, 220px) 3.25rem; gap: .65rem; align-items: center; min-height: 44px; margin: 0; color: #353239; font-weight: 600; }
 .sound-lab__volume input { width: 100%; min-height: 32px; accent-color: var(--ui-accent); cursor: pointer; }

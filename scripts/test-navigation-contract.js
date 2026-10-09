@@ -9,6 +9,7 @@ const biotron = read('src/components/BiotronPage/BiotronPageUpdated.vue')
 const settingsReadback = read('src/biotron/settingsReadback.mjs')
 const selector = read('src/components/MidiComponents/BiotronDeviceSelector.vue')
 const sound = read('src/components/SoundLab/SoundLab.vue')
+const compare = read('src/components/SoundLab/AudioCompare.vue')
 const gate = read('src/components/CompatibilityGate.vue')
 const notice = read('src/components/CompatibilityNotice.vue')
 const compatibility = read('src/compatibility.mjs')
@@ -73,6 +74,13 @@ assert(selector.includes('[0xf0, 0x14, 0x0d, RECALIBRATE_COMMAND, nonce, 0xf7]')
 assert(selector.includes('data[1] === 0x0b'),
   'recalibration progress must require the device response envelope')
 assert(sound.includes('active-task="play"'), 'Biotron first play must show Play as current')
+assert(sound.includes('class="sound-palette"') && sound.includes('<AudioCompare v-if="paletteVisited"'),
+  'Biotron musical sound choices must be available lazily on Play before a device is connected')
+assert(compare.includes("bank.id !== 'calibration'") && biotron.includes('<AudioCompare calibration-only'),
+  'musical choices belong on Play and calibration cues belong in Settings')
+assert(!compare.includes('KeyboardControls') && !compare.includes('compare-volume') && !compare.includes('async play()'),
+  'the palette must reuse the player rather than duplicate connection, volume or keyboard controls')
+assert(biotron.includes('@click="soundPlayer.stop()"'), 'Settings must retain an immediate sound stop/cancel action')
 assert(sound.includes("{{ revealExpanded ? 'Hide sounds' : 'Choose a sound' }}"),
   'sound choice action must use the same plain-language noun as the task')
 assert(sound.includes('>Settings</router-link>'),
