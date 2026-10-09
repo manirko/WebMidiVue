@@ -6,12 +6,28 @@ const os = require('node:os')
 const path = require('node:path')
 const {EventEmitter} = require('node:events')
 const {chromium} = require('playwright-core')
-const {chromePath, browserConfig, browserCall, createStaticServer} = require('./browser-test-harness')
+const {chromePath, browserConfig, browserCall, qaOrigin, verifyOnlineIdentity, createStaticServer} = require('./browser-test-harness')
 
 assert.throws(() => browserConfig('safari'), /Unknown BIOTRON_QA_BROWSER/,
   'Safari must never silently run Chrome or Playwright WebKit')
 assert.equal(browserConfig('firefox').engine, 'firefox')
 assert.equal(browserConfig('webkit').engine, 'webkit')
+const originalOrigin = process.env.BIOTRON_QA_ORIGIN
+try {
+  delete process.env.BIOTRON_QA_ORIGIN
+  assert.equal(qaOrigin({address: () => ({port: 12345})}), 'http://127.0.0.1:12345')
+  assert.equal(qaOrigin(null, 'https://9a2de909.biotron-settings-beta.pages.dev/'), 'https://9a2de909.biotron-settings-beta.pages.dev')
+  for (const origin of ['', 'http://9a2de909.biotron-settings-beta.pages.dev',
+    'https://biotron-settings-beta.pages.dev', 'https://candidate-8bda7ab6e6d4.biotron-settings-beta.pages.dev',
+    'https://9a2de909.biotron-settings-beta.pages.dev.evil.test', 'https://user@9a2de909.biotron-settings-beta.pages.dev',
+    'https://9a2de909.biotron-settings-beta.pages.dev/path', 'https://9a2de909.biotron-settings-beta.pages.dev?q=1',
+    'https://9a2de909.biotron-settings-beta.pages.dev/#/biotron', 'https://9a2de909.biotron-settings-beta.pages.dev:444']) {
+    assert.throws(() => qaOrigin(null, origin))
+  }
+} finally {
+  if (originalOrigin === undefined) delete process.env.BIOTRON_QA_ORIGIN
+  else process.env.BIOTRON_QA_ORIGIN = originalOrigin
+}
 const originalEdgePath = process.env.EDGE_PATH
 try {
   process.env.EDGE_PATH = __filename // Path contract only; this fixture is never launched.
@@ -72,20 +88,38 @@ function readHttp(url, options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'biotron-http-fixture-'))
   let server, browser, fault
   try {
+    const release = {commit: 'a'.repeat(40), build_id: 'a'.repeat(12), firmware_update_enabled: false}
+    const metadata = () => Buffer.from(JSON.stringify(release))
+    const identityContext = (status, body) => ({request: {get: async (url, options) => {
+      assert.equal(url, 'https://9a2de909.biotron-settings-beta.pages.dev/release-evidence.json')
+      assert.deepEqual(options, {timeout: 15000, maxRedirects: 0})
+      return {status: () => status, body: async () => body}
+    }}})
+    const origin = 'https://9a2de909.biotron-settings-beta.pages.dev'
+    fs.writeFileSync(path.join(root, 'release-evidence.json'), metadata())
+    assert.equal((await verifyOnlineIdentity(identityContext(200, metadata()), origin, root)).byteIdenticalMetadata, true)
+    await assert.rejects(verifyOnlineIdentity(identityContext(302, metadata()), origin, root), /metadata differs/)
+    await assert.rejects(verifyOnlineIdentity(identityContext(200, Buffer.from('{}')), origin, root), /metadata differs/)
+    for (const bad of [{...release, commit: null}, {...release, commit: 'old'}, {...release, firmware_update_enabled: true}]) {
+      const bytes = Buffer.from(JSON.stringify(bad))
+      fs.writeFileSync(path.join(root, 'release-evidence.json'), bytes)
+      await assert.rejects(verifyOnlineIdentity(identityContext(200, bytes), origin, root), /updates disabled/)
+    }
+    console.log('PASS 12 immutable-origin and 6 pinned online-identity controls; no network in these controls')
     for (const {name, body} of fixtures) fs.writeFileSync(path.join(root, name), body)
     const before = fixtures.map(({name}) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, name))).digest('hex'))
     server = createStaticServer(root)
     await new Promise((resolve, reject) => {server.once('error', reject); server.listen(0, '127.0.0.1', resolve)})
-    const origin = `http://127.0.0.1:${server.address().port}`
+    const localOrigin = `http://127.0.0.1:${server.address().port}`
     const transport = []
-    for (const {name} of fixtures) transport.push(await readHttp(`${origin}/${name}`))
-    const telemetry = await readHttp(`${origin}/api/telemetry`, {method: 'POST'})
-    const fallback = await readHttp(`${origin}/missing`)
+    for (const {name} of fixtures) transport.push(await readHttp(`${localOrigin}/${name}`))
+    const telemetry = await readHttp(`${localOrigin}/api/telemetry`, {method: 'POST'})
+    const fallback = await readHttp(`${localOrigin}/missing`)
     browser = await chromium.launch({executablePath: chromePath(), headless: true})
     const context = await browser.newContext({serviceWorkers: 'block'})
-    await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort())
+    await context.route('**/*', route => new URL(route.request().url()).origin === localOrigin ? route.continue() : route.abort())
     const page = await context.newPage()
-    await page.goto(origin, {waitUntil: 'load'})
+    await page.goto(localOrigin, {waitUntil: 'load'})
     const cssContent = await page.locator('p').evaluate(element => getComputedStyle(element, '::before').content)
     const svgLoaded = await page.locator('img').evaluate(image => image.complete && image.naturalWidth === 8 && image.naturalHeight === 9)
     const received = []

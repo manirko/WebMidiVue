@@ -13,8 +13,7 @@ const {pathToFileURL} = require('node:url')
 
 const repo = path.resolve(process.argv[2] || path.join(__dirname, '..'))
 const localRequire = createRequire(path.join(repo, 'package.json'))
-const {chromium} = localRequire('playwright-core')
-const {chromePath, createStaticServer} = localRequire(path.join(repo, 'scripts/browser-test-harness.js'))
+const {launchBrowser, qaOrigin, verifyOnlineIdentity, createStaticServer} = localRequire(path.join(repo, 'scripts/browser-test-harness.js'))
 const outputParent = process.env.BIOTRON_QA_OUTPUT || process.argv[3] || os.tmpdir()
 const fault = process.env.UI_PERF_FAULT || 'none'
 const output = fs.mkdtempSync(path.join(outputParent, 'ui-performance-'))
@@ -106,12 +105,17 @@ async function cleanup() {
   save()
   server = createStaticServer(dist)
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve) })
-  browser = await chromium.launch({executablePath: chromePath(), headless: process.env.UI_PERF_HEADED !== '1'})
+  browser = await launchBrowser({headless: process.env.UI_PERF_HEADED !== '1'})
   report.browser = browser.version()
+  report.browserSelector = process.env.BIOTRON_QA_BROWSER || 'chrome'
+  report.engine = browser.browserType().name()
   report.headless = process.env.UI_PERF_HEADED !== '1'
+  const origin = qaOrigin(server)
+  report.origin = origin
   // PWA update has its own lane. A fresh, SW-free profile isolates UI/engine timing.
   context = await browser.newContext({viewport: {width: 1366, height: 900}, serviceWorkers: 'block'})
   context.setDefaultTimeout(5000)
+  if (process.env.BIOTRON_QA_ORIGIN !== undefined) report.onlineIdentityBefore = await verifyOnlineIdentity(context, origin, dist)
   await context.tracing.start({screenshots: false, snapshots: false, sources: false})
   await context.addInitScript(injectedFault => {
     const q = window.__uiPerf = {contexts: [], output: null, gesture: null, gardenAt: null,
@@ -169,7 +173,7 @@ async function cleanup() {
   page.on('pageerror', error => report.errors.push(String(error)))
   page.on('requestfailed', request => report.requestFailures.push({url: request.url(), failure: request.failure()}))
   const coldStarted = Date.now()
-  await page.goto(`http://127.0.0.1:${server.address().port}/#/biotron/play`)
+  await page.goto(`${origin}/#/biotron/play`)
   await page.locator('.sound-lab:visible').waitFor()
   report.coldNavigationWallMs = Date.now() - coldStarted
   for (let index = 0; index < 20; index++) {
@@ -298,6 +302,7 @@ async function cleanup() {
   assert.equal(report.cleanup.retainedBlobs, 0, 'Lane or renderer retained a Blob URL')
   assert.deepEqual(report.errors, [], 'Uncaught browser error')
   assert.deepEqual(snapshot(), initialDist, 'dist changed during this lane; evidence is not bound to one artifact')
+  if (process.env.BIOTRON_QA_ORIGIN !== undefined) report.onlineIdentityAfter = await verifyOnlineIdentity(context, origin, dist)
   report.status = 'PASS'
   console.log('PASS: 20 UI route clicks, actual Garden, existing engine PCM under three synthetic loads, trusted keyboard Note Off and complete release')
 })().catch(async error => {

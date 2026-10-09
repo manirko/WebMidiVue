@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs')
 const {devices}=require('playwright-core')
-const {launchBrowser,browserCall,contextOptions,createStaticServer}=require('./browser-test-harness')
+const {launchBrowser,browserCall,contextOptions,qaOrigin,verifyOnlineIdentity,createStaticServer}=require('./browser-test-harness')
 const allowedSoundRequest=message=>message[0]===0xf0&&message[1]===20&&message[2]===13&&message.at(-1)===0xf7&&
  message.slice(3,-1).every(byte=>Number.isInteger(byte)&&byte>=0&&byte<=127)&&
  ((message.length===6&&[125,126].includes(message[3]))||
@@ -20,7 +20,8 @@ if(process.argv.includes('--request-guard-only')){
  console.log(`PASS ${requestControls.length} request controls: calibration/settings/status reads allowed, writes/BOOT/malformed rejected`)
  process.exit(0)
 }
-const server=createStaticServer(path.resolve(process.env.BIOTRON_QA_DIST_ROOT||path.join(__dirname,'..','dist')))
+const root=path.resolve(process.env.BIOTRON_QA_DIST_ROOT||path.join(__dirname,'..','dist'))
+const server=createStaticServer(root)
 const artifacts=process.env.AUDITION_BROWSER_OUTPUT||`/private/tmp/biotron-audition-browser-${Date.now()}`
 fs.mkdirSync(artifacts,{recursive:true})
 let page,stage='launch',starts=0
@@ -33,6 +34,7 @@ const mark=value=>{stage=value;progress.push({stage,starts,at:new Date().toISOSt
 const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()=>resolve({unavailable:'page did not respond within 1500ms'}),1500))])
 ;(async()=>{
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
+ const origin=qaOrigin(server)
  const browser=await launchBrowser()
  fs.writeFileSync(path.join(artifacts,'browser.json'),JSON.stringify({requested:process.env.BIOTRON_QA_BROWSER||'chrome',engine:browser.browserType().name(),version:browser.version()},null,2))
  let deadlineExpired=false
@@ -48,6 +50,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
  },deadlineMs)
  try{
   const context=await browser.newContext({viewport:{width:1366,height:900}})
+  if(process.env.BIOTRON_QA_ORIGIN!==undefined)fs.writeFileSync(path.join(artifacts,'online-identity-before.json'),JSON.stringify(await verifyOnlineIdentity(context,origin,root),null,2))
   await context.addInitScript(()=>{
    window.__nativeCapabilities={midi:typeof navigator.requestMIDIAccess==='function',audio:typeof window.AudioContext==='function',secure:isSecureContext}
    window.__comparisonContexts=[];window.__comparisonMidiRequests=0
@@ -174,7 +177,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
    else await openDetails(page,'Sound')
    await panel().getByRole('button',{name:label,exact:true}).click()
   }
-  await page.goto(`http://127.0.0.1:${server.address().port}/#/biotron/compare`)
+  await page.goto(`${origin}/#/biotron/compare`)
   await waitCompareAlias()
   fs.writeFileSync(path.join(artifacts,'native-capabilities.json'),JSON.stringify(await page.evaluate(()=>window.__nativeCapabilities),null,2))
   const stopped=async()=>{
@@ -669,7 +672,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   const offline=await browser.newContext()
   await offline.addInitScript(()=>Object.defineProperty(navigator,'requestMIDIAccess',{configurable:true,value:async()=>({inputs:new Map(),outputs:new Map(),addEventListener(){},removeEventListener(){}})}))
   const settings=await offline.newPage()
-  await settings.goto(`http://127.0.0.1:${server.address().port}/#/biotron?experiments=1`)
+  await settings.goto(`${origin}/#/biotron?experiments=1`)
   await settings.getByText(/Local preset — changes stay/).waitFor()
   assert(await details(settings,'Experiments').evaluate(element=>element.open),'experiments query did not open its native section')
   await settings.getByRole('heading',{name:'Calibration cues',exact:true}).waitFor()
@@ -690,7 +693,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   await offline.close()
   const cold=await browser.newContext()
   await cold.addInitScript(()=>{window.__keyboardMidi=0;Object.defineProperty(navigator,'requestMIDIAccess',{configurable:true,value:async()=>{window.__keyboardMidi++;throw new Error('No device for keyboard test')}})})
-  const keyboardPlay=await cold.newPage();await keyboardPlay.goto(`http://127.0.0.1:${server.address().port}/#/biotron/play`)
+  const keyboardPlay=await cold.newPage();await keyboardPlay.goto(`${origin}/#/biotron/play`)
   await keyboardPlay.getByRole('heading',{name:'Plant music',exact:true}).waitFor()
   assert.equal(await palette(keyboardPlay).evaluate(element=>element.open),false,'cold Play opened Sound without a query')
   assert.equal(await keyboardPlay.locator('.audio-compare').count(),0,'cold Play mounted the unopened palette')
@@ -708,7 +711,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   await keyboardPlay.getByRole('button',{name:'Stop keyboard',exact:true}).click();await cold.close()
   for(const profile of [{viewport:{width:320,height:700}},{...devices['iPhone 15'],isMobile:false}]){
    const mobile=await browser.newContext(contextOptions(profile,browser));await mobile.addInitScript(()=>Object.defineProperty(navigator,'requestMIDIAccess',{value:undefined,configurable:true}))
-   const tab=await mobile.newPage();await tab.goto(`http://127.0.0.1:${server.address().port}/#/biotron/compare`)
+   const tab=await mobile.newPage();await tab.goto(`${origin}/#/biotron/compare`)
    await waitCompareAlias(tab)
    assert(await tab.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth),'comparison overflows mobile')
    await tab.getByRole('button',{name:'High-note treatments',exact:true}).click();assert.equal(await selection(tab).locator('option').count(),10)
@@ -722,6 +725,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   }
   assert.deepEqual(errors,[])
   mark(keyboardOnly?'PASS keyboard development subset':'PASS')
+  if(process.env.BIOTRON_QA_ORIGIN!==undefined)fs.writeFileSync(path.join(artifacts,'online-identity-after.json'),JSON.stringify(await verifyOnlineIdentity(context,origin,root),null,2))
   await context.tracing.stop({path:path.join(artifacts,'trace.zip')})
   console.log(keyboardOnly ? 'Keyboard development subset:43 trusted keyboard PCM/DSP choices including Classic, focused Sound/Octave and uncancelled native control keys, C2–C7, layout/edit/IME/release guards, live MIDI and cold device-free Play; full preview/startup gate not rerun.' : `Comparison browser: ${cases}/36 real-engine option Play/Stop, 100 repeated starts/closes without timers/Blobs, cancelled module load, failed-close route protection/retry, suspend/background release, four natural completions, switch/route release, reference, no preview MIDI or inferred outcome;36 live MIDI selections, six short-gate handpan modal rings and cue-only calibration changes, persistent selection through Settings/Play/reload, independent inline sections without voting, stock reset and 320/iPhone layout passed; 43 trusted keyboard PCM/DSP choices including Classic, focused Sound/Octave and uncancelled native control keys, C2–C7, four key layouts, typing/shadow/IME/modifier guards, repeat/focus/blur/background/route/Stop, keyboard/MIDI identity isolation and no screen keys, cold audio-only Play without a MIDI request.`)
  }catch(error){

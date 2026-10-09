@@ -29,7 +29,7 @@ if len(matrix_browsers) != len(set(matrix_browsers)): p.error('--browsers must n
 allowed_browsers = json.loads(subprocess.check_output(['node', '-e', "console.log(JSON.stringify(require('./scripts/browser-test-harness').browserNames))"], cwd=ROOT, text=True))
 if any(name not in allowed_browsers for name in matrix_browsers): p.error('--browsers contains an unknown selector; allowed: '+','.join(allowed_browsers))
 portable_lanes = ('test:firmware:browser', 'test:sound:browser', 'test:pwa:browser', 'test:quality:browser', 'test:auditions:browser',
-                  'test:playtron-variants:browser', 'test:scales-variants:browser', 'test:touchme-variants:browser')
+                  'test:playtron-variants:browser', 'test:scales-variants:browser', 'test:touchme-variants:browser', 'test:ui-performance')
 matrix_lanes = {}
 for script in BROWSER_TESTS:
  TESTS.append(script)

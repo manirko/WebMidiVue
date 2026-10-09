@@ -73,9 +73,9 @@ function browserConfig(name = process.env.BIOTRON_QA_BROWSER || 'chrome') {
   throw new Error(`Unknown BIOTRON_QA_BROWSER: ${name}`)
 }
 
-async function launchBrowser() {
+async function launchBrowser(options = {}) {
   const config = browserConfig()
-  const browser = await require('playwright-core')[config.engine].launch({...config.options, headless: true})
+  const browser = await require('playwright-core')[config.engine].launch({headless: true, ...options, ...config.options})
   const newContext = browser.newContext.bind(browser)
   browser.newContext = (...args) => browserCall(browser, () => newContext(...args), 'newContext')
     .then(context => guardPages(context, browser))
@@ -101,6 +101,29 @@ function contextOptions(options, browser) {
   const result = {...options}
   if (browser.browserType().name() === 'firefox') delete result.isMobile
   return result
+}
+
+function qaOrigin(server, supplied = process.env.BIOTRON_QA_ORIGIN) {
+  if (supplied === undefined) return `http://127.0.0.1:${server.address().port}`
+  const url = new URL(supplied)
+  if (url.protocol !== 'https:' || !/^[0-9a-f]{8}\.biotron-settings-beta\.pages\.dev$/.test(url.hostname) ||
+      url.port || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+    throw new Error('BIOTRON_QA_ORIGIN must be an immutable Biotron beta HTTPS origin')
+  }
+  return url.origin
+}
+
+async function verifyOnlineIdentity(context, origin, root) {
+  const expected = fs.readFileSync(path.join(root, 'release-evidence.json'))
+  const response = await context.request.get(origin + '/release-evidence.json', {timeout: 15000, maxRedirects: 0})
+  if (response.status() !== 200 || !(await response.body()).equals(expected)) {
+    throw new Error('Online runtime metadata differs from the pinned artifact')
+  }
+  const release = JSON.parse(expected)
+  if (!/^[0-9a-f]{40}$/.test(release.commit) || release.firmware_update_enabled !== false) {
+    throw new Error('Online software lane requires a pinned customer artifact with firmware updates disabled')
+  }
+  return {origin, commit: release.commit, buildId: release.build_id, byteIdenticalMetadata: true}
 }
 
 function createStaticServer(root, options = {}) {
@@ -129,4 +152,4 @@ function createStaticServer(root, options = {}) {
   })
 }
 
-module.exports = {chromePath, browserNames, browserConfig, browserCall, launchBrowser, launchPersistentContext, contextOptions, createStaticServer}
+module.exports = {chromePath, browserNames, browserConfig, browserCall, launchBrowser, launchPersistentContext, contextOptions, qaOrigin, verifyOnlineIdentity, createStaticServer}

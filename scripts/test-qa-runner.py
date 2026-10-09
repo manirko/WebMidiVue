@@ -76,7 +76,7 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
   assert by_name['test:firmware']['result'] == 'FAIL'
   assert by_name['test:firmware']['exit_code'] == 7
   assert by_name['test:midi-lifecycle']['result'] == 'TIMEOUT'
-  assert by_name['test:presets']['result'] == 'PASS'
+  assert by_name['test:presets']['result'] == 'PASS', json.dumps(by_name['test:presets'])
   assert by_name['test:sound:levels']['result'] == 'PASS'
   for name in ['test:browser-harness','test:audio:realtime','test:mobile:owner','test:pwa:browser','test:firmware:browser','test:firmware:physical-cycle','test:quality:browser','test:windows:daw']:
    assert by_name[name]['result'] == 'NOT RUN', name
@@ -114,7 +114,7 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  assert matrix.returncode == 1, matrix.stdout+matrix.stderr
  latest = max(output.iterdir(),key=lambda p:p.stat().st_mtime_ns)
  rows = [json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
- for script in ['test:firmware:browser','test:sound:browser','test:pwa:browser','test:quality:browser','test:auditions:browser','test:playtron-variants:browser','test:scales-variants:browser','test:touchme-variants:browser']:
+ for script in ['test:firmware:browser','test:sound:browser','test:pwa:browser','test:quality:browser','test:auditions:browser','test:playtron-variants:browser','test:scales-variants:browser','test:touchme-variants:browser','test:ui-performance']:
   firefox = next(row for row in rows if row['test']==script+'@firefox')
   webkit = next(row for row in rows if row['test']==script+'@webkit')
   assert firefox['result']=='FAIL' and firefox['exit_code']==9 and firefox['browser']=='firefox'
@@ -123,7 +123,7 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  names=[row['test'] for row in rows]
  assert names.count('test:firmware:browser')==1 and names.count('test:beta-build')==1
  assert names.index('test:firmware:browser@webkit') < names.index('test:beta-build') < names.index('test:sound:browser@firefox')
- assert len([row for row in rows if '@' in row['test']])==16
+ assert len([row for row in rows if '@' in row['test']])==18
  # An affected-only run retains the build order and never counts omitted lanes as PASS.
  selected=subprocess.run([sys.executable,str(runner),'--output',str(output),'--browser','--browsers','firefox,webkit','--only','test:sound:browser@webkit,test:firmware:browser@webkit'],env=environment,capture_output=True,text=True,timeout=15)
  assert selected.returncode==0,selected.stdout+selected.stderr

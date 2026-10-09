@@ -2,7 +2,7 @@ const assert = require('assert')
 const path = require('path')
 const fs = require('node:fs')
 const {devices} = require('playwright-core')
-const {launchBrowser, contextOptions, createStaticServer} = require('./browser-test-harness')
+const {launchBrowser, contextOptions, qaOrigin, verifyOnlineIdentity, createStaticServer} = require('./browser-test-harness')
 
 const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
 const server = createStaticServer(root)
@@ -86,6 +86,7 @@ function assertQuality(result, label, checkCls = true) {
 async function auditProfile(browser, origin, profile) {
   currentProfile = profile.name
   const context = await browser.newContext(contextOptions({...profile.options, reducedMotion: 'reduce'}, browser))
+  if (process.env.BIOTRON_QA_ORIGIN !== undefined) fs.writeFileSync(path.join(artifacts, `${profile.name}-online-identity.json`), JSON.stringify(await verifyOnlineIdentity(context, origin, root), null, 2))
   context.setDefaultTimeout(5000)
   await context.addInitScript(hasMidi => {
     window.__copiedText = ''
@@ -246,7 +247,7 @@ async function auditProfile(browser, origin, profile) {
 
 ;(async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
-  const origin = `http://127.0.0.1:${server.address().port}`
+  const origin = qaOrigin(server)
   const browser = await launchBrowser()
   try {
     const results = []
