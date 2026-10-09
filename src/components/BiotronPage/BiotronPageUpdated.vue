@@ -45,7 +45,7 @@
           aria-live="polite"
       >{{ calibrationMessage }}</span>
     </div>
-    <div v-if="betaBuild && settingsMessage" class="settings-feedback" :class="{'settings-feedback--error': settingsState === 'error'}" role="status" aria-live="polite">
+    <div v-if="settingsMessage" class="settings-feedback" :class="{'settings-feedback--error': settingsState === 'error'}" role="status" aria-live="polite">
       <span>{{ settingsMessage }}</span>
       <button v-if="settingsState === 'saved'" type="button" class="btn btn-outline-secondary btn-sm" aria-label="Dismiss saved message" @click="settingsMessage = ''">Dismiss</button>
       <button v-if="device && settingsState === 'error' && !settingsSnapshotKnown && !legacyFirmware" type="button" class="btn btn-outline-primary btn-sm" @click="retrySettingsConnection">Retry settings connection</button>
@@ -674,11 +674,7 @@ export default  {
     },
 
     saveData() {
-      let state = {}
-      for (let val of Object.values(this.commands_data)) {
-        state[val.name] = val.value
-      }
-
+      const state = Object.fromEntries(Object.values(this.commands_data).map(command => [command.name, command.value]))
       return withPresetFeedback(this.id, "autosave", () =>
         this.db.updatePatch(localStorage.getItem(this.id), state))
     },
@@ -690,29 +686,33 @@ export default  {
         preset = await this.db.getPatch(localStorage.getItem(this.id))
       }
 
-      for (const [key, value] of Object.entries(preset.data)) {
-        this.commands_data[key].set_value(value);
-      }
+      for (const [key, value] of Object.entries(preset.data)) this.commands_data[key].set_value(value)
 
       this.forceRerender++;
     },
     createPreset() {
-      let state = []
-      for (let item in this.commands_data) {
-        state.push(this.commands_data[item].toShortDict())
-      }
-
-      let value = {"commands": state}
-      let myFile = new File([JSON.stringify(value)], "biotron-preset.txt",
-          {type: "text/plain;charset=utf-8"})
-      saveAs(myFile, "biotron-preset.txt");
+      const value = {commands: Object.values(this.commands_data).map(command => command.toShortDict())}
+      saveAs(new File([JSON.stringify(value)], "biotron-preset.txt", {type: "text/plain;charset=utf-8"}), "biotron-preset.txt")
     },
     async loadDataFromPreset(e) {
       if (this.betaBuild && this.device && !this.settingsSnapshotKnown) return
-      await this.patchChanged();
-      for (let item of JSON.parse(e).commands) {
-        this.commands_data[item.name].set_value(item.value);
+      let commands
+      try {
+        commands = JSON.parse(e).commands
+        if (!Array.isArray(commands) || !commands.length || new Set(commands.map(item => item?.name)).size !== commands.length) throw new Error("Invalid commands")
+        for (const item of commands) {
+          const command = this.commands_data[item?.name], value = Number(item?.value)
+          const validValue = ["number", "boolean", "string"].includes(typeof item?.value) && String(item.value).trim() !== ""
+              && Number.isInteger(value) && value >= command?.min_value && value <= command?.max_value
+          if (!Object.hasOwn(this.commands_data, item?.name) || !validValue) throw new Error("Invalid setting")
+        }
+      } catch {
+        this.settingsState = "error"
+        this.settingsMessage = "Could not load preset. Choose a valid Biotron preset file."
+        return
       }
+      await this.patchChanged();
+      for (const item of commands) this.commands_data[item.name].set_value(Number(item.value))
       await this.saveData();
       this.forceRerender++;
       this.markPresetPending()
@@ -804,7 +804,6 @@ export default  {
     this.patches = await this.db.getPatch();
 
     await this.loadData()
-    this.forceRerender++;
     this.page_is_inited = true
     if (this.betaBuild && this.device) await this.loadPersistedSettings(this.device)
 

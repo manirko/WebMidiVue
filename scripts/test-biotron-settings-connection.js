@@ -99,11 +99,37 @@ pair.changeEndpoint(0, pair.minCommandObject); pair.changeEndpoint(1, pair.maxCo
 assert.equal(pair.minCommandObject.value, 0, 'explicit velocity zero must remain valid')
 assert.equal(pair.maxCommandObject.value, 127)
 assert.deepEqual(pair.values, [0, 127])
+const typedEndpoint = {target: {value: '-1'}}
+pair.values[0] = 8
+pair.changeEndpoint(0, pair.minCommandObject, typedEndpoint)
+assert.equal(typedEndpoint.target.value, 0)
+const blankEndpoint = {target: {value: ''}}
+pair.changeEndpoint(0, pair.minCommandObject, blankEndpoint)
+assert.equal(blankEndpoint.target.value, 0, 'blank numeric DOM must restore even when reactive state is already zero')
 const rangeWrites = pair.sent.length
 pair.values[0] = ''; pair.changeEndpoint(0, pair.minCommandObject)
 assert.equal(pair.sent.length, rangeWrites, 'blank range endpoint must not write zero')
 
 ;(async () => {
+  const importing = page()
+  importing.settingsSnapshotKnown = true
+  importing.commands_data = Object.fromEntries(['noteDistance', 'minPlantVelocity'].map(name => [name,
+    {value: 8, min_value: 0, max_value: name === 'noteDistance' ? 100 : 127, set_value(value) { this.value = value }}]))
+  let presetChanges = 0
+  importing.patchChanged = importing.saveData = async () => { presetChanges++ }
+  importing.markPresetPending = () => {}
+  for (const invalid of ['{', '{}', '{"commands":[]}', '{"commands":[{"name":"unknown","value":1}]}',
+    '{"commands":[{"name":"noteDistance","value":101}]}', '{"commands":[{"name":"noteDistance","value":3},{"name":"noteDistance","value":4}]}',
+    '{"commands":[{"name":"noteDistance","value":null}]}', '{"commands":[{"name":"noteDistance","value":""}]}']) {
+    await assert.doesNotReject(() => importing.loadDataFromPreset(invalid), 'invalid preset must show an error without throwing')
+    assert.match(importing.settingsMessage, /valid Biotron preset file/)
+    assert.equal(presetChanges, 0, 'invalid preset changed browser storage before validation')
+    assert.equal(importing.commands_data.noteDistance.value, 8, 'invalid preset partly changed the form')
+  }
+  await importing.loadDataFromPreset('{"commands":[{"name":"minPlantVelocity","value":0},{"name":"noteDistance","value":"42"}]}')
+  assert.equal(importing.commands_data.minPlantVelocity.value, 0)
+  assert.equal(Number(importing.commands_data.noteDistance.value), 42, 'legacy numeric strings must remain readable')
+  assert.equal(presetChanges, 2)
   const legacy = page()
   legacy.firmwareVersion = '1.8.2'
   legacy.legacyFirmware = component.computed.legacyFirmware.call(legacy)

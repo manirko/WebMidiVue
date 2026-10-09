@@ -66,7 +66,7 @@ class PacketTests(unittest.TestCase):
    with self.subTest(name=name),self.assertRaisesRegex(ValueError,message):tester.verify(self.root)
    file.write_bytes(original);self.manifest['files']['runtime/firmware/'+name]=tester.digest(file)
  def test_case_inventory_keeps_physical_cue_gate(self):
-  self.assertEqual(len(tester.CASES),14)
+  self.assertEqual(len(tester.CASES),15)
   self.assertIn('FB44',tester.CASES['W14'])
  def test_paths_cannot_escape_on_either_os(self):
   for name in ['../secret','/secret','C:/secret','..\\secret','runtime/../../secret']:
@@ -184,6 +184,7 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
     if mode=='settings_fail':return subprocess.CompletedProcess(command,1)
     tester.write_json(observed/'settings-matrix.json',{'rows':[{'field':str(i),'status':'PASS'} for i in range(25 if mode=='settings_early' else 26)]})
     tester.write_json(observed/'settings-boundaries.json',[{'status':'PASS'} for i in range(17)])
+    tester.write_json(observed/'settings-actions.json',[{'status':'PASS'} for i in range(8)])
     return subprocess.CompletedProcess(command,0)
    observed=run/'browser';observed.mkdir()
    tester.write_json(observed/'progress.json',[{'stage':'PASS'}])

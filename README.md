@@ -326,3 +326,5 @@ npm run lint
 ### Customize configuration
 See [Configuration Reference](https://cli.vuejs.org/config/).
  
+
+Settings QA: все 13 ладов, Reduce extra notes, выбор локального пресета, явное Apply, экспорт/импорт, сохранение/удаление и отказ от повреждённого файла без частичных изменений. Клавиатура компьютера играет браузерным синтезатором; она не доказывает действие настроек прибора.

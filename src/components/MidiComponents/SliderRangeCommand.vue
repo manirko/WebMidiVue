@@ -32,13 +32,15 @@ export default {
     }
   },
   methods: {
-    changeEndpoint(index, command) {
-      const value = this.values[index]
+    changeEndpoint(index, command, event) {
+      const value = event ? event.target.value : this.values[index]
       if (value === '' || !Number.isFinite(Number(value))) {
         this.values[index] = command.value
+        if (event) event.target.value = command.value
         return
       }
       this.values[index] = Math.max(command.min_value, Math.min(command.max_value, Math.round(Number(value))))
+      if (event) event.target.value = this.values[index]
       command.set_value(this.values[index])
       this.$emit('input-changed', command)
     },
@@ -70,13 +72,13 @@ export default {
     </label>
       <div class="row command-range-pair" style="margin-bottom: 10px">
         <div class="col">
-          <input type="number" :aria-label="`${commandLabel} minimum`" class="form-control" @change="changeEndpoint(0, minCommandObject)"
-                 v-model="this.values[0]" :min="this.minCommandObject.min_value" :max="this.minCommandObject.max_value" />
+          <input type="number" :aria-label="`${commandLabel} minimum`" class="form-control" @change="changeEndpoint(0, minCommandObject, $event)"
+                 :value="this.values[0]" :min="this.minCommandObject.min_value" :max="this.minCommandObject.max_value" />
         </div>
         -
         <div class="col">
-          <input type="number" :aria-label="`${commandLabel} maximum`" class="form-control" @change="changeEndpoint(1, maxCommandObject)"
-                 v-model="this.values[1]" :min="this.minCommandObject.min_value" :max="this.maxCommandObject.max_value" />
+          <input type="number" :aria-label="`${commandLabel} maximum`" class="form-control" @change="changeEndpoint(1, maxCommandObject, $event)"
+                 :value="this.values[1]" :min="this.minCommandObject.min_value" :max="this.maxCommandObject.max_value" />
         </div>
       </div>
       <div class="row">

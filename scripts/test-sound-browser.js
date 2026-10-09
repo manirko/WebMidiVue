@@ -164,6 +164,88 @@ async function verifySettingsFailures(page, origin) {
   console.log(`PASS Settings boundaries/reply failures: ${records.length} cases; native device NOT RUN`)
 }
 
+async function verifySettingsActions(page, origin) {
+  const sections = await openSettingsForTest(page, origin)
+  const records = []
+  const pass = name => {
+    records.push({case: name, status: 'PASS'})
+    if (process.env.BIOTRON_TEST_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR,
+      'settings-actions.json'), JSON.stringify(records, null, 2))
+  }
+  for (let scale = 0; scale <= 12; scale++) {
+    const marker = await page.evaluate(() => window.__soundMidiSent.length)
+    await sections['Plant sensor'].getByRole('combobox', {name: '🎼 Scale', exact: true}).selectOption(String(scale))
+    await page.getByText('Saved on Biotron.', {exact: true}).waitFor()
+    assert.deepStrictEqual(await page.evaluate(start => window.__soundMidiSent.slice(start).filter(message => message[3] !== 123), marker),
+      [[240, 20, 13, 4, scale, 247]])
+  }
+  pass('all 13 scales send the chosen scale, not the preceding one')
+  const marker = await page.evaluate(() => window.__soundMidiSent.length)
+  const before = await page.evaluate(() => window.__soundSettingsSnapshot())
+  await page.getByRole('button', {name: 'Reduce extra notes', exact: true}).click()
+  await page.getByText(/^Calmer play is saved\./).waitFor()
+  assert.deepStrictEqual(await page.evaluate(start => window.__soundMidiSent.slice(start).filter(message => message[3] !== 123), marker),
+    [[240, 20, 13, 10, 0, 247], [240, 20, 13, 21, 1, 247], [240, 20, 13, 11, 2, 247]])
+  const expected = [...before]; expected[12] = 0; expected[21] = 1; expected[13] = 2
+  assert.deepStrictEqual(await page.evaluate(() => window.__soundSettingsSnapshot()), expected)
+  pass('Reduce extra notes writes only its three settings; other settings stay unchanged')
+  const exportPreset = async () => {
+    const download = page.waitForEvent('download')
+    await page.getByRole('button', {name: 'Save preset', exact: true}).click()
+    const file = await download
+    assert.equal(file.suggestedFilename(), 'biotron-preset.txt')
+    return JSON.parse(fs.readFileSync(await file.path(), 'utf8'))
+  }
+  const selectedMarker = await page.evaluate(() => window.__soundMidiSent.length)
+  await page.getByRole('combobox', {name: 'Preset', exact: true}).selectOption({label: 'Fast role'})
+  await page.getByRole('button', {name: 'Apply preset to Biotron', exact: true}).waitFor()
+  const preset = await exportPreset()
+  assert.equal(preset.commands.length, 26)
+  assert.equal(await page.evaluate(() => window.__soundMidiSent.length), selectedMarker, 'Selecting/exporting a browser preset wrote the device')
+  pass('preset selection and file export stay local before explicit Apply')
+  await page.getByRole('button', {name: 'Apply preset to Biotron', exact: true}).click()
+  await page.getByText('Saved on Biotron.', {exact: true}).waitFor()
+  const writes = await page.evaluate(start => window.__soundMidiSent.slice(start).filter(message => message[3] !== 123), selectedMarker)
+  // Whole-preset protocol ordering, independently specified from firmware commands.
+  const ids = {lightBpm:9,noteOffPercent:12,noteDistance:1,firstValue:2,smoothness:3,scale:4,minPlantVelocity:15,maxPlantVelocity:5,minLightVelocity:17,maxLightVelocity:6,randomness:10,same_note_plant:11,same_note_light:24,range_light_note:13,light_pitch_mode:19,plant_no_velocity:22,light_no_velocity:23,randomPlantVelocity:16,randomLightVelocity:18,performance:21,middle_plant_note:25,plant_midi_channel:[127,0],light_midi_channel:[127,1],swing_first_note_percent:26,button_mode_state:27}
+  const values = Object.fromEntries(preset.commands.map(item => [item.name, Number(item.value)]))
+  assert.deepStrictEqual(writes, [[240,11,20,13,126,247], ...Object.entries(ids).map(([name,id]) =>
+    [240,20,13,...[id].flat(),Array.isArray(id) ? values[name]-1 : values[name],247]),
+    [240,11,20,13,126,247], [240,20,13,0,...Array(Math.floor(values.plantBpm/127)).fill(127),values.plantBpm%127,247]])
+  pass('explicit Apply sends the full preset once and verifies its saved copy')
+  const localMarker = await page.evaluate(() => window.__soundMidiSent.length)
+  const fileInput = page.locator('.fileDropArea input[type=file]')
+  const partial = {commands: [{name:'minPlantVelocity',value:0},{name:'plantBpm',value:127}]}
+  await fileInput.setInputFiles({name:'biotron-preset.txt',mimeType:'text/plain',buffer:Buffer.from(JSON.stringify(partial))})
+  await page.getByRole('button', {name:'Apply preset to Biotron',exact:true}).waitFor()
+  const imported = await exportPreset()
+  const importedValues = Object.fromEntries(imported.commands.map(item => [item.name,item.value]))
+  assert.equal(importedValues.minPlantVelocity, 0); assert.equal(importedValues.plantBpm, 127)
+  for (const item of preset.commands.filter(item => !['minPlantVelocity','plantBpm'].includes(item.name))) assert.equal(importedValues[item.name],item.value)
+  assert.equal(await page.evaluate(() => window.__soundMidiSent.length),localMarker)
+  pass('partial legacy import preserves other fields and explicit zero without device writes')
+  await page.getByRole('button',{name:'Save in browser',exact:true}).filter({visible:true}).first().click()
+  await page.getByRole('textbox',{name:'Preset name'}).fill('Autonomous settings test')
+  await page.locator('#saveModal').getByRole('button',{name:'Save in browser',exact:true}).click()
+  await page.getByText('Saved in this browser.',{exact:true}).waitFor()
+  assert.equal(await page.getByRole('combobox',{name:'Preset',exact:true}).locator('option:checked').textContent(),'Autonomous settings test')
+  pass('named browser preset saves through its actual dialog')
+  await page.getByRole('button',{name:'Delete browser preset',exact:true}).click()
+  await page.locator('#deleteModel').getByRole('button',{name:'Delete',exact:true}).click()
+  await page.waitForFunction(() => ![...document.querySelectorAll('#patch-selector option')].some(option=>option.textContent==='Autonomous settings test'))
+  assert.equal(await page.evaluate(() => window.__soundMidiSent.length),localMarker)
+  pass('browser preset deletion changes no device settings')
+  const original = await exportPreset()
+  for (const body of ['{', '{}', '{"commands":[]}', '{"commands":[{"name":"unknown","value":1}]}', '{"commands":[{"name":"noteDistance","value":101}]}', '{"commands":[{"name":"noteDistance","value":3},{"name":"noteDistance","value":4}]}']) {
+    await fileInput.setInputFiles({name:'invalid.json',mimeType:'application/json',buffer:Buffer.from(body)})
+    await page.getByText('Could not load preset. Choose a valid Biotron preset file.',{exact:true}).waitFor({timeout:3000})
+    assert.deepStrictEqual(await exportPreset(),original,'invalid import partly changed the local preset')
+    assert.equal(await page.evaluate(() => window.__soundMidiSent.length),localMarker)
+  }
+  pass('six malformed or invalid preset files are rejected without partial changes or writes')
+  console.log(`PASS Settings actions: ${records.length} cases; native effects NOT RUN`)
+}
+
 async function verifyAllSettings(page, origin) {
   const sections = await openSettingsForTest(page, origin)
   const rows = []
@@ -766,11 +848,18 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     const page = await context.newPage()
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
+    if (process.argv.includes('--settings-actions-only')) {
+      if (process.env.BIOTRON_TEST_EVIDENCE_DIR) fs.mkdirSync(process.env.BIOTRON_TEST_EVIDENCE_DIR, {recursive: true})
+      await verifySettingsActions(page, origin)
+      assert.deepStrictEqual(errors, [])
+      return
+    }
     if (process.argv.includes('--settings-only')) {
       const evidence = process.env.BIOTRON_TEST_EVIDENCE_DIR
       if (evidence) fs.mkdirSync(evidence, {recursive: true})
       await verifySettingsFailures(page, origin)
       await verifyAllSettings(page, origin)
+      await verifySettingsActions(page, origin)
       assert.deepStrictEqual(errors, [])
       return
     }
@@ -1237,6 +1326,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await verifyGardenStates(page, origin)
     await verifySettingsFailures(page, origin)
     await verifyAllSettings(page, origin)
+    await verifySettingsActions(page, origin)
     assert.deepStrictEqual(errors, [])
     if (realtimeSoak) writeSoakEvidence('PASS', 'suite-complete', realtimeSoak)
     console.log(`Sound browser verified: first-play Biotron reveal, Play → Settings → Speed live-save continuity, permission/audio-only/no-audio fallbacks, 7 variants, ${devtools ? '6x-throttled' : 'unthrottled (CDP NOT SUPPORTED)'} Low CPU start ${constrainedStartMilliseconds} ms and burst ${constrainedBurstMilliseconds.toFixed(1)} ms, exclusive two-tab sound handoff, 100/100 lifecycle cycles in ${cycleMilliseconds} ms, 1000 burst ${burstMilliseconds.toFixed(1)} ms, 20000 soak ${soakMilliseconds.toFixed(1)} ms, optional real-time soak ${realtimeSoak ? `${realtimeSoak.elapsedMilliseconds} ms` : 'not requested'}, heap delta ${heapGrowth}, disconnect/background recovery and retryable release.`)
