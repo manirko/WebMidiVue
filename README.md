@@ -97,6 +97,13 @@ frame/long-task observations and load0/4/10. Audio/cleanup oracles are gates;
 dropped/truncated/drifting capture exits inconclusive. These measurements
 do not certify physical output or weak computers.
 
+`test:browser-harness` checks the shared local test server before browser lanes:
+HTTP bytes, browser `arrayBuffer` and CDP response bodies must agree for eleven
+fixtures, including non-ASCII UTF8 CSS and decoded SVG. Text responses declare
+UTF8, SVG/WebP use their image MIME, and binary bytes remain unchanged. Fixtures
+use a unique OS temporary directory and never request MIDI or execute audio.
+An incomplete older trace remains incomplete; this test does not fill its gaps.
+
 To test a previously built artifact without rebuilding it, set
 `BIOTRON_QA_DIST_ROOT=/absolute/path/to/runtime` for `test:sound:browser`,
 `test:quality:browser`, `test:auditions:browser` and `test:ui-performance`.

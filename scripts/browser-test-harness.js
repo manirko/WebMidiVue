@@ -3,8 +3,10 @@ const http = require('http')
 const path = require('path')
 
 const mime = {
-  '.css': 'text/css', '.html': 'text/html', '.ico': 'image/x-icon', '.js': 'text/javascript',
-  '.json': 'application/json', '.png': 'image/png', '.ttf': 'font/ttf', '.woff2': 'font/woff2'
+  '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.ico': 'image/x-icon',
+  '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp',
+  '.ttf': 'font/ttf', '.woff2': 'font/woff2'
 }
 
 function chromePath() {
@@ -21,7 +23,7 @@ function createStaticServer(root, options = {}) {
     const pathname = new URL(request.url, 'http://127.0.0.1').pathname
     if (pathname === '/api/telemetry' && request.method === 'POST') {
       request.resume()
-      response.writeHead(202, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'})
+      response.writeHead(202, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store'})
       response.end('{"accepted":true}')
       return
     }

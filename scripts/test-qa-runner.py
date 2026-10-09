@@ -78,7 +78,7 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
   assert by_name['test:midi-lifecycle']['result'] == 'TIMEOUT'
   assert by_name['test:presets']['result'] == 'PASS'
   assert by_name['test:sound:levels']['result'] == 'PASS'
-  for name in ['test:audio:realtime','test:mobile:owner','test:pwa:browser','test:firmware:browser','test:firmware:physical-cycle','test:quality:browser','test:windows:daw']:
+  for name in ['test:browser-harness','test:audio:realtime','test:mobile:owner','test:pwa:browser','test:firmware:browser','test:firmware:physical-cycle','test:quality:browser','test:windows:daw']:
    assert by_name[name]['result'] == 'NOT RUN', name
   for row in rows:
    if 'evidence' in row:
@@ -107,6 +107,7 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  assert next(row for row in rows if row['test']=='test:audio:load')['result']=='PASS'
  assert next(row for row in rows if row['test']=='test:ui-performance')['result']=='PASS'
  assert next(row for row in rows if row['test']=='test:lint')['result']=='PASS'
+ assert next(row for row in rows if row['test']=='test:browser-harness')['result']=='PASS'
  for arguments in [['--soak-seconds','600'],['--browser','--soak-seconds','-1'],['--browser','--soak-seconds','28801'],['--timeout','nan'],['--timeout','inf']]:
   invalid = subprocess.run([sys.executable,str(runner),'--output',str(output),*arguments],env=environment,capture_output=True,text=True,timeout=5)
   assert invalid.returncode==2 and 'error:' in invalid.stderr, arguments
