@@ -1382,13 +1382,13 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     assert((await helpedFeedback.getAttribute('href')).includes('Reached%3A%20Sound%20from%20the%20plant'))
     await page.evaluate(() => window.__emitSoundMidi([0x81, 64, 0]))
     const calibrationCount = await page.evaluate(() => window.__soundMidiSent
-      .filter(message => message[0] === 0xf0 && message[3] === 125).length)
+      .filter(message => message[0] === 0xf0 && message[3] === 125 && message.length === 6).length)
     await page.evaluate(() => window.__soundContext.suspend())
     await page.locator('.sound-lab[data-audio-state="suspended"]').waitFor()
     await page.getByRole('button', {name: 'Resume sound'}).click()
     await page.locator('.sound-lab[data-audio-state="running"][data-reveal-stage="revealed"]').waitFor()
     assert.strictEqual(await page.evaluate(() => window.__soundMidiSent
-      .filter(message => message[0] === 0xf0 && message[3] === 125).length), calibrationCount,
+      .filter(message => message[0] === 0xf0 && message[3] === 125 && message.length === 6).length), calibrationCount,
     'manual Resume unexpectedly restarted calibration')
     assert.strictEqual(await page.evaluate(() => window.__soundInput.connection), 'open')
     const resumedSignalRms = await page.evaluate(async () => {
