@@ -130,6 +130,29 @@ assert.equal(pair.sent.length, rangeWrites, 'blank range endpoint must not write
   assert.equal(importing.commands_data.minPlantVelocity.value, 0)
   assert.equal(Number(importing.commands_data.noteDistance.value), 42, 'legacy numeric strings must remain readable')
   assert.equal(presetChanges, 2)
+  const storedData = new Map()
+  context.localStorage = {getItem: key => storedData.get(key), setItem: (key, value) => storedData.set(key, value)}
+  importing.id = 'stored-preset-fixture'
+  storedData.set(importing.id, '9')
+  let storedPreset
+  importing.db = {getPatch: async () => storedPreset}
+  for (const data of [{noteDistance: 21, unknown: 1}, null, [], {}, {noteDistance: 101}, {noteDistance: ''}]) {
+    storedPreset = {id: 9, editable: true, saved: true, data}
+    await assert.doesNotReject(() => importing.loadData(), 'damaged stored preset must show an error without interrupting Settings')
+    assert.match(importing.settingsMessage, /Choose another preset/)
+    assert.equal(importing.commands_data.noteDistance.value, 42, 'damaged stored preset partly changed the form')
+    assert.equal(presetChanges, 2, 'reading a damaged preset wrote browser storage')
+    assert.equal(storedData.get(importing.id), '9', 'damaged preset was silently replaced')
+  }
+  storedPreset = {id: 9, editable: true, data: {noteDistance: '7', minPlantVelocity: 0}}
+  assert.equal(await importing.loadData(), true)
+  assert.equal(importing.commands_data.noteDistance.value, 7)
+  assert.equal(importing.commands_data.minPlantVelocity.value, 0)
+  const uncommon = {commandObject: {value: 7}, tableValues: {1:'1',2:'1/2',4:'1/4',8:'1/8'}, tableValuesReversed: true, rawValue: -1}
+  slider.created.call(uncommon)
+  assert.equal(uncommon.tableTranslate[uncommon.rawValue], '7', 'stored table value was displayed as another setting')
+  assert.equal(uncommon.maxValue, uncommon.tableTranslate.length - 1)
+  assert.equal(uncommon.tableTranslate.join(','), '8,7,4,2,1', 'custom value must retain the slider order')
   const legacy = page()
   legacy.firmwareVersion = '1.8.2'
   legacy.legacyFirmware = component.computed.legacyFirmware.call(legacy)

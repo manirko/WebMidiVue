@@ -222,8 +222,8 @@ def run_autotest(root, run, browser, executable, node):
      rows=json.loads((run/'settings/settings-matrix.json').read_text(encoding='utf-8'))['rows']
      boundaries=json.loads((run/'settings/settings-boundaries.json').read_text(encoding='utf-8'))
      actions=json.loads((run/'settings/settings-actions.json').read_text(encoding='utf-8'))
-     if len({x['field'] for x in rows if x['status']=='PASS'})!=26 or any(x['status'] not in ['PASS','UNCHANGED_BASELINE'] for x in rows) or len(boundaries)!=17 or any(x['status']!='PASS' for x in boundaries) or len(actions)!=8 or any(x['status']!='PASS' for x in actions):
-      fault='Settings suite exited without 26 changed commands, 17 boundary/failure cases and 8 preset/action cases.'
+     if len({x['field'] for x in rows if x['status']=='PASS'})!=26 or any(x['status'] not in ['PASS','UNCHANGED_BASELINE'] for x in rows) or len(boundaries)!=17 or any(x['status']!='PASS' for x in boundaries) or len(actions)!=10 or any(x['status']!='PASS' for x in actions):
+      fault='Settings suite exited without 26 changed commands, 17 boundary/failure cases and 10 preset/action cases.'
    except (OSError,ValueError,KeyError,IndexError,TypeError):fault='Suite evidence is missing or incomplete.'
   if fault:break
  if fault:write_json(run/'first-autotest-fault.json',{'at':utc(),'message':fault,'exit_code':code,'cleanup':cleanup,'status':'INTERRUPTED' if interrupted else 'FAIL_OR_INCONCLUSIVE; not physical acceptance'})

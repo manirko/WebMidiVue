@@ -672,7 +672,6 @@ export default  {
         this.commands_data.plantBpm.sendToMidi(output, [11])
       }
     },
-
     saveData() {
       const state = Object.fromEntries(Object.values(this.commands_data).map(command => [command.name, command.value]))
       return withPresetFeedback(this.id, "autosave", () =>
@@ -680,15 +679,22 @@ export default  {
     },
 
     async loadData() {
-      let preset = await this.db.getPatch(localStorage.getItem(this.id))
-      if (!preset) {
-        localStorage.setItem(this.id, 1)
-        preset = await this.db.getPatch(localStorage.getItem(this.id))
+      let commands
+      try {
+        let preset = await this.db.getPatch(localStorage.getItem(this.id))
+        if (!preset) {
+          localStorage.setItem(this.id, 1)
+          preset = await this.db.getPatch(1)
+        }
+        commands = this.validatePresetCommands(Object.entries(preset.data).map(([name, value]) => ({name, value})))
+      } catch {
+        this.settingsState = "error"
+        this.settingsMessage = "Could not load saved preset. Choose another preset."
+        return false
       }
-
-      for (const [key, value] of Object.entries(preset.data)) this.commands_data[key].set_value(value)
-
+      for (const item of commands) this.commands_data[item.name].set_value(Number(item.value))
       this.forceRerender++;
+      return true
     },
     createPreset() {
       const value = {commands: Object.values(this.commands_data).map(command => command.toShortDict())}
@@ -698,14 +704,7 @@ export default  {
       if (this.betaBuild && this.device && !this.settingsSnapshotKnown) return
       let commands
       try {
-        commands = JSON.parse(e).commands
-        if (!Array.isArray(commands) || !commands.length || new Set(commands.map(item => item?.name)).size !== commands.length) throw new Error("Invalid commands")
-        for (const item of commands) {
-          const command = this.commands_data[item?.name], value = Number(item?.value)
-          const validValue = ["number", "boolean", "string"].includes(typeof item?.value) && String(item.value).trim() !== ""
-              && Number.isInteger(value) && value >= command?.min_value && value <= command?.max_value
-          if (!Object.hasOwn(this.commands_data, item?.name) || !validValue) throw new Error("Invalid setting")
-        }
+        commands = this.validatePresetCommands(JSON.parse(e).commands)
       } catch {
         this.settingsState = "error"
         this.settingsMessage = "Could not load preset. Choose a valid Biotron preset file."
@@ -716,6 +715,16 @@ export default  {
       await this.saveData();
       this.forceRerender++;
       this.markPresetPending()
+    },
+    validatePresetCommands(commands) {
+      if (!Array.isArray(commands) || !commands.length || new Set(commands.map(item => item?.name)).size !== commands.length) throw new Error("Invalid commands")
+      for (const item of commands) {
+        const command = this.commands_data[item?.name], value = Number(item?.value)
+        const validValue = ["number", "boolean", "string"].includes(typeof item?.value) && String(item.value).trim() !== ""
+            && Number.isInteger(value) && value >= command?.min_value && value <= command?.max_value
+        if (!Object.hasOwn(this.commands_data, item?.name) || !validValue) throw new Error("Invalid setting")
+      }
+      return commands
     },
     async patchChanged() {
       let patch_id = parseInt(localStorage.getItem(this.id));
@@ -797,16 +806,12 @@ export default  {
     if (!localStorage.getItem(this.id)) {
       localStorage.setItem(this.id, "1")
     }
-
     this.db = new BiotronDb();
     await this.db.ready;
-
     this.patches = await this.db.getPatch();
-
     await this.loadData()
     this.page_is_inited = true
     if (this.betaBuild && this.device) await this.loadPersistedSettings(this.device)
-
   },
   mounted() {
     this.listenerScope = createListenerScope()
@@ -814,9 +819,7 @@ export default  {
       if (event.code === 'Enter' && !this.is_loading) this.change_data_loader();
     })
     this.listenerScope.on(document, 'PatchChanged', async () => {
-      await this.loadData();
-      this.forceRerender++;
-      this.markPresetPending()
+      if (await this.loadData()) this.markPresetPending()
     })
     this.listenerScope.on(document, "PatchSave", async (ev) => {
       await withPresetFeedback(this.id, "save", async () => {
@@ -830,9 +833,7 @@ export default  {
         await this.db.deletePatch(parseInt(localStorage.getItem(this.id)))
         localStorage.setItem(this.id, "1")
         this.patches = await this.db.getPatch()
-        await this.loadData();
-        this.forceRerender++;
-        this.markPresetPending()
+        if (await this.loadData()) this.markPresetPending()
       })
     })
   },

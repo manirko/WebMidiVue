@@ -57,23 +57,13 @@ export default {
   },
   created() {
     if (this.tableValues !== undefined) {
-
       this.minValue = 0;
-      let temp = toRaw(this.tableValues);
-      this.maxValue = Object.keys(temp).length - 1;
-      this.tableTranslate = Object.keys(temp);
-      if (this.tableValuesReversed) {
-        this.tableTranslate = this.tableTranslate.reverse();
-      }
-      for (let i = 0; i < this.tableTranslate.length; i++) {
-        if (parseInt(this.tableTranslate[i]) === this.commandObject.value) {
-          this.rawValue = i;
-        }
-      }
-      if (this.rawValue === -1) {
-        this.rawValue = 0;
-      }
-
+      this.tableTranslate = Object.keys(toRaw(this.tableValues));
+      if (!this.tableTranslate.includes(String(this.commandObject.value))) this.tableTranslate.push(String(this.commandObject.value));
+      this.tableTranslate.sort((a, b) => Number(a) - Number(b));
+      if (this.tableValuesReversed) this.tableTranslate.reverse();
+      this.maxValue = this.tableTranslate.length - 1;
+      this.rawValue = this.tableTranslate.indexOf(String(this.commandObject.value));
     }
     else {
       this.rawValue = this.commandObject.value;
@@ -94,7 +84,7 @@ export default {
     <div v-if="this.tableValues">
       <select v-model="this.rawValue" :aria-label="`${commandLabel} value`" class="form-control" @change="this.changed">
         <option v-for="(value, key) in this.tableTranslate" v-bind:key="key" :value="key">
-          {{this.tableValues[parseInt(value)]}}
+          {{this.tableValues[parseInt(value)] ?? `Current value: ${value}`}}
         </option>
       </select>
     </div>

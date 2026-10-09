@@ -185,6 +185,9 @@ const server = http.createServer((request, response) => {
       check((await db.getPatch(user)).data.minPlantVelocity === 0, 'user preset zero was changed')
       await db.updatePatch(fast.id, {...oldData, plantBpm: oldData.plantBpm + 1})
       check((await db.getPatch(fast.id)).data.minPlantVelocity === 0, 'edited locked preset was changed')
+      await db.updatePatch(fast.id, null)
+      check((await db.getPatch()).find(patch => patch.id === fast.id).data === null, 'damaged locked preset broke listing or was silently replaced')
+      check((await Db.prototype.getPatch.call(db, fast.id)).data === null, 'reading a damaged preset changed storage')
     })
     console.log('Preset IndexedDB regression passed:', JSON.stringify(cases))
   } finally {

@@ -245,6 +245,60 @@ async function verifySettingsActions(page, origin) {
     assert.equal(await page.evaluate(() => window.__soundMidiSent.length),localMarker)
   }
   pass('six malformed or invalid preset files are rejected without partial changes or writes')
+  const storedFixture = async data => page.evaluate(async data => {
+    if (!window.__storedPresetReads) {
+      window.__storedPresetReads = []
+      const get = IDBObjectStore.prototype.get
+      IDBObjectStore.prototype.get = function (key) {
+        const request = get.call(this,key)
+        if (this.name === 'Biotron_Patches') request.addEventListener('success', () => window.__storedPresetReads.push(key))
+        return request
+      }
+    }
+    const db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('BiotronDB', 10)
+      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error)
+    })
+    const id = await new Promise((resolve, reject) => {
+      const transaction = db.transaction('Biotron_Patches', 'readwrite')
+      const request = transaction.objectStore('Biotron_Patches').add({name:'Autonomous stored fixture',saved:true,editable:true,data})
+      transaction.oncomplete = () => resolve(request.result); transaction.onabort = () => reject(transaction.error)
+    })
+    db.close()
+    localStorage.setItem('BiotronWebMidiId_2', String(id))
+    document.dispatchEvent(new CustomEvent('PatchChanged'))
+    return id
+  }, data)
+  const beforeStored = Object.fromEntries(original.commands.map(item => [item.name,item.value]))
+  const goodId = await storedFixture({noteOffPercent:'7',minPlantVelocity:0})
+  await page.waitForFunction(id => window.__storedPresetReads.includes(id),goodId)
+  await page.getByText('Preset loaded in browser. Apply preset to Biotron to hear and save it.',{exact:true}).waitFor()
+  const hold = sections['Plant sensor'].getByRole('combobox',{name:'🎵 Note hold value',exact:true})
+  assert.equal(await hold.locator('option:checked').textContent(),'Current value: 7','stored note hold7 is shown as a different value')
+  const stored = await exportPreset()
+  assert.equal(stored.commands.find(item=>item.name==='noteOffPercent').value,7)
+  assert.equal(stored.commands.find(item=>item.name==='minPlantVelocity').value,0)
+  for (const item of original.commands.filter(item => !['noteOffPercent','minPlantVelocity'].includes(item.name))) assert.deepStrictEqual(stored.commands.find(other=>other.name===item.name),item)
+  assert.equal(await page.evaluate(()=>window.__soundMidiSent.length),localMarker)
+  pass('legacy partial stored preset preserves other fields; numeric string and zero display without device writes')
+  for (const data of [{...beforeStored,unknown:1},null,[],{},{...beforeStored,noteDistance:101},{...beforeStored,noteDistance:''}]) {
+    const id = await storedFixture(data)
+    await page.waitForFunction(id => window.__storedPresetReads.includes(id),id)
+    await page.getByText('Could not load saved preset. Choose another preset.',{exact:true}).waitFor({timeout:3000})
+    assert.deepStrictEqual(await exportPreset(),stored,'damaged saved preset partly changed the form')
+    const raw = await page.evaluate(async id => {
+      const db = await new Promise(resolve => { const request=indexedDB.open('BiotronDB',10);request.onsuccess=()=>resolve(request.result) })
+      const record = await new Promise(resolve => { const request=db.transaction('Biotron_Patches').objectStore('Biotron_Patches').get(id);request.onsuccess=()=>resolve(request.result) })
+      db.close(); return record.data
+    },id)
+    assert.deepStrictEqual(raw,data,'reading a damaged saved preset modified storage')
+    assert.equal(await page.evaluate(()=>window.__soundMidiSent.length),localMarker)
+  }
+  await page.getByRole('combobox',{name:'Preset',exact:true}).selectOption({label:'Fast role'})
+  await page.getByText('Preset loaded in browser. Apply preset to Biotron to hear and save it.',{exact:true}).waitFor()
+  assert.equal((await exportPreset()).commands.find(item=>item.name==='plantBpm').value,404,'another preset did not recover after rejected data')
+  assert.equal(await page.evaluate(()=>window.__soundMidiSent.length),localMarker)
+  pass('six damaged saved presets preserve form/storage/MIDI and another preset recovers')
   console.log(`PASS Settings actions: ${records.length} cases; native effects NOT RUN`)
 }
 

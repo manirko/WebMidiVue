@@ -184,7 +184,7 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
     if mode=='settings_fail':return subprocess.CompletedProcess(command,1)
     tester.write_json(observed/'settings-matrix.json',{'rows':[{'field':str(i),'status':'PASS'} for i in range(25 if mode=='settings_early' else 26)]})
     tester.write_json(observed/'settings-boundaries.json',[{'status':'PASS'} for i in range(17)])
-    tester.write_json(observed/'settings-actions.json',[{'status':'PASS'} for i in range(8)])
+    tester.write_json(observed/'settings-actions.json',[{'status':'PASS'} for i in range(8 if mode=='settings_old_actions' else 10)])
     return subprocess.CompletedProcess(command,0)
    observed=run/'browser';observed.mkdir()
    tester.write_json(observed/'progress.json',[{'stage':'PASS'}])
@@ -215,7 +215,7 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
    self.assertEqual(summary['physical_windows_result'],'NOT_RUN')
 
  def test_autonomous_failure_timeout_or_early_exit_cannot_pass(self):
-  for mode in ['fail','timeout','early','settings_fail','settings_timeout','settings_early']:
+  for mode in ['fail','timeout','early','settings_fail','settings_timeout','settings_early','settings_old_actions']:
    run=tester.new_run(self.root,'auto-'+mode)
    with mock.patch.object(tester.subprocess,'run',side_effect=self.autonomous_fixture(run,mode)):
     with self.subTest(mode=mode),self.assertRaises(ValueError):tester.run_autotest(self.root,run,'chrome','fixture','node')

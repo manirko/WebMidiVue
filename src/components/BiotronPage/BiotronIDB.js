@@ -174,7 +174,7 @@ export class BiotronDb extends Db {
         const refresh = patch => {
             if (!patch || patch.editable) return patch
             const builtin = builtinPresets.find(preset => preset.name === patch.name)
-            if (!builtin || Object.keys(patch.data).length !== Object.keys(builtin.data).length ||
+            if (!builtin || Object.keys(patch.data || {}).length !== Object.keys(builtin.data).length ||
                 !Object.entries(builtin.data).every(([key, value]) => patch.data[key] === value)) return patch
             return {...patch, data: audibleHumanize(patch.data)}
         }
