@@ -124,8 +124,16 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  assert names.count('test:firmware:browser')==1 and names.count('test:beta-build')==1
  assert names.index('test:firmware:browser@webkit') < names.index('test:beta-build') < names.index('test:sound:browser@firefox')
  assert len([row for row in rows if '@' in row['test']])==16
+ # An affected-only run retains the build order and never counts omitted lanes as PASS.
+ selected=subprocess.run([sys.executable,str(runner),'--output',str(output),'--browser','--browsers','firefox,webkit','--only','test:sound:browser@webkit,test:firmware:browser@webkit'],env=environment,capture_output=True,text=True,timeout=15)
+ assert selected.returncode==0,selected.stdout+selected.stderr
+ latest=max(output.iterdir(),key=lambda p:p.stat().st_mtime_ns)
+ rows=[json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
+ assert [row['test'] for row in rows if row['result']=='PASS']==['test:firmware:browser','test:firmware:browser@webkit','test:beta-build','test:sound:browser@webkit']
+ assert all(row['result']=='NOT RUN' for row in rows if row['test'] not in json.loads((latest/'run.json').read_text())['selected'])
+ assert not json.loads((latest/'summary.json').read_text())['coverage_complete']
  npm.write_text('#!/bin/sh\necho fixture-pass\n')
- for arguments in [['--soak-seconds','600'],['--browser','--soak-seconds','-1'],['--browser','--soak-seconds','28801'],['--timeout','nan'],['--timeout','inf'],['--browsers','firefox'],['--browser','--browsers','firefox,firefox'],['--browser','--browsers','../unowned'],['--browser','--browsers','safari']]:
+ for arguments in [['--only',''],['--only',','],['--only','test:unknown'],['--only','test:sound,test:sound'],['--soak-seconds','600'],['--browser','--soak-seconds','-1'],['--browser','--soak-seconds','28801'],['--timeout','nan'],['--timeout','inf'],['--browsers','firefox'],['--browser','--browsers','firefox,firefox'],['--browser','--browsers','../unowned'],['--browser','--browsers','safari']]:
   invalid = subprocess.run([sys.executable,str(runner),'--output',str(output),*arguments],env=environment,capture_output=True,text=True,timeout=5)
   assert invalid.returncode==2 and 'error:' in invalid.stderr, arguments
  npm.write_text('#!/bin/sh\ncase "$2" in test:ui-performance) echo fixture-inconclusive; exit 2;; *) echo fixture-pass;; esac\n')

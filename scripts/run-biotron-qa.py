@@ -18,6 +18,7 @@ p.add_argument('--browser', action='store_true', help='Run isolated browser lane
 p.add_argument('--browsers', default='', help='Additional sequential full Biotron/software browser lanes: comma-separated BIOTRON_QA_BROWSER names; requires --browser. Safari is separate from Playwright WebKit.')
 p.add_argument('--soak-seconds', type=int, default=0, help='Optional real-time soak, 1–28800 seconds; requires --browser')
 p.add_argument('--require-complete', action='store_true', help='Exit nonzero when required browser coverage is absent')
+p.add_argument('--only', default=None, help='Comma-separated planned lane names for an affected-only recheck; other lanes stay NOT RUN and required builds are retained')
 a = p.parse_args()
 if not math.isfinite(a.timeout) or a.timeout <= 0: p.error('--timeout must be finite and positive')
 if not 0 <= a.soak_seconds <= 28800: p.error('--soak-seconds must be from 0 to 28800')
@@ -39,6 +40,16 @@ for script in BROWSER_TESTS:
    TESTS.append(name)
 if a.soak_seconds: TESTS.append('test:sound:soak')
 TESTS.extend(EXTERNAL_CHECKS)
+selected = [name.strip() for name in (a.only or '').split(',') if name.strip()]
+if a.only is not None and (not selected or len(selected) != len(set(selected)) or any(name not in TESTS for name in selected)):
+ p.error('--only must contain unique planned lane names')
+required_builds = set()
+for name in selected:
+ script = matrix_lanes.get(name, (name,))[0]
+ if (script in portable_lanes and script != 'test:firmware:browser') or script in ('test:sound:soak', 'test:audio:realtime', 'test:audio:load', 'test:ui-performance'):
+  required_builds.add('test:beta-build')
+ if script == 'test:firmware:browser': required_builds.add('test:firmware:browser')
+selected = set(selected) | required_builds if selected else set(TESTS)
 run_id = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+uuid.uuid4().hex[:8]
 a.output = a.output/run_id
 a.output.mkdir(parents=True, exist_ok=False)
@@ -50,7 +61,7 @@ for directory in ('src', 'public', 'beta-assets', 'scripts'):
 inputs.extend(path for pattern in ('package*.json', '*config*', '.env*') for path in ROOT.glob(pattern) if path.is_file())
 input_hashes = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(set(inputs))}
 (a.output/'inputs.json').write_text(json.dumps(input_hashes,indent=2))
-(a.output/'run.json').write_text(json.dumps(dict(run_id=run_id,head=head,working_tree=status,timeout=a.timeout,soak_seconds=a.soak_seconds),indent=2))
+(a.output/'run.json').write_text(json.dumps(dict(run_id=run_id,head=head,working_tree=status,timeout=a.timeout,soak_seconds=a.soak_seconds,selected=[name for name in TESTS if name in selected],required_builds=sorted(required_builds)),indent=2))
 print('Evidence:', a.output, flush=True)
 def process_snapshot():
  """Only PID/parent/start/status metadata; never commands or user profile data."""
@@ -119,8 +130,8 @@ with (a.output/'tests.jsonl').open('x') as journal:
    counts['NOT RUN'] = counts.get('NOT RUN', 0)+1
    continue
   at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-  if name in EXTERNAL_CHECKS or (name in BROWSER_TESTS and not a.browser) or script not in package_scripts:
-   record = dict(at=at,run_id=run_id,head=head,test=name,result='NOT RUN',reason=EXTERNAL_CHECKS.get(name, 'Use --browser for isolated browser evidence.' if name in BROWSER_TESTS else 'No executable npm script exists for this proposed lane; never count as PASS.'))
+  if name not in selected or name in EXTERNAL_CHECKS or (name in BROWSER_TESTS and not a.browser) or script not in package_scripts:
+   record = dict(at=at,run_id=run_id,head=head,test=name,result='NOT RUN',reason=EXTERNAL_CHECKS.get(name, 'Outside --only recheck; no result for this lane.' if name not in selected else 'Use --browser for isolated browser evidence.' if name in BROWSER_TESTS else 'No executable npm script exists for this proposed lane; never count as PASS.'))
    journal.write(json.dumps(record)+'\n'); journal.flush()
    print(name, record['result'], flush=True)
    counts['NOT RUN'] = counts.get('NOT RUN', 0)+1
