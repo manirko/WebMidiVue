@@ -83,7 +83,7 @@
       </details>
       <label v-if="revealProfile.id === 'biotron'" class="sound-lab__quality">
         <input type="checkbox" aria-label="Limit to 4 notes at once" aria-describedby="sound-quality-help" :checked="lowCpu" @change="changeQuality" :disabled="starting || releaseBlocked"> Limit to 4 notes at once
-        <small id="sound-quality-help">When on: up to 4 notes. Simulated room reflections (reverb) are off. Echo settings stay the same. When off: up to 8 notes. Switching stops sound.</small>
+        <small id="sound-quality-help">Use if sound breaks up: less work for your device, no simulated room reflections. Switching stops sound.</small>
       </label>
       <section v-if="revealProfile.id !== 'biotron' && revealStage === 'revealed'" class="sound-lab__after-reveal" :aria-label="`Continue with ${revealProfile.productName}`">
         <button type="button" class="btn btn-primary" @click="revealExpanded = !revealExpanded">
@@ -126,7 +126,7 @@
         >
         Limit to 4 notes at once
       </label>
-      <small id="sound-quality-help">When on: up to 4 notes. Simulated room reflections (reverb) are off. Echo settings stay the same. When off: up to 8 notes. Switching stops sound.</small>
+      <small id="sound-quality-help">Use if sound breaks up: less work for your device, no simulated room reflections. Switching stops sound.</small>
       <label class="sound-lab__volume" for="sound-lab-volume">
         <span>Volume</span>
         <input
