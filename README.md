@@ -10,7 +10,8 @@ Pipeline: MIDI or physical key codes → shared SoundLab → Elementary worklet 
 settings use the separate MIDI request/readback flow; Vue Router owns navigation cleanup.
 Live Biotron play reads the existing sensor status (125/5) every two seconds,
 only in the foreground plant session. Firmware Sleep shows **Waiting for plant signal**;
-it does not prove a detached contact. Missing or invalid replies leave the state
+it does not prove a detached contact. Stabilization reuses the initial calibration
+animation and copy. Missing or invalid replies leave the state
 unknown and stop polling. Stop waits for pending port cleanup. This watch sends
 no settings or calibration writes; the existing Start listening calibration is unchanged.
 All play messages belong beside the sphere; the sphere contains no text.

@@ -235,18 +235,19 @@ export default {
   },
   computed: {
     revealMode() { return this.mode === 'reveal' },
-    plantSignalMissing() {
-      return this.revealMode && this.revealProfile.id === 'biotron' && this.controlsVisible && !this.revealIssue && !this.releaseBlocked &&
-        this.plantSignalState === 0 && !this.keyboardOn && !this.examplePlaying && this.audioState === 'running' && ['ready', 'revealed'].includes(this.revealStage)
+    plantSignalStage() {
+      const live = this.revealMode && this.revealProfile.id === 'biotron' && this.controlsVisible && !this.revealIssue && !this.releaseBlocked &&
+        !this.keyboardOn && !this.examplePlaying && this.audioState === 'running' && ['ready', 'revealed'].includes(this.revealStage)
+      return live ? {0: 'attention', 1: 'calibrating'}[this.plantSignalState] || null : null
     },
     revealHeading() {
       if (this.starting && this.visualStage === 'connecting') return 'Starting…'
-      if (this.plantSignalMissing || this.revealStage !== 'revealed') return this.revealCopy.heading
+      if (this.plantSignalStage || this.revealStage !== 'revealed') return this.revealCopy.heading
       return this.midiActive ? 'Notes arriving' : 'Ready for the next note'
     },
     visualStage() {
       if (this.releaseBlocked || (this.revealIssue && !this.keyboardOn && !this.examplePlaying) || this.audioState === 'error') return 'attention'
-      if (this.plantSignalMissing) return 'attention'
+      if (this.plantSignalStage) return this.plantSignalStage
       if (this.starting) return this.revealStage === 'intro' || this.audioStarting || this.midiOpening || this.permissionPending ? 'connecting' : 'paused'
       if (this.engine && this.audioState !== 'running') return 'paused'
       if (this.revealStage === 'settling') return 'connecting'
@@ -262,8 +263,8 @@ export default {
     exampleSelection() { return this.audition || {...resolveAudition('timbres', 'tone-reference'), variant: {label: this.selectedSound.name, level: 1}} },
     revealProfile() { return getRevealProfile(this.profileId) },
     revealCopy() {
-      if (this.plantSignalMissing) return {heading: 'Waiting for plant signal', instruction: 'Check both contacts on the plant and both contact cables on Biotron.'}
-      const stage = ['intro', 'settling', 'calibrating', 'ready'].includes(this.revealStage)
+      if (this.plantSignalStage === 'attention') return {heading: 'Waiting for plant signal', instruction: 'Check both contacts on the plant and both contact cables on Biotron.'}
+      const stage = this.plantSignalStage === 'calibrating' ? 'calibrating' : ['intro', 'settling', 'calibrating', 'ready'].includes(this.revealStage)
         ? this.revealStage : 'revealed'
       return {heading: this.revealProfile[`${stage}Heading`],
         instruction: this.revealProfile[stage === 'revealed' ? 'explanation' : `${stage}Instruction`]}

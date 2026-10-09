@@ -89,13 +89,14 @@ const report = {
 // output cleanup in the existing session. No firmware, engine, dependency or source file.
 // Sleep is a waiting hint, not a physical disconnected-contact verdict.
 // Caption duplication removed: visual text/state/hint data deleted; one sidebar heading.
-// Net final budget +73 lines from10688, with no additional source file or dependency.
+// Net +74 lines from10688: status1 now reuses the existing calibration animation.
+// No additional source file or dependency.
 const limits = {
   eagerDeviceRouteImports: 0,
   sleepCalls: 0,
   unmanagedListenerFiles: 0,
   sourceFiles: 70,
-  sourceLines: 10761,
+  sourceLines: 10762,
   largestProductFileLines: 850
 }
 const violations = [

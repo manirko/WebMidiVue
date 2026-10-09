@@ -141,3 +141,18 @@ for(const [changes,expected] of cases) {
   assert.equal(delivered[0].state,expected,'scene received a different presentation state');
 }
 console.log('PASS:12 existing session-state combinations derive presentation only; scene receives the same state');
+
+const plantMethod=labSource.match(/plantSignalStage\(\) \{([\s\S]*?)\n    \},/);
+assert(plantMethod,'Sensor status is not wired to the visual');
+const plantStage=vm.runInNewContext('(function(){'+plantMethod[1]+'})');
+const livePlant={revealMode:true,revealProfile:{id:'biotron'},controlsVisible:true,revealStage:'revealed',audioState:'running'};
+for(const [status,expected] of [[0,'attention'],[1,'calibrating'],[2,null],[3,null],[null,null]]) {
+  const session={...livePlant,plantSignalState:status};
+  const stage=plantStage.call(session);assert.equal(stage,expected);
+  assert.equal(visualStage.call({...session,plantSignalStage:stage}),expected || 'ready');
+}
+for(const changes of [{controlsVisible:false},{revealMode:false},{revealProfile:{id:'other'}},{keyboardOn:true},
+  {examplePlaying:true},{audioState:'suspended'},{revealIssue:{}},{releaseBlocked:true},{revealStage:'intro'}]) {
+  assert.equal(plantStage.call({...livePlant,plantSignalState:1,...changes}),null,'Inactive sensor status animated a different session');
+}
+console.log('PASS: sensor Sleep/stabilization/active/unknown visuals and nine session guards; no session mutation');
