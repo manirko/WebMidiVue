@@ -97,6 +97,14 @@ frame/long-task observations and load0/4/10. Audio/cleanup oracles are gates;
 dropped/truncated/drifting capture exits inconclusive. These measurements
 do not certify physical output or weak computers.
 
+To test a previously built artifact without rebuilding it, set
+`BIOTRON_QA_DIST_ROOT=/absolute/path/to/runtime` for `test:sound:browser`,
+`test:quality:browser`, `test:auditions:browser` and `test:ui-performance`.
+These four lanes keep their assertions and use that directory instead of `dist`.
+Verify the artifact manifest before and after the run; record its source identity
+separately from the tester's Git commit. Leave this override unset for the full
+runner and its production/general-beta/frozen-firmware isolation gates.
+
 That single command derives the visible build ID from `HEAD`, runs the complete
 Biotron release gate, including all 36 audition variants, their standard/safe DSP
 renders and live MIDI/Stop lifecycle, then atomically creates

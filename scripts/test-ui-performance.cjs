@@ -18,7 +18,7 @@ const {chromePath, createStaticServer} = localRequire(path.join(repo, 'scripts/b
 const outputParent = process.env.BIOTRON_QA_OUTPUT || process.argv[3] || os.tmpdir()
 const fault = process.env.UI_PERF_FAULT || 'none'
 const output = fs.mkdtempSync(path.join(outputParent, 'ui-performance-'))
-const dist = path.join(repo, 'dist')
+const dist = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(repo, 'dist'))
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
 const files = directory => fs.readdirSync(directory, {withFileTypes: true})
   .flatMap(entry => entry.isDirectory() ? files(path.join(directory, entry.name)) : [path.join(directory, entry.name)])
@@ -86,6 +86,7 @@ async function cleanup() {
   assert(fs.existsSync(path.join(dist, 'service-worker.js')), 'Existing beta dist required; this lane never builds')
   initialDist = snapshot()
   report.distHashes = initialDist
+  report.artifactRoot = dist
   const releaseFile = path.join(dist, 'release-evidence.json')
   report.builtReleaseEvidence = fs.existsSync(releaseFile) ? JSON.parse(fs.readFileSync(releaseFile, 'utf8')) : null
   report.head = execFileSync('git', ['rev-parse', 'HEAD'], {cwd: repo, encoding: 'utf8'}).trim()

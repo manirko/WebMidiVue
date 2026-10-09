@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs')
 const {chromium,devices}=require('playwright-core')
 const {chromePath,createStaticServer}=require('./browser-test-harness')
-const server=createStaticServer(path.resolve(__dirname,'..','dist'))
+const server=createStaticServer(path.resolve(process.env.BIOTRON_QA_DIST_ROOT||path.join(__dirname,'..','dist')))
 const artifacts=process.env.AUDITION_BROWSER_OUTPUT||`/private/tmp/biotron-audition-browser-${Date.now()}`
 fs.mkdirSync(artifacts,{recursive:true})
 let page,stage='launch',starts=0

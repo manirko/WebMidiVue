@@ -7,7 +7,7 @@ const path = require('path')
 const {chromium, devices} = require('playwright-core')
 const {chromePath, createStaticServer} = require('./browser-test-harness')
 
-const root = path.resolve(__dirname, '..', 'dist')
+const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
 
 const soakArgument = process.argv.find(argument => argument.startsWith('--soak-seconds='))
 const realtimeSoakSeconds = soakArgument ? Number(soakArgument.split('=')[1]) : 0
