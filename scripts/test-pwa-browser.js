@@ -266,7 +266,7 @@ async function controllerVersion(page) {
   await waitFor(() => sendButton.isEnabled(), 'fake Biotron did not connect offline')
   await page.getByText('Settings loaded. Individual changes apply live; presets need Apply preset to Biotron.').waitFor({state: 'visible'})
   assert.strictEqual(await page.locator('.settings-feedback').evaluate(element => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)', 'Settings status still looks like a filled button')
-  const sectionHeading = page.getByRole('button', {name: 'Plant sensor', exact: true}).locator('h2')
+  const sectionHeading = page.locator('.settings-section > summary h2').filter({hasText: /^Plant sensor$/})
   assert.strictEqual((await sectionHeading.innerText()).trim(), 'Plant sensor')
   assert.strictEqual(await sectionHeading.evaluate(element => getComputedStyle(element).textTransform), 'none',
     'section headings should use readable sentence case')
