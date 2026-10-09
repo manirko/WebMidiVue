@@ -71,12 +71,17 @@ try {
   const framedEnv = {ASSETS: {fetch: async () => new Response('scene', {headers: {
     'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'self'; frame-ancestors 'none'"
   }})}}
-  const scene = await worker.fetch(new Request(origin + '/garden/scene.html'), framedEnv)
-  assert.equal(scene.headers.get('X-Frame-Options'), 'SAMEORIGIN')
-  assert.equal(scene.headers.get('Content-Security-Policy'), "default-src 'self'; frame-ancestors 'self'")
-  const app = await worker.fetch(new Request(origin + '/'), framedEnv)
-  assert.equal(app.headers.get('X-Frame-Options'), 'DENY')
-  assert.match(app.headers.get('Content-Security-Policy'), /frame-ancestors 'none'/)
+  for (const pathname of ['/garden/scene.html', '/garden/scene']) {
+    const scene = await worker.fetch(new Request(origin + pathname), framedEnv)
+    assert.equal(scene.headers.get('X-Frame-Options'), 'SAMEORIGIN', pathname)
+    assert.equal(scene.headers.get('Content-Security-Policy'), "default-src 'self'; frame-ancestors 'self'", pathname)
+    assert.equal(await scene.text(), 'scene')
+  }
+  for (const pathname of ['/', '/garden/scene/', '/garden/scene.js', '/other/garden/scene.html']) {
+    const app = await worker.fetch(new Request(origin + pathname), framedEnv)
+    assert.equal(app.headers.get('X-Frame-Options'), 'DENY', pathname)
+    assert.match(app.headers.get('Content-Security-Policy'), /frame-ancestors 'none'/, pathname)
+  }
   let retentionQuery
   assert.deepEqual(await retention.scheduled({}, {SESSION_EVENTS: {prepare(sql) {
     retentionQuery = sql

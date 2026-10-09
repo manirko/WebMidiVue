@@ -340,9 +340,14 @@ def verify_remote(url: str, verified: dict) -> dict:
             for item in release["files"]:
                 if item["path"] in {"_headers", "_worker.js"}:
                     continue  # Cloudflare applies these files; neither is served as a static asset.
-                remote, _ = request_bytes(url + "/" + urllib.parse.quote(item["path"]))
+                remote, asset_headers = request_bytes(url + "/" + urllib.parse.quote(item["path"]))
                 if len(remote) != item["bytes"] or hashlib.sha256(remote).hexdigest() != item["sha256"]:
                     raise CandidateError(f"remote file mismatch: {item['path']}")
+                if item["path"] == "garden/scene.html":
+                    ancestors = [directive.strip() for directive in asset_headers.get("Content-Security-Policy", "").split(";")
+                                 if directive.strip().startswith("frame-ancestors")]
+                    if asset_headers.get("X-Frame-Options") != "SAMEORIGIN" or ancestors != ["frame-ancestors 'self'"]:
+                        raise CandidateError("remote Garden is blocked from its same-origin iframe after redirects")
             health, _ = request_bytes(url + "/api/telemetry")
             if json.loads(health) != {"status": "ready"}:
                 raise CandidateError("remote telemetry storage is not ready")

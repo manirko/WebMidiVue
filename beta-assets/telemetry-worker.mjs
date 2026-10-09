@@ -43,7 +43,7 @@ export default {
     const url = new URL(request.url)
     if (url.pathname !== '/api/telemetry') {
       const response = await env.ASSETS.fetch(request)
-      if (url.pathname !== '/garden/scene.html') return response
+      if (!['/garden/scene.html', '/garden/scene'].includes(url.pathname)) return response
       // _headers forbids app framing. Only this decorative same-origin child may be framed.
       const headers = new Headers(response.headers)
       headers.set('X-Frame-Options', 'SAMEORIGIN')

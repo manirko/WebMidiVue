@@ -38,11 +38,13 @@ class BiotronPreviewGuardTests(unittest.TestCase):
             "manifest.json": '{"name":"Biotron Settings Offline Beta"}',
             "service-worker.js": "self.addEventListener('fetch', () => {})",
             "telemetry.html": "<p>Technical events</p>",
+            "garden/scene.html": "<canvas></canvas>",
             "_worker.js": "export default {fetch(request, env) { return env.ASSETS.fetch(request) }}",
             "_headers": "/*\n  X-Frame-Options: DENY\n  Content-Security-Policy: frame-ancestors 'none'\n  Permissions-Policy: midi=(self), camera=(), microphone=(), geolocation=()\n  Referrer-Policy: no-referrer\n  X-Robots-Tag: noindex\n",
         }
         for name, content in files.items():
             path = self.dist / name
+            path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
         manifest = [
             {"path": name, "bytes": (self.dist / name).stat().st_size, "sha256": self.sha(self.dist / name)}
@@ -178,6 +180,23 @@ database_id = "0d385f91-f646-4f8c-b508-344b4b2f8a6e"
         }
         return archive, digest, verified, origin, served, headers
 
+    @staticmethod
+    def response_headers(name, headers):
+        if name == "garden/scene.html":
+            return {"X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": "frame-ancestors 'self'"}
+        return headers if name == "release-evidence.json" else {}
+
+    def test_remote_rejects_blocked_garden_after_redirects(self) -> None:
+        _, _, verified, origin, served, headers = self.remote_fixture()
+        # request_bytes follows redirects: the final canonical response must allow this child.
+        for frame_headers in [headers, {}, {"X-Frame-Options": "SAMEORIGIN", "Content-Security-Policy": "frame-ancestors 'self'; frame-ancestors 'none'"}]:
+            def fetch(url):
+                name = urllib.parse.unquote(url.removeprefix(origin + "/"))
+                return served[name], frame_headers if name == "garden/scene.html" else self.response_headers(name, headers)
+            with patch("scripts.biotron_preview_guard.request_bytes", side_effect=fetch), patch("scripts.biotron_preview_guard.time.sleep"):
+                with self.assertRaisesRegex(CandidateError, "Garden is blocked"):
+                    verify_remote(origin, verified)
+
     def test_remote_verifies_every_served_asset_without_fetching_headers_config(self) -> None:
         archive, digest, verified, origin, served, headers = self.remote_fixture()
         requested = []
@@ -186,12 +205,12 @@ database_id = "0d385f91-f646-4f8c-b508-344b4b2f8a6e"
             requested.append(name)
             if name not in served:
                 raise AssertionError(f"unexpected remote fetch: {name}")
-            return served[name], headers if name == "release-evidence.json" else {}
+            return served[name], self.response_headers(name, headers)
         with patch("scripts.biotron_preview_guard.request_bytes", side_effect=fetch), patch(
             "scripts.biotron_preview_guard.time.sleep"
         ):
             result = verify_remote(origin, verified)
-        self.assertEqual(result["served_file_count"], 4)
+        self.assertEqual(result["served_file_count"], 5)
         self.assertEqual(result["config_file_count"], 2)
         self.assertEqual(set(requested), set(served))
         self.assertNotIn("_headers", requested)
@@ -203,7 +222,7 @@ database_id = "0d385f91-f646-4f8c-b508-344b4b2f8a6e"
         headers.pop("X-Robots-Tag")
         def fetch(url):
             name = urllib.parse.unquote(url.removeprefix(origin + "/"))
-            return served[name], headers if name == "release-evidence.json" else {}
+            return served[name], self.response_headers(name, headers)
         with patch("scripts.biotron_preview_guard.request_bytes", side_effect=fetch), patch(
             "scripts.biotron_preview_guard.time.sleep"
         ):
@@ -218,7 +237,7 @@ database_id = "0d385f91-f646-4f8c-b508-344b4b2f8a6e"
                 corrupted[name] = (served["index.html"] if name == "service-worker.js" else b"corrupt")
                 def fetch(url):
                     path = urllib.parse.unquote(url.removeprefix(origin + "/"))
-                    return corrupted[path], headers if path == "release-evidence.json" else {}
+                    return corrupted[path], self.response_headers(path, headers)
                 with patch("scripts.biotron_preview_guard.request_bytes", side_effect=fetch), patch(
                     "scripts.biotron_preview_guard.time.sleep"
                 ):
