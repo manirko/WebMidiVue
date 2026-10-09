@@ -167,4 +167,66 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
   self.assertNotEqual(first,second)
   self.assertEqual(json.loads((first/'first-fault.json').read_text())['error'],'first')
 
+ def test_unlisted_autonomous_code_is_rejected(self):
+  for directory in ['automation','vendor']:
+   extra=self.root/directory/'unexpected.js';extra.parent.mkdir();extra.write_text('unexpected')
+   with self.subTest(directory=directory),self.assertRaisesRegex(ValueError,'inventory changed'):tester.verify(self.root)
+   extra.unlink()
+
+ def autonomous_fixture(self, run, mode):
+  (self.root/'automation/scripts').mkdir(parents=True,exist_ok=True)
+  (self.root/'automation/scripts/test-audition-browser.js').write_text('// command fixture only')
+  def execute(command, **kwargs):
+   observed=run/'browser';observed.mkdir()
+   tester.write_json(observed/'progress.json',[{'stage':'PASS'}])
+   tester.write_json(observed/'keyboard-observations.json',[{'bank':'fixture','id':str(i)} for i in range(43 if mode=='pass' else 42)])
+   if mode=='timeout':raise subprocess.TimeoutExpired(command,600)
+   if mode=='fail':tester.write_json(observed/'failure.json',{'error':'original product fault'})
+   return subprocess.CompletedProcess(command,1 if mode=='fail' else 0)
+  return execute
+
+ def test_autonomous_command_keeps_browser_identity_and_local_fixture(self):
+  for browser in ['chrome','edge']:
+   run=tester.new_run(self.root,'auto-'+browser)
+   with mock.patch.object(tester.subprocess,'run',side_effect=self.autonomous_fixture(run,'pass')) as call:
+    tester.run_autotest(self.root,run,browser,'C:/Browser With Spaces/app.exe','node')
+   args,kwargs=call.call_args
+   self.assertEqual(args[0],['node',str(self.root/'automation/scripts/test-audition-browser.js')])
+   self.assertEqual(kwargs['cwd'],self.root/'automation')
+   self.assertEqual(kwargs['timeout'],600)
+   self.assertEqual(kwargs['env']['BIOTRON_QA_BROWSER'],'msedge' if browser=='edge' else 'chrome')
+   self.assertEqual(kwargs['env']['EDGE_PATH' if browser=='edge' else 'CHROME_PATH'],'C:/Browser With Spaces/app.exe')
+   self.assertEqual(kwargs['env']['BIOTRON_QA_DIST_ROOT'],str(self.root/'runtime'))
+   summary=json.loads((run/'autotest-summary.json').read_text())
+   self.assertEqual(summary['status'],'PASS_SOFTWARE_ONLY')
+   self.assertFalse(summary['customer_release'])
+   self.assertEqual(summary['physical_windows_result'],'NOT_RUN')
+
+ def test_autonomous_failure_timeout_or_early_exit_cannot_pass(self):
+  for mode in ['fail','timeout','early']:
+   run=tester.new_run(self.root,'auto-'+mode)
+   with mock.patch.object(tester.subprocess,'run',side_effect=self.autonomous_fixture(run,mode)):
+    with self.subTest(mode=mode),self.assertRaises(ValueError):tester.run_autotest(self.root,run,'chrome','fixture','node')
+   self.assertEqual(json.loads((run/'autotest-summary.json').read_text())['status'],'FAIL')
+   self.assertTrue((run/'first-autotest-fault.json').is_file())
+   if mode=='fail':self.assertEqual(json.loads((run/'browser/failure.json').read_text())['error'],'original product fault')
+
+ def test_autonomous_missing_evidence_cannot_pass(self):
+  run=tester.new_run(self.root,'auto-missing');self.autonomous_fixture(run,'pass')
+  with mock.patch.object(tester.subprocess,'run',return_value=subprocess.CompletedProcess([],0)):
+   with self.assertRaisesRegex(ValueError,'missing or incomplete'):tester.run_autotest(self.root,run,'chrome','fixture','node')
+
+ def test_autonomous_interruption_and_launch_error_save_nonpass(self):
+  for error,status,cleanup in [(KeyboardInterrupt(),'INTERRUPTED','NOT_CONFIRMED'),(OSError('injected execution failure'),'FAIL','NOT_CONFIRMED')]:
+   run=tester.new_run(self.root,'auto-exception');self.autonomous_fixture(run,'pass')
+   with mock.patch.object(tester.subprocess,'run',side_effect=error),self.assertRaises(ValueError):
+    tester.run_autotest(self.root,run,'chrome','fixture','node')
+   summary=json.loads((run/'autotest-summary.json').read_text())
+   self.assertEqual(summary['status'],status)
+   self.assertEqual(summary['cleanup'],cleanup)
+   self.assertFalse(summary['customer_release'])
+   fault=json.loads((run/'first-autotest-fault.json').read_text())
+   self.assertNotIn('Close only its test window',fault['message'])
+   if cleanup=='NOT_CONFIRMED':self.assertIn('Stop further autotest/capture',fault['message'])
+
 if __name__=='__main__':unittest.main()

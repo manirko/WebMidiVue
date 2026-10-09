@@ -12,6 +12,18 @@ assert.throws(() => browserConfig('safari'), /Unknown BIOTRON_QA_BROWSER/,
   'Safari must never silently run Chrome or Playwright WebKit')
 assert.equal(browserConfig('firefox').engine, 'firefox')
 assert.equal(browserConfig('webkit').engine, 'webkit')
+const originalEdgePath = process.env.EDGE_PATH
+try {
+  process.env.EDGE_PATH = __filename // Path contract only; this fixture is never launched.
+  assert.deepEqual(browserConfig('msedge').options, {executablePath: __filename})
+  process.env.EDGE_PATH = path.join(__dirname, 'missing-edge-executable')
+  assert.throws(() => browserConfig('msedge'), /EDGE_PATH does not exist/)
+  delete process.env.EDGE_PATH
+  assert.deepEqual(browserConfig('msedge').options, {channel: 'msedge'})
+} finally {
+  if (originalEdgePath === undefined) delete process.env.EDGE_PATH
+  else process.env.EDGE_PATH = originalEdgePath
+}
 
 // Non-ASCII CSS previously reached CDP response.body() in a different encoding
 // from the actual HTTP bytes. Keep both observations: transport and browser.

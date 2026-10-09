@@ -1,13 +1,18 @@
 # Biotron: тестировщик для Windows и Claude Сергея
 
-Черновик внутреннего пакета для final-frozen web + firmware1.10.11.
+Сначала пакет сам проверяет сайт и 43 варианта звука. Затем человек проверяет
+слышимый звук и подключённый Biotron. Короткая ручная часть занимает примерно
+10–15 минут; DAW, телефон и прошивка — отдельные проверки по необходимости.
+
+Это исходники внутреннего пакета для exact web + отдельной firmware1.10.11.
 До финальной упаковки `WEB_COMMIT` не задан: `verify` блокирует запуск.
 Packager после общего freeze записывает exact40-hex SHA в `tester.py` и manifest
 только в копии для ZIP, не переписывает frozen web checkout,
 а также `firmware_version`/`firmware_source_commit`; не брать latest.
 Запускает уже собранный инструмент и сохраняет доказательства. Прошивку не пишет.
 Обычный запуск требует Python3.10+ и установленный Chrome/Edge. Наблюдатель
-дополнительно требует Node.js20+. Playwright-core1.62.1 включён вместе с лицензией:
+и автоматическая проверка требуют Node.js20+.
+Playwright-core1.62.1 включён вместе с лицензией:
 `npm install`, Git, WSL, Docker, права администратора и новый браузер не нужны.
 
 Статус9 октября2026: helper подготовлен отдельно; web ещё не final-frozen.
@@ -19,7 +24,8 @@ Packager после общего freeze записывает exact40-hex SHA в 
 
 Распакуй ZIP в локальную папку, например `C:\BiotronTester-20261009`. Открой там Claude
 Code, дай ему прочитать `CLAUDE.md` и попроси: «Проведи доступные тесты по этому
-пакету, сохрани первые ошибки. Физические действия давай по одному».
+пакету. Сначала автоматические, затем короткие ручные. Сохрани первые ошибки.
+Давай мне одно действие за раз и говори, что должно произойти».
 Используй новую папку: не смешивай прежние runtime, results и browser profiles.
 Claude Desktop может прочитать инструкции; запуск команд требует его доступного
 локального инструмента или PowerShell. Доступов к компьютеру пакет не создаёт.
@@ -28,6 +34,8 @@ Claude Desktop может прочитать инструкции; запуск 
 
 ```powershell
 py -3 tester.py doctor
+py -3 tester.py autotest --browser chrome
+py -3 tester.py autotest --browser edge
 py -3 tester.py serve --browser chrome
 ```
 
@@ -35,6 +43,20 @@ py -3 tester.py serve --browser chrome
 Если Python/Node отсутствует, Claude сначала фиксирует недостающий runtime и
 предлагает обычную установку с официального сайта; без обхода защит/админ-запуска.
 `doctor` не устанавливает программы и не подключается к MIDI.
+
+`autotest` занимает обычно несколько минут, максимум 10 минут на браузер.
+Chrome и Edge запускаются по очереди в отдельных временных профилях.
+Команда использует тот же тест звуков, что и на Mac: 43 настоящих нажатия
+клавиатуры, цифровой звук, смена тембра, отпускание, ограничение нот, закрытый
+Sound и повторный запуск. MIDI здесь имитируется; настоящий прибор не используется.
+Это не проверка динамиков или USB. Результаты и первая ошибка сохраняются в `results/`.
+Открывать сайт и нажимать клавиши во время автоматической проверки не требуется.
+При ошибке Claude сначала объясняет конкретный шаг, ожидаемое и фактическое поведение.
+Команды выполняй по одной. При обычном FAIL безопасные ручные проверки можно
+продолжить, сохранив ошибку. При cleanup NOT_CONFIRMED останови дальнейшие autotest/capture:
+сначала Claude должен подтвердить, что процессы именно этого прогона завершены.
+Автоматическое окно скрыто; закрытие обычного окна браузера не доказывает cleanup.
+Не завершать все Chrome/Edge процессы пользователя.
 
 Откроется отдельное тестовое окно по `http://127.0.0.1:8765/#/biotron/play`.
 Начать без прибора: открыть Sound на Play, выбрать звук и Play with keyboard.
@@ -101,7 +123,7 @@ UF2 SHA256 `18a73113ae75ccd68d244a2d90d1e902848a8473452e65b07a2173883abe6d60`.
 Rollback1.10.9 SHA256 `823d044374268462d39b13c0e65dc2676cda2fb3d5162edba78aedccb0a09f3d`.
 Host/build identity не заменяют совместимость платы, owner approval и физический тест.
 
-Текущий web updater этого пакета закреплён на **frozen1.10.10**.
+В обычной beta нового пакета **обновление прошивки выключено**.
 **Browser W10 для candidate1.10.11 сейчас BLOCKED.** Вложенный UF21.10.11
 не является разрешением прошивания. Отдельная ручная firmware-процедура может
 стать будущей проверкой только после явного owner approval exact1.10.11,
@@ -120,8 +142,8 @@ Host/build identity не заменяют совместимость платы,
 | W06 | Освободить порт веба -> DAW принимает ноты -> закрыть DAW -> reconnect web. Три реально завершённых цикла. На Windows одновременно открытый порт может мешать; отсутствие ошибок не доказывает release. |
 | W07 | Фон/возврат; USB disconnect/reconnect. Записать реальные ноты до/после и восстановление, а не только видимый порт. Lock screen — отдельный наблюдаемый сценарий. |
 | W08 | Один online load, затем сеть выключить, закрыть и открыть тот же test profile. Настройки/сравнения работают; incomplete cache не выдаётся за ready. На `127.0.0.1` сеть отключена, но локальный сервер должен оставаться включённым. Полностью server-off PWA проверять в браузере отдельно, не через capture, которому нужна metadata. |
-| W09 | Проверить installed version и Download & check/hash, same/legacy/no-reply. Текущий web target — frozen1.10.10. Candidate1.10.11 отдельный; browser W10 для него BLOCKED. Не обходить hash guard и не нажимать BOOT/write. |
-| W10 | СЕЙЧАС browser flash candidate1.10.11 BLOCKED: updater закреплён на frozen1.10.10. Отдельная будущая ручная процедура — только с явным firmware-owner approval exact1.10.11, совместимой платой и своим backup:1.10.11 -> readback/sound -> согласованный1.10.9 rollback -> readback/sound -> exact1.10.11 reflash. Helper не разрешает эту процедуру. Frozen1.10.10 не менять; никаких erase/power cut/raw sector. |
+| W09 | Проверить installed version и no-reply. Автоматическое обновление этой beta выключено; Download & check NOT RUN. Candidate1.10.11 приложен отдельно; не нажимать BOOT/write. |
+| W10 | Browser flash candidate1.10.11 BLOCKED. Отдельная будущая ручная процедура — только с firmware-owner approval exact1.10.11, совместимой платой и своим backup:1.10.11 -> readback/sound -> согласованный1.10.9 rollback -> readback/sound -> exact1.10.11 reflash. Helper не разрешает эту процедуру. Frozen1.10.10 не менять; никаких erase/power cut/raw sector. |
 | W11 | Play -> Sound:10 Timbres,10 High-note treatments,6 Handpan (+7 Classic). Settings -> Experiments -> Calibration cues:10, только явный выбор; открытие панели не выбирает cue. Примеры, keyboard и реальная игра/Stop/Start при одинаковых volume/quality/output. Выбран один experiment slot: cue заменяет прежний эксперимент, обычные plant notes возвращаются к последнему Classic. Cue — звук, не новый sensor algorithm. Записать выбор/«ни один» и причины;36 WAV не дают LISTENED/APPROVED. |
 | W12 | Native details Sound/Plant sensor/More fun/Experiments открываются независимо. Закрытие Experiments не закрывает другие и не теряет выбранный cue. Слайдеры, Humanize built-ins1/user0, компактность, feedback Copy и exact diagnostics до/после инцидента. Keyboard/Limit to 4 notes at once только на Play. Ничего не отправлять. |
 | W13 | Если есть телефон+USB: отдельная фактическая проверка своего browser/OS/adapter, sound/settings/reconnect. Windows capture или эмулятор её не заменяют. |
@@ -168,7 +190,7 @@ diagnostics в соответствующую results-папку; файл мо�
 
 ## Карта файлов и данные
 
-- `tester.py` — verify/doctor/serve/capture/record/bundle, Python standard library.
+- `tester.py` — verify/doctor/autotest/serve/capture/record/bundle, Python standard library.
 - `capture-browser.cjs` — ограниченный браузерный наблюдатель, existing Playwright.
 - `test_tester.py` — проверки целостности, приватных путей, Windows discovery,
   ограничения сервера/экспорта. Локальный запуск: `py -3 test_tester.py`.
@@ -176,6 +198,8 @@ diagnostics в соответствующую results-папку; файл мо�
 - `runtime/` — final-frozen web и exact1.10.11 UF2, frozen1.10.10 и rollback1.10.9;
   добавляет packager после freeze, в этом helper draft runtime отсутствует.
 - `vendor/playwright-core/` — та же версия1.62.1 и её LICENSE/NOTICE, без browser binary.
+- `automation/` — копия существующего audition suite и нужных source modules с exact SHA;
+  небольшой набор Node dependencies с лицензиями. Это тот же тестер, не новая система.
 - `packet-manifest.json` — SHA256 каждого поставляемого файла; ZIP SHA отдельно в сообщении.
 - `listening-36.zip` — существующие36 WAV и параметры; packager проверяет digest
   перед включением. Это альтернативное прослушивание, не новая physical acceptance.

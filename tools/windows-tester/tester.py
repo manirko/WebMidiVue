@@ -82,6 +82,10 @@ def verify(root):
  actual = {x.relative_to(runtime).as_posix() for x in runtime.rglob('*') if x.is_file()}
  if actual != expected:
   raise ValueError('Runtime inventory changed')
+ for directory in ['automation', 'vendor']:
+  expected = {x[len(directory)+1:] for x in manifest['files'] if x.startswith(directory+'/')}
+  actual = {x.relative_to(root/directory).as_posix() for x in (root/directory).rglob('*') if x.is_file()}
+  if actual != expected:raise ValueError(directory+' inventory changed')
  release = json.loads((runtime/'release-evidence.json').read_text(encoding='utf-8'))
  if release['source_commit'] != WEB_COMMIT:
   raise ValueError('Runtime metadata differs from candidate')
@@ -181,6 +185,39 @@ def node_version(executable):
  except (OSError,subprocess.SubprocessError): return None
 
 
+def run_autotest(root, run, browser, executable, node):
+ # Reuse the project's exact audition suite; no second engine or MIDI client.
+ script=root/'automation/scripts/test-audition-browser.js'
+ if not script.is_file():raise ValueError('This packet has no autonomous suite')
+ env={**os.environ, 'NODE_PATH':str(root/'vendor'), 'BIOTRON_QA_DIST_ROOT':str(root/'runtime'),
+      'BIOTRON_QA_BROWSER':'msedge' if browser=='edge' else 'chrome',
+      ('EDGE_PATH' if browser=='edge' else 'CHROME_PATH'):executable,
+      'AUDITION_BROWSER_OUTPUT':str(run/'browser'), 'AUDITION_BROWSER_TIMEOUT_MS':'540000'}
+ command=[node,str(script)]
+ write_json(run/'autotest-config.json',{'at':utc(),'command':command,'browser':browser,'executable':executable,'web_commit':WEB_COMMIT,'native_midi':'NOT_USED; isolated synthetic fixture','physical_result':'NOT_RUN'})
+ fault=None;code=None;cleanup='NOT_CHECKED';interrupted=False
+ with (run/'autotest.log').open('w',encoding='utf-8') as log:
+  try:code=subprocess.run(command,cwd=root/'automation',env=env,stdout=log,stderr=subprocess.STDOUT,timeout=600).returncode
+  except subprocess.TimeoutExpired:
+   cleanup='NOT_CONFIRMED';fault='Suite exceeded 600 seconds. Stop further autotest/capture until owned-process cleanup is confirmed.'
+  except KeyboardInterrupt:
+   interrupted=True;cleanup='NOT_CONFIRMED';fault='Suite interrupted. Stop further autotest/capture until owned-process cleanup is confirmed.'
+  except OSError as error:
+   cleanup='NOT_CONFIRMED';fault='Suite execution error: '+str(error)+'. Stop further autotest/capture until owned-process cleanup is confirmed.'
+ if code!=0:fault=fault or 'Autonomous suite failed; keep the first fault and log.'
+ if not fault:
+  try:
+   progress=json.loads((run/'browser/progress.json').read_text(encoding='utf-8'))
+   keys=json.loads((run/'browser/keyboard-observations.json').read_text(encoding='utf-8'))
+   if progress[-1]['stage']!='PASS' or len({(x['bank'],x['id']) for x in keys})!=43:
+    fault='Suite exited without complete PASS and 43 keyboard observations.'
+  except (OSError,ValueError,KeyError,IndexError,TypeError):fault='Suite evidence is missing or incomplete.'
+ if fault:write_json(run/'first-autotest-fault.json',{'at':utc(),'message':fault,'exit_code':code,'cleanup':cleanup,'status':'INTERRUPTED' if interrupted else 'FAIL_OR_INCONCLUSIVE; not physical acceptance'})
+ write_json(run/'autotest-summary.json',{'at':utc(),'status':'INTERRUPTED' if interrupted else 'FAIL' if fault else 'PASS_SOFTWARE_ONLY','exit_code':code,'cleanup':cleanup,'web_commit':WEB_COMMIT,'browser':browser,'physical_windows_result':'NOT_RUN','customer_release':False,'error':fault})
+ if fault:raise ValueError(fault+' Evidence: '+str(run))
+ print('Software tests passed. USB and audible sound remain for the manual steps. Evidence:',run)
+
+
 def main():
  if sys.version_info < (3,10): raise ValueError('Python3.10+ required')
  p=argparse.ArgumentParser(description=__doc__)
@@ -189,6 +226,7 @@ def main():
  sub.add_parser('verify'); sub.add_parser('doctor'); sub.add_parser('cases'); sub.add_parser('bundle')
  serve=sub.add_parser('serve'); serve.add_argument('--browser',choices=['chrome','edge','none'],default='none');serve.add_argument('--port',type=int,default=8765)
  capture=sub.add_parser('capture');capture.add_argument('--browser',choices=['chrome','edge'],default='chrome');capture.add_argument('--site',choices=['local','live'],default='local');capture.add_argument('--origin',help='Exact approved HTTPS origin for live capture');capture.add_argument('--minutes',type=float,default=10);capture.add_argument('--port',type=int,default=8765);capture.add_argument('--smoke',action='store_true',help='Automated headless harness check; never a physical PASS')
+ autotest=sub.add_parser('autotest');autotest.add_argument('--browser',choices=['chrome','edge'],default='chrome')
  record=sub.add_parser('record');record.add_argument('--case',choices=CASES,required=True);record.add_argument('--result',choices=['PASS','FAIL','NOT_RUN','BLOCKED','INCONCLUSIVE'],required=True);record.add_argument('--note',required=True);record.add_argument('--evidence',action='append',default=[])
  args=p.parse_args();root=args.root.resolve()
  if args.command=='cases':print(json.dumps(CASES,ensure_ascii=False,indent=2));return
@@ -209,6 +247,10 @@ def main():
  environment['node_version']=node_version(environment['node'])
  write_json(run/'environment.json',environment)
  if args.command=='doctor':print(json.dumps(environment,ensure_ascii=False,indent=2));return
+ if args.command=='autotest':
+  if not browsers[args.browser]:raise ValueError('Browser not found; set CHROME_PATH or EDGE_PATH')
+  if not environment['node_version'] or int(environment['node_version'].lstrip('v').split('.')[0])<20:raise ValueError('Autotest needs Node.js >=20; plain serve only needs Python')
+  run_autotest(root,run,args.browser,browsers[args.browser],environment['node']);return
  if not 0<=args.port<=65535:p.error('port must be 0..65535')
  if args.command=='capture' and not 0<args.minutes<=30:p.error('minutes must be >0 and <=30')
  if args.browser!='none' and not browsers[args.browser]:raise ValueError('Browser not found; set CHROME_PATH or EDGE_PATH to its exact executable')

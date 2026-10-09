@@ -62,7 +62,13 @@ function browserConfig(name = process.env.BIOTRON_QA_BROWSER || 'chrome') {
     if (!fs.existsSync(installed[name])) throw new Error(`${name} not installed: ${installed[name]}`)
     return {name, engine: 'chromium', options: {executablePath: installed[name]}}
   }
-  if (name === 'msedge') return {name, engine: 'chromium', options: {channel: 'msedge'}}
+  if (name === 'msedge') {
+    if (process.env.EDGE_PATH) {
+      if (!fs.existsSync(process.env.EDGE_PATH)) throw new Error('EDGE_PATH does not exist')
+      return {name, engine: 'chromium', options: {executablePath: process.env.EDGE_PATH}}
+    }
+    return {name, engine: 'chromium', options: {channel: 'msedge'}}
+  }
   if (['chromium', 'firefox', 'webkit'].includes(name)) return {name, engine: name, options: {}}
   throw new Error(`Unknown BIOTRON_QA_BROWSER: ${name}`)
 }
