@@ -8,7 +8,7 @@ const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirnam
 const server = createStaticServer(root)
 const artifacts = process.env.QUALITY_BROWSER_OUTPUT || path.join(process.env.BIOTRON_QA_OUTPUT || require('node:os').tmpdir(), `biotron-quality-${Date.now()}`)
 fs.mkdirSync(artifacts, {recursive: true})
-let currentPage
+let currentPage, currentProfile
 
 const profiles = [
   {name: 'desktop', options: {viewport: {width: 1440, height: 900}}, midi: true, heading: 'Settings'},
@@ -84,6 +84,7 @@ function assertQuality(result, label, checkCls = true) {
 }
 
 async function auditProfile(browser, origin, profile) {
+  currentProfile = profile.name
   const context = await browser.newContext(contextOptions({...profile.options, reducedMotion: 'reduce'}, browser))
   context.setDefaultTimeout(5000)
   await context.addInitScript(hasMidi => {
@@ -255,6 +256,10 @@ async function auditProfile(browser, origin, profile) {
         engine: browser.browserType().name(), version: browser.version(), root, results}, null, 2))
     }
     console.log(`Responsive quality verified — ${results.join('; ')}`)
+  } catch (error) {
+    if (!fs.existsSync(path.join(artifacts, 'failure.json'))) fs.writeFileSync(path.join(artifacts, 'failure.json'), JSON.stringify({profile: currentProfile, error: error.message}, null, 2))
+    await currentPage?.screenshot({path: path.join(artifacts, 'failure.png'), timeout: 1000}).catch(() => {})
+    throw error
   } finally {
     await browser.close()
     await new Promise(resolve => server.close(resolve))
