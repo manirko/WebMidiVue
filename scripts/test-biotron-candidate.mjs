@@ -95,6 +95,8 @@ test("candidate packaging is atomic, immutable and free of macOS metadata entrie
     const checklist = readFileSync(resolve(packaged.candidateDir, "PHYSICAL-TEST.md"), "utf8")
     assert.match(checklist, new RegExp(buildId))
     assert.match(checklist, /Biotron beta · 1 October 2026/)
+    assert.match(checklist, /\*\*Start listening\*\*/)
+    assert.doesNotMatch(checklist, /Hear Biotron/)
     assert.doesNotMatch(checklist, /page shows build/)
     const evidence = JSON.parse(
       readFileSync(resolve(packaged.candidateDir, "test-evidence.json"), "utf8"),

@@ -101,7 +101,7 @@ not update firmware; this candidate intentionally disables it.
 
 Stop at the first failure:
 
-1. Open **Play**, press **Hear Biotron**, keep the plant still through
+1. Open **Play**, press **Start listening**, keep the plant still through
    calibration, then touch a leaf. Sound must react without a DAW.
 2. Open **Settings**. The picker must offer the responsive Biotron but not
    \`MIDIIN2\`, \`MIDIOUT2\` or \`Biotron Port 2\`. Wait for its saved settings
