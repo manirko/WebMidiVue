@@ -76,7 +76,8 @@ function hasAdvancingDspClock(rows) {
     const response = await fetch(config.origin+'/release-evidence.json', {signal: AbortSignal.timeout(10000)})
     if (!response.ok) throw new Error('Exact-site metadata unavailable: '+response.status)
     const release = await response.json()
-    if (release.source_commit !== config.web_commit) throw new Error('Site differs from exact candidate')
+    const commits = ['commit', 'source_commit'].filter(key => Object.hasOwn(release, key)).map(key => release[key])
+    if (!commits.length || commits.some(commit => commit !== config.web_commit)) throw new Error('Site differs from exact candidate')
     context = await chromium.launchPersistentContext(config.profile, {
       executablePath: config.executable,
       headless: config.smoke,

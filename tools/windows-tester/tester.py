@@ -90,7 +90,8 @@ def verify(root, expected_web_commit=None):
   actual = {x.relative_to(root/directory).as_posix() for x in (root/directory).rglob('*') if x.is_file()}
   if actual != expected:raise ValueError(directory+' inventory changed')
  release = json.loads((runtime/'release-evidence.json').read_text(encoding='utf-8'))
- if release['source_commit'] != WEB_COMMIT:
+ commits = [release[key] for key in ('commit', 'source_commit') if key in release]
+ if not commits or any(commit != WEB_COMMIT for commit in commits):
   raise ValueError('Runtime metadata differs from candidate')
  if digest(runtime/'firmware/biotron-1.10.11-internal.uf2') != UF2_SHA:
   raise ValueError('Firmware hash differs from candidate')

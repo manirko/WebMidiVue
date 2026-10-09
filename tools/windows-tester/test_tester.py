@@ -53,6 +53,19 @@ class PacketTests(unittest.TestCase):
   self.manifest['files']['runtime/release-evidence.json']=tester.digest(file)
   tester.write_json(self.root/'packet-manifest.json',self.manifest)
   with self.assertRaisesRegex(ValueError,'metadata differs'):tester.verify(self.root)
+ def test_canonical_and_legacy_metadata_require_every_present_commit(self):
+  for release in [{'commit':tester.WEB_COMMIT}, {'source_commit':tester.WEB_COMMIT},
+                  {'commit':tester.WEB_COMMIT,'source_commit':tester.WEB_COMMIT}, {},
+                  {'commit':None}, {'commit':'2'*40}, {'source_commit':None},
+                  {'commit':tester.WEB_COMMIT,'source_commit':'2'*40},
+                  {'commit':'2'*40,'source_commit':tester.WEB_COMMIT}]:
+   file=self.root/'runtime/release-evidence.json';tester.write_json(file,release)
+   self.manifest['files']['runtime/release-evidence.json']=tester.digest(file)
+   tester.write_json(self.root/'packet-manifest.json',self.manifest)
+   with self.subTest(release=release):
+    if release and all(value==tester.WEB_COMMIT for value in release.values()):tester.verify(self.root)
+    else:
+     with self.assertRaisesRegex(ValueError,'metadata differs'):tester.verify(self.root)
  def test_altered_rollback_cannot_pass_with_rehashed_manifest(self):
   file=self.root/'runtime/firmware/biotron-1.10.9-clean.uf2';file.write_bytes(b'other image')
   self.manifest['files']['runtime/firmware/biotron-1.10.9-clean.uf2']=tester.digest(file)
@@ -120,12 +133,12 @@ class PacketTests(unittest.TestCase):
    self.assertFalse(data['customer_release'])
   (run/'dangerous.exe').write_text('unexpected')
   with self.assertRaisesRegex(ValueError,'Unexpected'):tester.export_results(self.root)
- def run_capture_fixture(self, mode):
+ def run_capture_fixture(self, mode, release=None):
   # Execute the real JS launcher with deterministic browser/time adapters.
   # No actual browser, MIDI, audio graph, network or permissions in this oracle.
   script=r"""
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
-const [source,root,mode]=process.argv.slice(1);let clock=0,index=0,exit;
+const [source,root,mode,release]=process.argv.slice(1);let clock=0,index=0,exit;
 const config={root,run:root,origin:'http://fixture',profile:root,executable:'fixture',smoke:true,web_commit:'fixture',seconds:30};
 fs.writeFileSync(path.join(root,'config.json'),JSON.stringify(config));
 const locator={waitFor:async()=>{},click:async()=>{},count:async()=>6,locator:()=>locator};
@@ -144,13 +157,26 @@ const context={addInitScript:async()=>{},pages:()=>[page],newCDPSession:async()=
 const fixtureFs={...fs,appendFileSync(file,data){fs.appendFileSync(file,data);if(mode==='writeoverrun' && index===3)clock+=11000;}};
 const sandbox={require:name=>name==='node:fs'?fixtureFs:name==='node:path'?path:name==='node:perf_hooks'?{performance:{now:()=>clock}}:{chromium:{launchPersistentContext:async()=>context}},
  process:{argv:['node','capture',path.join(root,'config.json')],on(){},exit:code=>{exit=code}},console:{log(){}},
- fetch:async()=>({ok:true,json:async()=>({source_commit:'fixture'})}),AbortSignal:{timeout(){}},WeakRef,
+ fetch:async()=>({ok:true,json:async()=>JSON.parse(release)}),AbortSignal:{timeout(){}},WeakRef,
  setTimeout:(fn,ms)=>{if(ms===1000)queueMicrotask(()=>{clock+=ms;fn()});return 1},clearTimeout(){}};
 vm.runInNewContext(fs.readFileSync(source,'utf8'),sandbox,{filename:source});
 setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');process.stdout.write(JSON.stringify({exit,summary:JSON.parse(fs.readFileSync(path.join(root,'capture-summary.json'),'utf8')),samples:index})+'\n')});
 """
-  result=subprocess.run(['node','-e',script,str(Path(__file__).with_name('capture-browser.cjs')),tempfile.mkdtemp(prefix='capture-fixture-',dir=self.root),mode],capture_output=True,text=True,timeout=10,check=True)
+  result=subprocess.run(['node','-e',script,str(Path(__file__).with_name('capture-browser.cjs')),tempfile.mkdtemp(prefix='capture-fixture-',dir=self.root),mode,json.dumps({'source_commit':'fixture'} if release is None else release)],capture_output=True,text=True,timeout=10,check=True)
   return json.loads(result.stdout)
+ def test_capture_checks_canonical_and_legacy_identity_before_browser_launch(self):
+  for release in [{'commit':'fixture'}, {'source_commit':'fixture'},
+                  {'commit':'fixture','source_commit':'fixture'}, {}, {'commit':None},
+                  {'commit':'other'}, {'source_commit':None},
+                  {'commit':'fixture','source_commit':'other'},
+                  {'commit':'other','source_commit':'fixture'}]:
+   with self.subTest(release=release):
+    result=self.run_capture_fixture('late',release)
+    if release and all(value=='fixture' for value in release.values()):self.assertEqual(result['exit'],0)
+    else:
+     self.assertEqual(result['exit'],1)
+     self.assertEqual(result['samples'],0)
+     self.assertEqual(result['summary']['status'],'CAPTURE_FAULT')
  def test_smoke_waits_for_delayed_real_clock(self):
   result=self.run_capture_fixture('late')
   self.assertEqual(result['exit'],0)

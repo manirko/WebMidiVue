@@ -11,13 +11,15 @@
 Packager после общего freeze записывает exact40-hex SHA в `tester.py` и manifest
 только в копии для ZIP, не переписывает frozen web checkout,
 а также `firmware_version`/`firmware_source_commit`; не брать latest.
+Runtime может содержать canonical `commit` или прежний `source_commit`.
+Каждое присутствующее поле должно совпадать с exact SHA пакета; конфликт блокирует запуск.
 Запускает уже собранный инструмент и сохраняет доказательства. Прошивку не пишет.
 Обычный запуск требует Python3.10+ и установленный Chrome/Edge. Наблюдатель
 и автоматическая проверка требуют Node.js20+.
 Playwright-core1.62.1 включён вместе с лицензией:
 `npm install`, Git, WSL, Docker, права администратора и новый браузер не нужны.
 
-Статус9 октября2026: helper подготовлен отдельно; web ещё не final-frozen.
+Статус готовой сборки, точная онлайн-ссылка и SHA находятся в manifest пакета.
 Обязательные физические Windows/DAW/firmware1.10.11 проверки — NOT RUN. Mac QA
 и helper selftests не закрывают эти gates. Пакет не является
 подписанным установщиком и не изменяет производственный стенд или firmware latest.
