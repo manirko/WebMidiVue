@@ -36,7 +36,8 @@ const report = {
   performanceDistributions: 'Observations only; no calibrated p50/p95 or hardware-latency acceptance',
   fault,
   faultScope: fault === 'mute' ? 'Test-only capture worklet substitutes zero PCM; production output is unchanged' :
-    fault === 'drop' ? 'Test-only capture omits the second observed block; production output is unchanged' : 'No injected capture fault',
+    fault === 'drop' ? 'Test-only capture omits the second observed block; production output is unchanged' :
+    fault === 'late-release' ? 'Test-only keyboard Note Off is delayed by 500ms; timing must remain INCONCLUSIVE' : 'No injected capture fault',
   physicalMidi: 'NOT RUN: the synthetic provider never delegates to native MIDI',
 }
 const save = () => {
@@ -82,7 +83,7 @@ async function cleanup() {
 
 (async () => {
   const {SCORE, analyze, wav} = await import(pathToFileURL(path.join(repo, 'scripts/audio-qa/analyze.mjs')).href)
-  assert(['none', 'mute', 'drop'].includes(fault), 'UI_PERF_FAULT must be none, mute or drop')
+  assert(['none', 'mute', 'drop', 'late-release'].includes(fault), 'UI_PERF_FAULT must be none, mute, drop or late-release')
   assert(fs.existsSync(path.join(dist, 'service-worker.js')), 'Existing beta dist required; this lane never builds')
   initialDist = snapshot()
   report.distHashes = initialDist
@@ -218,6 +219,10 @@ async function cleanup() {
       phase.blocks.push(event.data)
     }
   }, worklet)
+  const waitUntilScore = seconds => page.waitForFunction(seconds => {
+    const q = window.__uiPerf
+    return q.output.context.currentTime - q.phase.firstFrame / q.output.context.sampleRate >= seconds
+  }, seconds, {timeout: 10000})
   for (const budget of [0, 4, 10]) {
     await page.evaluate(async milliseconds => {
       const q = window.__uiPerf
@@ -231,11 +236,12 @@ async function cleanup() {
         phase.firstResolve = () => { clearTimeout(timer); resolve() }
       })
     }, budget)
-    await page.waitForTimeout(SCORE.noteOn * 1000)
+    await waitUntilScore(SCORE.noteOn)
     await page.keyboard.down('h')
-    await page.waitForTimeout((SCORE.noteOff - SCORE.noteOn) * 1000)
+    await waitUntilScore(SCORE.noteOff)
+    if (fault === 'late-release') await page.waitForTimeout(500)
     await page.keyboard.up('h')
-    await page.waitForTimeout((SCORE.seconds - SCORE.noteOff) * 1000)
+    await waitUntilScore(SCORE.seconds)
     const captured = await page.evaluate(score => {
       const q = window.__uiPerf, phase = q.phase, sampleRate = q.output.context.sampleRate
       q.tap.port.postMessage({type: 'stop'}); clearInterval(phase.load); q.phase = null
