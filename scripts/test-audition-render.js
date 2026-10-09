@@ -54,9 +54,9 @@ function wav(samples,sampleRate){
    for(let bankIndex=0;bankIndex<banks.length;bankIndex++)for(let variantIndex=0;variantIndex<banks[bankIndex].variants.length;variantIndex++){
     const caseId=`${quality}/${banks[bankIndex].id}/${variantIndex+1}`
     if(selectedCase&&selectedCase!==caseId)continue
-    // OfflineAudioContext cannot be closed. Destroy each bank’s page so native
-    // offline contexts do not accumulate; realtime repeated-close is a separate lane.
-    if(variantIndex===0||selectedCase)await preparePage()
+    // OfflineAudioContext cannot be closed. Bound native worklets by destroying
+    // each case's page; realtime repeated-close remains a separate lane.
+    await preparePage()
     let watchdog
     const running=page.evaluate(async({quality,bankIndex,variantIndex,sampleRate,handpanControl})=>{
      const {ElementarySynthEngine,AUDITION_BANKS,auditionEvents,auditionDuration}=window.__Audition

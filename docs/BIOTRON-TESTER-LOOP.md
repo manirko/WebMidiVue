@@ -14,6 +14,12 @@ sound/PWA/quality/device variants. Browser updater tests use simulated MIDI and
 cannot certify physical flash. Presets and digital audio levels are automated;
 microphone/system/physical audio are distinct unavailable lanes.
 
+Offline audition rendering uses a fresh page for each case, because native
+OfflineAudioContexts cannot be closed. The retained 30s case deadline and all
+PCM/FFT/alias/tail/voice assertions remain unchanged. Realtime lifecycle is a
+separate test. Runner interruption controls wait for the fixture's readiness file
+before SIGINT; elapsed startup time is not a readiness signal.
+
 ## Autonomous browser matrix — 9 October 2026
 
 The browser audition test sends trusted key down/up through the actual built UI.

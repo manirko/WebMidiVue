@@ -4,9 +4,7 @@ export const soundSessionState = reactive({running: false, volume: DEFAULT_VOLUM
 const controller = shallowRef(null)
 const experimentKey = 'biotron-sound-experiment-v1'
 export const getSoundController = () => controller.value
-export function registerSoundController(nextController) {
-  controller.value = nextController
-}
+export function registerSoundController(nextController) { controller.value = nextController }
 
 export function unregisterSoundController(currentController) {
   if (controller.value === currentController) controller.value = null

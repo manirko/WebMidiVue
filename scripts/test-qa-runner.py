@@ -135,9 +135,13 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  rows = [json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
  assert next(row for row in rows if row['test']=='test:ui-performance')['result']=='INCONCLUSIVE'
  assert not json.loads((latest/'summary.json').read_text())['software_checks_passed']
- npm.write_text('#!/bin/sh\nsleep 5\n')
+ interrupt_ready=root/'runner-interrupt-ready'
+ environment['QA_INTERRUPT_READY']=str(interrupt_ready)
+ npm.write_text('#!/bin/sh\nprintf ready > "$QA_INTERRUPT_READY"\nsleep 5\n')
  interrupted = subprocess.Popen([sys.executable,str(runner),'--output',str(output)],env=environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
- time.sleep(.25)
+ deadline=time.monotonic()+10
+ while not interrupt_ready.exists() and interrupted.poll() is None and time.monotonic()<deadline:time.sleep(.02)
+ assert interrupt_ready.exists(),'Interrupt fixture never reached the actual lane'
  interrupted.send_signal(signal.SIGINT)
  stdout, stderr = interrupted.communicate(timeout=15)
  assert interrupted.returncode == 130, stdout+stderr

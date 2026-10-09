@@ -17,10 +17,7 @@ const TouchMePageStandalone = () => import(/* webpackChunkName: "touchme" */ '@/
 const PlaytronPage = () => import(/* webpackChunkName: "playtron" */ '@/components/PlaytronPage/PlaytronPage.vue')
 const CirclePage = () => import(/* webpackChunkName: "circle" */ '@/components/CirclePage/CirclePage.vue')
 const SoundLab = () => import(/* webpackChunkName: "sound-lab" */ '@sound-lab')
-const deviceMeta = productName => ({
-    requiresMidi: true,
-    productName
-})
+const deviceMeta = productName => ({requiresMidi: true, productName})
 
 const knownDirectRoutes = new Set([
     '/biotron', '/biotron/play', '/biotron/update', '/biotron/compare', '/touchme', '/touchme/test',
