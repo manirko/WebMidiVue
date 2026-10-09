@@ -5,7 +5,7 @@
       <button v-for="group in banks" :key="group.id" type="button" class="btn btn-outline-primary" :class="{active: bankId === group.id}" :aria-pressed="bankId === group.id" @click="changeBank(group.id)">{{ group.label }}</button>
     </div>
     <label :for="calibrationOnly ? 'calibration-variant' : 'compare-variant'">{{ calibrationOnly ? 'Calibration cue' : 'Sound' }}</label>
-    <select :id="calibrationOnly ? 'calibration-variant' : 'compare-variant'" class="form-select" :value="variantId" @change="choose(bankId, $event.target.value)">
+    <select :id="calibrationOnly ? 'calibration-variant' : 'compare-variant'" :data-keyboard-playable="calibrationOnly ? null : 'true'" class="form-select" :value="variantId" @change="choose(bankId, $event.target.value)">
       <option v-if="calibrationOnly && !variantId" value="" disabled>Choose a cue to try</option>
       <option v-for="(option, index) in bank.variants" :key="option.id" :value="option.id">{{ index + 1 }}. {{ option.label }}</option>
     </select>

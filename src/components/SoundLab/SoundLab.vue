@@ -523,7 +523,7 @@ export default {
       this.heldCodes.delete(id)
     },
     handleKeyDown(event) {
-      if (!this.keyboardOn || this.audioState !== 'running' || blocksKeyboardNotes(event)) return
+      if (!this.keyboardOn || this.audioState !== 'running' || blocksKeyboardNotes(event, true)) return
       const note = noteForKeyboardCode(event.code)
       if (note === null) return
       event.preventDefault()
