@@ -34,6 +34,7 @@ const report = {
   scope: 'Exact built UI, actual Garden and existing production-engine final-gain PCM; keyboard input and synthetic CPU contention, no physical MIDI/speaker, perceptual or release acceptance',
   limits: {routeResponseMs: 5000, firstKeyboardStartMs: 5000, gardenHandshakeMs: 20000},
   performanceDistributions: 'Observations only; no calibrated p50/p95 or hardware-latency acceptance',
+  traceScope: 'Protocol events only; continuous screenshots/DOM snapshots delay trusted keys and invalidate audio timing. First-fault screenshot remains separate.',
   fault,
   faultScope: fault === 'mute' ? 'Test-only capture worklet substitutes zero PCM; production output is unchanged' :
     fault === 'drop' ? 'Test-only capture omits the second observed block; production output is unchanged' :
@@ -111,7 +112,7 @@ async function cleanup() {
   // PWA update has its own lane. A fresh, SW-free profile isolates UI/engine timing.
   context = await browser.newContext({viewport: {width: 1366, height: 900}, serviceWorkers: 'block'})
   context.setDefaultTimeout(5000)
-  await context.tracing.start({screenshots: true, snapshots: true, sources: true})
+  await context.tracing.start({screenshots: false, snapshots: false, sources: false})
   await context.addInitScript(injectedFault => {
     const q = window.__uiPerf = {contexts: [], output: null, gesture: null, gardenAt: null,
       phase: null, phaseId: 0, fault: injectedFault, midiCalls: [], measurementPhase: 'cold-play',
@@ -237,10 +238,14 @@ async function cleanup() {
       })
     }, budget)
     await waitUntilScore(SCORE.noteOn)
+    const downStarted = Date.now()
     await page.keyboard.down('h')
+    const keyDownWallMs = Date.now() - downStarted
     await waitUntilScore(SCORE.noteOff)
     if (fault === 'late-release') await page.waitForTimeout(500)
+    const upStarted = Date.now()
     await page.keyboard.up('h')
+    const keyUpWallMs = Date.now() - upStarted
     await waitUntilScore(SCORE.seconds)
     const captured = await page.evaluate(score => {
       const q = window.__uiPerf, phase = q.phase, sampleRate = q.output.context.sampleRate
@@ -275,7 +280,7 @@ async function cleanup() {
     fs.writeFileSync(path.join(output, filename), wavBytes)
     const frameDistribution = distribution(captured.frames)
     delete captured.frames
-    report.audio.push({...captured, analysis, timingDriftMs: drift, uiFrameDistributionMs: frameDistribution,
+    report.audio.push({...captured, analysis, timingDriftMs: drift, inputTransportWallMs: {down: keyDownWallMs, up: keyUpWallMs}, uiFrameDistributionMs: frameDistribution,
       wav: filename, wavSha256: hash(wavBytes), performanceAcceptance: 'Frame/long-task distributions are observations; audio fault oracle is gated'})
     save()
     if (analysis.result !== 'PASS') {
