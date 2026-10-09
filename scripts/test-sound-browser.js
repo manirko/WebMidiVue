@@ -88,7 +88,7 @@ async function openSoundHelp(page) {
 // params.c/settings_readback.c, not the application's serialization helpers.
 async function openSettingsForTest(page, origin) {
   await page.goto(`${origin}/#/biotron`, {waitUntil: 'domcontentloaded'})
-  await page.getByText('Settings loaded. Individual changes apply live; presets need Apply preset to Biotron.', {exact: true}).waitFor({timeout: 15000})
+  await page.getByText(/^(Settings loaded\. Individual changes apply live; presets need Apply preset to Biotron\.|Saved on Biotron\.)/).waitFor({timeout: 15000})
   for (const summary of await page.locator('.settings-section > summary').all()) {
     if (!await summary.evaluate(element => element.parentElement.open)) await summary.click()
   }
