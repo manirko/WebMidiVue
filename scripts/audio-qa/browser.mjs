@@ -65,15 +65,18 @@ export async function captureScore(Engine,mode='normal',signal,recordMime){
   return {report:{task:'audio-realtime',mode,result:analysis.result==='INCONCLUSIVE'?'INCONCLUSIVE':detected?'PASS':'FAIL',mutationExpected:mode!=='normal',analysis,events,sampleRate:context.sampleRate,firstBlockWaitWallMs,scoreWallMs:performance.now()-wall,contextState:context.state,baseLatency:context.baseLatency,outputLatency:context.outputLatency,scope:'Isolated QA bench using production engine; not the running Play UI or physical output'},wav:wav([pcm],context.sampleRate),recording}
  }finally{
   try{await stopRecording()}finally{
-   if(recorder){recorder.ondataavailable=null;recorder.onerror=null;recorder.onstop=null}
-   if(sink){try{engine?.output.disconnect(sink)}finally{sink.stream.getTracks().forEach(track=>track.stop());sink.disconnect()}}
-  firstBlock=null
-  tap?.disconnect();drain?.disconnect()
-  if(tap){tap.port.onmessage=null;tap.port.close()}
-  // Closing the context alone leaves WebRenderer's polling interval alive.
-  // Use the production stop path, including its pending-request cleanup.
-  try{await engine?.stop()}
-  finally{try{if(context.state!=='closed')await context.close()}finally{if(url)URL.revokeObjectURL(url)}}
+   try{
+    if(recorder){recorder.ondataavailable=null;recorder.onerror=null;recorder.onstop=null}
+    if(sink){try{engine?.output.disconnect(sink)}finally{sink.stream.getTracks().forEach(track=>track.stop());sink.disconnect()}}
+   }finally{
+    firstBlock=null
+    tap?.disconnect();drain?.disconnect()
+    if(tap){tap.port.onmessage=null;tap.port.close()}
+    // Closing the context alone leaves WebRenderer's polling interval alive.
+    // Use the production stop path, including its pending-request cleanup.
+    try{await engine?.stop()}
+    finally{try{if(context.state!=='closed')await context.close()}finally{if(url)URL.revokeObjectURL(url)}}
+   }
   }
  }
 }

@@ -153,19 +153,22 @@ async function testRealtimeCapture() {
         catch (error) { return error.message === 'Recording format not supported' && before === window.__captureResources.contexts.length }
       })
       assert(unsupported, 'unsupported format must fail before creating audio resources')
-      report.recordingControls = await page.evaluate(async mime => {
+      report.recordingControls = await browserCall(browser, () => page.evaluate(async mime => {
         const Native = window.MediaRecorder, controls = []
         window.MediaRecorder = class extends Native { constructor(...args) { super(...args); throw Error('Injected encoder constructor failure') } }
         try { await window.__CaptureScore(window.__ElemEngine.ElementarySynthEngine, 'normal', undefined, mime); controls.push({name: 'constructor', detected: false}) }
         catch (error) { controls.push({name: 'constructor', detected: error.message === 'Injected encoder constructor failure'}) }
         finally { window.MediaRecorder = Native }
-        const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 2000)
+        const controller = new AbortController(); let timer, started = false
+        window.MediaRecorder = class extends Native {
+          start(...args) { super.start(...args); started = true; timer = setTimeout(() => controller.abort(), 1200) }
+        }
         try { await window.__CaptureScore(window.__ElemEngine.ElementarySynthEngine, 'normal', controller.signal, mime); controls.push({name: 'abort', detected: false}) }
-        catch (error) { controls.push({name: 'abort', detected: error.name === 'AbortError'}) }
-        finally { clearTimeout(timer) }
+        catch (error) { controls.push({name: 'abort-after-recorder-start', detected: started && error.name === 'AbortError'}) }
+        finally { clearTimeout(timer); window.MediaRecorder = Native }
         return {controls, intervals: window.__captureResources.intervals.size, blobs: window.__captureResources.blobs.size,
           contextStates: window.__captureResources.contexts.map(c => c.state), trackStates: window.__captureResources.tracks.map(t => t.readyState)}
-      }, capability.formats[0]); save()
+      }, formats[0]), 'creator fault controls'); save()
       assert(report.recordingControls.controls.every(row => row.detected), 'capture must retain the original constructor/abort failure')
       assert.equal(report.recordingControls.intervals, 0); assert.equal(report.recordingControls.blobs, 0)
       assert(report.recordingControls.contextStates.every(state => state === 'closed'))
@@ -250,6 +253,8 @@ async function testRealtimeCapture() {
   } catch (error) {
     report.status = 'FAIL'
     report.error = {message: String(error), stack: error.stack, pageErrors}
+    const pending = report.cases.at(-1)
+    if (pending?.reopenedStatus === 'PENDING') pending.reopenedStatus = 'FAILED'
     save() // The first failure survives a hanging screenshot or cleanup.
     if (page) await page.screenshot({path: path.join(output, 'first-fault.png'), timeout: 2000}).catch(() => {})
     throw error
