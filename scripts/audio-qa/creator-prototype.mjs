@@ -140,8 +140,10 @@ $('release').onclick = () => run(async () => { await finishAndRelease(); $('conn
 $('copy').onclick = async () => {
   const link = new URL(location.href); link.hash = new URLSearchParams({sound: $('sound').value, register: $('register').value, volume: $('volume').value})
   $('link-fallback').value = link.href
+  $('link-fallback').hidden = false; $('link-status').textContent = 'Copying. You can also copy this link manually.'; $('copy').disabled = true
   try { await navigator.clipboard.writeText(link.href); $('link-fallback').hidden = true; $('link-status').textContent = 'Sound link copied. It restores sound and register, not plant notes.' }
   catch { $('link-fallback').hidden = false; $('link-status').textContent = 'Copy this sound link manually.' }
+  finally { $('copy').disabled = false }
 }
 
 // Stop is acknowledged by the worklet after its last PCM message. No wall-clock
