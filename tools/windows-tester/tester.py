@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import urllib.parse
 import uuid
 import zipfile
@@ -200,19 +201,26 @@ def run_autotest(root, run, browser, executable, node):
  commands=[[node,str(scripts[0])],[node,str(scripts[1]),'--settings-only']]
  write_json(run/'autotest-config.json',{'at':utc(),'commands':commands,'browser':browser,'executable':executable,'web_commit':WEB_COMMIT,'native_midi':'NOT_USED; isolated synthetic fixture','physical_result':'NOT_RUN'})
  fault=None;code=None;cleanup='NOT_CHECKED';interrupted=False
+ deadline=time.monotonic()+600
  for index,command in enumerate(commands):
+  remaining=deadline-time.monotonic()
+  if remaining<=0:
+   fault='Autotest reached its total 600-second execution limit; the next suite was not started.'
+   break
   lane_env={**env}
   if index==1:
    (run/'settings').mkdir()
    lane_env['BIOTRON_TEST_EVIDENCE_DIR']=str(run/'settings')
   with (run/('autotest.log' if index==0 else 'settings.log')).open('w',encoding='utf-8') as log:
-   try:code=subprocess.run(command,cwd=root/'automation',env=lane_env,stdout=log,stderr=subprocess.STDOUT,timeout=600).returncode
+   try:code=subprocess.run(command,cwd=root/'automation',env=lane_env,stdout=log,stderr=subprocess.STDOUT,timeout=remaining).returncode
    except subprocess.TimeoutExpired:
-    cleanup='NOT_CONFIRMED';fault='Suite exceeded 600 seconds. Stop further autotest/capture until owned-process cleanup is confirmed.'
+    cleanup='NOT_CONFIRMED';fault='Autotest exceeded its total 600-second execution limit. Stop further autotest/capture until owned-process cleanup is confirmed.'
    except KeyboardInterrupt:
     interrupted=True;cleanup='NOT_CONFIRMED';fault='Suite interrupted. Stop further autotest/capture until owned-process cleanup is confirmed.'
    except OSError as error:
     cleanup='NOT_CONFIRMED';fault='Suite execution error: '+str(error)+'. Stop further autotest/capture until owned-process cleanup is confirmed.'
+  if not fault and time.monotonic()>deadline:
+   fault='Autotest results arrived after its total 600-second execution limit; keep the logs.'
   if code!=0:fault=fault or 'Autonomous suite failed; keep the first fault and log.'
   if not fault:
    try:

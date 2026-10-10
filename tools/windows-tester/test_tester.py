@@ -235,7 +235,8 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
    self.assertEqual(call.call_args_list[1].kwargs['env']['BIOTRON_TEST_EVIDENCE_DIR'],str(run/'settings'))
    self.assertEqual(args[0],['node',str(self.root/'automation/scripts/test-audition-browser.js')])
    self.assertEqual(kwargs['cwd'],self.root/'automation')
-   self.assertEqual(kwargs['timeout'],600)
+   self.assertGreater(kwargs['timeout'],0)
+   self.assertLessEqual(kwargs['timeout'],600)
    self.assertEqual(kwargs['env']['BIOTRON_QA_BROWSER'],'msedge' if browser=='edge' else 'chrome')
    self.assertEqual(kwargs['env']['EDGE_PATH' if browser=='edge' else 'CHROME_PATH'],'C:/Browser With Spaces/app.exe')
    self.assertEqual(kwargs['env']['BIOTRON_QA_DIST_ROOT'],str(self.root/'runtime'))
@@ -243,6 +244,44 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
    self.assertEqual(summary['status'],'PASS_SOFTWARE_ONLY')
    self.assertFalse(summary['customer_release'])
    self.assertEqual(summary['physical_windows_result'],'NOT_RUN')
+
+ def test_autonomous_second_phase_uses_only_remaining_budget(self):
+  run=tester.new_run(self.root,'shared-deadline');clock=[100.0]
+  execute=self.autonomous_fixture(run,'pass')
+  def timed_execute(command,**kwargs):
+   result=execute(command,**kwargs)
+   if command[-1]!='--settings-only':clock[0]+=450
+   return result
+  with mock.patch.object(tester.time,'monotonic',side_effect=lambda:clock[0]),mock.patch.object(tester.subprocess,'run',side_effect=timed_execute) as calls:
+   tester.run_autotest(self.root,run,'chrome','fixture','node')
+  self.assertEqual(calls.call_count,2)
+  self.assertEqual(calls.call_args_list[0].kwargs['timeout'],600)
+  self.assertEqual(calls.call_args_list[1].kwargs['timeout'],150)
+
+ def test_autonomous_expired_budget_does_not_launch_settings(self):
+  for elapsed in (600,601):
+   with self.subTest(elapsed=elapsed):
+    run=tester.new_run(self.root,'expired-deadline');clock=[100.0]
+    execute=self.autonomous_fixture(run,'pass')
+    def timed_execute(command,**kwargs):
+     result=execute(command,**kwargs);clock[0]+=elapsed;return result
+    with mock.patch.object(tester.time,'monotonic',side_effect=lambda:clock[0]),mock.patch.object(tester.subprocess,'run',side_effect=timed_execute) as calls,self.assertRaises(ValueError):
+     tester.run_autotest(self.root,run,'chrome','fixture','node')
+    self.assertEqual(calls.call_count,1)
+    self.assertEqual(json.loads((run/'autotest-summary.json').read_text())['status'],'FAIL')
+    self.assertTrue((run/'first-autotest-fault.json').is_file())
+
+ def test_autonomous_late_final_result_cannot_pass(self):
+  run=tester.new_run(self.root,'late-final-result');clock=[100.0]
+  execute=self.autonomous_fixture(run,'pass')
+  def timed_execute(command,**kwargs):
+   result=execute(command,**kwargs)
+   clock[0]+=151 if command[-1]=='--settings-only' else 450
+   return result
+  with mock.patch.object(tester.time,'monotonic',side_effect=lambda:clock[0]),mock.patch.object(tester.subprocess,'run',side_effect=timed_execute),self.assertRaises(ValueError):
+   tester.run_autotest(self.root,run,'chrome','fixture','node')
+  self.assertEqual(json.loads((run/'autotest-summary.json').read_text())['status'],'FAIL')
+  self.assertTrue((run/'first-autotest-fault.json').is_file())
 
  def test_autonomous_failure_timeout_or_early_exit_cannot_pass(self):
   for mode in ['fail','timeout','early','settings_fail','settings_timeout','settings_early','settings_old_actions']:
