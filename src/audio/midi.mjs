@@ -17,7 +17,7 @@ export function describeMidiAccessError(error) {
     return 'MIDI permission was not allowed. Allow device access, then try again.'
   }
   if (error?.name === 'SecurityError') {
-    return 'MIDI is blocked on this page. Open the secure Playtronica Settings address in current Chrome or Edge.'
+    return 'MIDI is blocked on this page. Check site permissions and browser policy. The page address must start with https:// or use localhost.'
   }
   return error?.message || 'MIDI could not start. Reconnect the device, then try again.'
 }

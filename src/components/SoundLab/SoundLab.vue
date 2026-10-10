@@ -38,6 +38,7 @@
           <p>{{ revealCopy.instruction }}</p>
           <details v-if="revealStage === 'intro'" class="play-help"><summary>Connection steps</summary><ol><li>Push both contact cables onto the device’s CONTACT PINS.</li><li>Clip them to two separate points on the same plant.</li><li>Connect USB with a data cable, then press Start listening.</li></ol><a href="/midi-access.html" target="_blank" rel="noopener">Browser permission help</a></details>
 
+          <CompatibilityNotice v-if="midiAdvisory" :issue="midiAdvisory" advisory />
           <div v-if="revealIssue" class="sound-lab__connect-notice" role="status" aria-live="polite">
             <strong>{{ revealIssue.title }}</strong>
             <span>{{ revealIssue.body }}</span>
@@ -114,7 +115,8 @@
     <CompatibilityNotice v-if="midiAdvisory" :issue="midiAdvisory" advisory />
 
     <section class="sound-lab__controls" aria-label="Sound controls">
-      <button type="button" class="btn btn-dark" @click="start" :disabled="starting || releaseBlocked || !capabilities.audio">Start sound</button>
+      <button v-if="!capabilities.midi" type="button" class="btn btn-dark" @click="toggleExample" :disabled="releaseBlocked || !capabilities.audio">{{ examplePlaying || audioStarting ? 'Stop example' : 'Listen to example' }}</button>
+      <button type="button" class="btn btn-dark sound-lab__start" @click="start" :disabled="starting || releaseBlocked || !capabilities.audio">Start sound</button>
       <button type="button" class="btn btn-outline-dark" @click="stop" :disabled="(starting && !midiOpening && !audioStarting) || (!engine && !midi)">Stop &amp; release</button>
       <button type="button" class="btn btn-outline-danger" @click="panic" :disabled="!engine">Stop notes</button>
       <label class="sound-lab__quality">
@@ -268,7 +270,7 @@ export default {
         instruction: this.revealProfile[stage === 'revealed' ? 'explanation' : `${stage}Instruction`]}
     },
     canStartReveal() { return this.capabilities.audio && this.capabilities.midi },
-    midiAdvisory() { return this.revealMode ? null : buildMidiAdvisory(this.platformCapabilities) }
+    midiAdvisory() { return buildMidiAdvisory(this.platformCapabilities) }
   },
   data() {
     const capabilities = detectSoundCapabilities()
@@ -666,6 +668,8 @@ export default {
 .sound-lab__intro p, .sound-lab__midi p { color: #625e58; line-height: 1.5; }
 .sound-lab section { margin-top: 2rem; }
 .sound-lab__controls, .sound-lab__variants, .sound-lab__midi-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.sound-lab__controls button { min-height:44px; }
+@media (any-hover: none) and (any-pointer: coarse) { .sound-lab[data-midi-capability="unavailable"] .sound-lab__start { display:none; } }
 .sound-lab__status { min-height: 1.5rem; padding-left: .5rem; color: #625e58; }
 .sound-lab__diagnostic { margin-top: .5rem; }
 .sound-lab__quality { display: inline-flex; flex-wrap:wrap; min-height: 44px; align-items: center; gap: .4rem; margin: 0; padding: 0 .35rem; white-space: normal; }

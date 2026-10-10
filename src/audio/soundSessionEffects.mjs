@@ -82,13 +82,13 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
         if (attemptId !== this.permissionAttemptId || error?.name === 'AbortError') return
         failure = error.message || `${this.revealProfile.productName} could not start.`
         const missingDevice = /was not found|No MIDI inputs found/i.test(failure)
-        const denied = /permission was not allowed/i.test(failure)
+        const denied = /permission was not allowed|MIDI is blocked on this page/i.test(failure)
         recordBiotronEvent('midi.connection_changed', {result: 'failed', error_type: denied ? 'permission_denied' : missingDevice ? 'device_missing' : 'connection_failed'})
         await this.stop()
         if (!this.releaseBlocked) {
           this.status = missingDevice ? 'Device not connected.' : 'Could not start listening.'
           this.revealIssue = missingDevice
-            ? {title: 'Connect the device', body: 'Connect the device to this computer with a USB data cable, then press Start listening again.'}
+            ? {title: 'Connect the device', body: 'Connect the device with a USB data cable, then press Start listening again.'}
             : {title: denied ? 'Allow access to Biotron' : 'Could not start listening', body: failure}
           this.firstSoundOutcome = 'not_yet'
         }
@@ -134,8 +134,8 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
     async changeQuality(event) {
       if (this.starting || this.releaseBlocked) { event.target.checked = this.lowCpu; return }
       const previous = this.lowCpu, safe = event.target.checked
-      const restartExample = this.examplePlaying || (this.revealMode && !this.capabilities.midi && !this.keyboardOn)
-      const restartAction = restartExample ? 'Open Sound, then press Listen to example' : `Press ${!this.revealMode ? 'Start sound' : (this.keyboardOn ? 'Play with keyboard' : this.revealProfile.startLabel)}`
+      const restartExample = this.examplePlaying || (!this.capabilities.midi && !this.keyboardOn)
+      const restartAction = restartExample ? `${this.revealMode ? 'Open Sound, then press' : 'Press'} Listen to example` : `Press ${!this.revealMode ? 'Start sound' : (this.keyboardOn ? 'Play with keyboard' : this.revealProfile.startLabel)}`
       this.lowCpu = safe
       if (this.engine) await this.stop()
       if (this.releaseBlocked) { this.lowCpu = previous; return }

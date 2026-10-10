@@ -589,8 +589,8 @@ async function verifyCapabilityFallbacks(browser, origin) {
   audioOnly.on('pageerror', error => audioOnlyErrors.push(error.message))
   await audioOnly.goto(`${origin}/#/sound`, {waitUntil: 'domcontentloaded'})
   await audioOnly.locator('.sound-lab[data-audio-capability="available"][data-midi-capability="unavailable"]').waitFor()
-  await audioOnly.getByRole('heading', {name: 'USB device connection isn’t available here'}).waitFor()
-  await audioOnly.getByText(/still try every sound with your keyboard or screen/i).waitFor()
+  await audioOnly.getByRole('heading', {name: 'This browser can play examples.'}).waitFor()
+  await audioOnly.locator('.sound-lab .compatibility-notice').getByText(/hear notes from your instrument/i).waitFor()
   assert.strictEqual(await audioOnly.locator('.sound-lab__midi').count(), 0)
   assert.strictEqual(await audioOnly.getByRole('button', {name: 'Find MIDI device'}).count(), 0)
   await audioOnly.getByRole('button', {name: 'Start sound'}).click()
@@ -610,8 +610,8 @@ async function verifyCapabilityFallbacks(browser, origin) {
     ['/scales', 'Scales'], ['/circle', 'Circle'], ['/scala', 'Playtronica device']
   ]) {
     await audioOnly.goto(`${origin}/#${route}`, {waitUntil: 'domcontentloaded'})
-    await audioOnly.getByRole('heading', {name: 'No MIDI in this browser'}).waitFor()
-    await audioOnly.getByText(`${product} connects over Web MIDI`).waitFor()
+    await audioOnly.getByRole('heading', {name: 'Device connection isn’t available here'}).waitFor()
+    await audioOnly.getByText(`To receive notes from ${product}`).waitFor()
     assert.strictEqual(await audioOnly.getByText('Select Device', {exact: true}).count(), 0)
   }
   assert.deepStrictEqual(audioOnlyErrors, [])
@@ -648,6 +648,7 @@ async function verifyCapabilityFallbacks(browser, origin) {
       configurable: true,
       value: async () => {
         window.__permissionRequests = (window.__permissionRequests || 0) + 1
+        if (window.__policyBlocksMidi) throw new DOMException('Policy denied', 'SecurityError')
         if (!window.__permissionNowAllowed) throw new DOMException('Permission denied', 'NotAllowedError')
         return {inputs: new Map(), outputs: new Map(), addEventListener() {}, removeEventListener() {}}
       }
@@ -675,6 +676,12 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await help.getByRole('heading', {name: 'Allow instrument access'}).waitFor()
   assert.equal(await help.locator('details').count(), 8)
   await help.close()
+  await denied.evaluate(() => { window.__policyBlocksMidi = true })
+  await denied.getByRole('button', {name: 'Start listening'}).click()
+  await denied.getByText(/Check site permissions and browser policy/).waitFor()
+  assert.equal(await permissionHelp.getAttribute('href'), '/midi-access.html')
+  assert.equal(await denied.locator('.compatibility-notice').count(), 0, 'policy denial incorrectly requests another browser')
+  await denied.evaluate(() => { window.__policyBlocksMidi = false })
   const requestCount = await denied.evaluate(() => window.__permissionRequests)
   await denied.evaluate(() => { window.__permissionNowAllowed = true })
   await denied.getByRole('button', {name: 'Start listening'}).click()
@@ -698,8 +705,9 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await missing.getByRole('button', {name: 'Start listening'}).click()
   try { await missing.getByText('Connect the device', {exact: true}).waitFor() }
   finally { console.log('Missing-device fallback elapsed ms: ' + (Date.now() - missingStarted)) }
-  await missing.getByText(/Connect the device to this computer with a USB data cable/i).waitFor()
+  await missing.getByText(/Connect the device with a USB data cable/i).waitFor()
   assert.strictEqual(await missing.getByRole('button', {name: 'Stop notes'}).count(), 0)
+  assert.equal(await missing.locator('.compatibility-notice').count(), 0, 'missing device incorrectly requests another browser')
   await missing.locator('.sound-lab[data-reveal-stage="intro"][data-audio-state="closed"][data-tab-lease="free"]').waitFor()
   await missingContext.close()
 
@@ -739,7 +747,7 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await iphone.getByRole('heading', {name: 'Settings'}).waitFor()
   await iphone.getByText(/Local preset — changes stay/).waitFor()
   await iphone.getByText('Browser & phone compatibility', {exact: true}).click()
-  assert.strictEqual(await iphone.getByRole('link', {name: 'MIDIWeb Browser', exact: true}).getAttribute('href'), 'https://apps.apple.com/us/app/midiweb-browser/id6757226617')
+  assert.strictEqual(await iphone.getByRole('link', {name: 'Web MIDI Browser app details', exact: true}).getAttribute('href'), 'https://apps.apple.com/us/app/web-midi-browser/id953846217')
   assert(await iphone.getByRole('button', {name: 'Check saved settings', exact: true}).isDisabled())
   const tempo = iphone.getByRole('spinbutton', {name: '🌱 The beat value', exact: true})
   const previousTempo = Number(await tempo.inputValue())
@@ -751,13 +759,28 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await iphone.getByText(/Local preset — changes stay/).waitFor()
   assert.strictEqual(Number(await tempo.inputValue()), changedTempo, 'no-MIDI local preset was not retained')
   await iphone.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
-  await iphone.getByRole('button', {name: 'Play with keyboard', exact: true}).waitFor()
+  assert.equal(await iphone.getByRole('button', {name: 'Play with keyboard', exact: true}).count(), 0,
+    'touch-only recovery must not suggest a computer keyboard')
+  await iphone.locator('.sound-palette > summary').tap()
+  await iphone.getByRole('button', {name: 'Listen to example', exact: true}).tap()
+  await iphone.locator('.sound-lab[data-example="playing"][data-audio-state="running"]').waitFor()
+  await iphone.getByRole('button', {name: 'Stop example', exact: true}).tap()
+  await iphone.locator('.sound-lab[data-example="idle"]').waitFor()
   assert(await iphone.getByRole('button', {name: 'Start listening'}).isDisabled())
   await iphone.goto(`${origin}/#/sound`, {waitUntil: 'domcontentloaded'})
-  await iphone.getByRole('heading', {name: 'USB device connection isn’t available here'}).waitFor()
-  await iphone.getByRole('link', {name: 'Get MIDIWeb Browser'}).waitFor()
+  await iphone.getByRole('heading', {name: 'This browser can play examples.'}).waitFor()
+  await iphone.getByRole('link', {name: 'Web MIDI Browser app details'}).waitFor()
   assert.strictEqual(await iphone.locator('.sound-lab__midi').count(), 0)
-  assert.strictEqual(await iphone.getByRole('button', {name: 'Start sound'}).isEnabled(), true)
+  assert.strictEqual(await iphone.getByRole('button', {name: 'Start sound'}).count(), 0, 'touch-only no-MIDI Sound must use its example action')
+  await iphone.getByRole('button', {name: 'Listen to example', exact: true}).tap()
+  await iphone.locator('.sound-lab[data-example="playing"][data-audio-state="running"]').waitFor()
+  await iphone.getByRole('button', {name: 'Stop example', exact: true}).tap()
+  await iphone.locator('.sound-lab[data-example="idle"]').waitFor()
+  await iphone.getByLabel('Limit to 4 notes at once', {exact: true}).check()
+  await iphone.getByText(/Sound stopped. Press Listen to example to start again./).waitFor()
+  await iphone.getByRole('button', {name: 'Listen to example', exact: true}).tap()
+  await iphone.locator('.sound-lab[data-example="playing"][data-quality="safe"]').waitFor()
+  await iphone.getByRole('button', {name: 'Stop example', exact: true}).tap()
   assert.deepStrictEqual(iphoneErrors, [])
   await iphoneContext.close()
 }

@@ -3,7 +3,7 @@ const fs = require('fs')
 const path = require('path')
 const zlib = require('zlib')
 
-const root = path.resolve(__dirname, '..', 'dist')
+const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
 for (const file of ['service-worker.js', 'manifest.json']) {
   assert(!fs.existsSync(path.join(root, file)), `${file} leaked into the normal production build`)
 }
@@ -30,6 +30,7 @@ assert(!javascript.includes('Meet Biotron'), 'beta first-play experience leaked 
 assert(!javascript.includes('Three experiments, ten options each.'), 'audition page leaked into the normal production bundle')
 assert(!javascript.includes('tone-reference'), 'audition bank data leaked into the normal production bundle')
 assert(!javascript.includes('Round Bright'), 'beta synth presets leaked into the normal production bundle')
+assert(!javascript.includes('This browser can play examples.'), 'beta browser recovery leaked into the normal production bundle')
 assert(!javascript.includes('Compatibility check'), 'beta compatibility UI leaked into the normal production bundle')
 assert(!javascript.includes('needs a computer'), 'beta device advice leaked into the normal production bundle')
 assert(!javascript.includes('Step back and keep still'), 'beta calibration UX leaked into the normal production bundle')

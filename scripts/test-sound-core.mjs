@@ -466,10 +466,12 @@ test('platform compatibility separates unsupported runtime from denied permissio
   })
   const midiIssue = buildCompatibilityIssue(noMidi, {requiresMidi: true, productName: 'Biotron'})
   assert.equal(midiIssue.kind, 'midi')
-  assert.equal(midiIssue.title, 'No MIDI in this browser')
-  assert.match(midiIssue.summary, /Biotron connects over Web MIDI/)
+  assert.equal(midiIssue.title, 'Device connection isn’t available here')
+  assert.match(midiIssue.summary, /receive notes from Biotron/)
   assert.match(midiIssue.steps.join(' '), /Chrome or Edge/i)
-  assert.match(buildMidiAdvisory(noMidi).summary, /keyboard or screen/i)
+  assert.equal(buildMidiAdvisory(noMidi).copyLink, true)
+  assert.equal(buildMidiAdvisory(noMidi).title, 'This browser can play examples.')
+  assert.doesNotMatch(buildMidiAdvisory(noMidi).summary, /keyboard|screen/i)
 
   const deniedButSupported = {...desktop}
   assert.equal(buildCompatibilityIssue(deniedButSupported, {requiresMidi: true}), null)
@@ -494,12 +496,14 @@ test('phones gate on Web MIDI capability, not on device name', () => {
   const iphoneIssue = buildCompatibilityIssue(iphone, {requiresMidi: true, productName: 'Scales'})
   assert.equal(iphoneIssue.kind, 'midi')
   assert.equal(iphone.appleMobile, true)
-  assert.match(iphoneIssue.steps.join(' '), /MIDIWeb Browser/)
-  assert.equal(iphoneIssue.action.label, 'Get MIDIWeb Browser')
-  assert.equal(iphoneIssue.action.href, 'https://apps.apple.com/us/app/midiweb-browser/id6757226617')
+  assert.match(iphoneIssue.steps.join(' '), /Web MIDI Browser/)
+  assert.equal(iphoneIssue.action.label, 'Web MIDI Browser app details')
+  assert.equal(iphoneIssue.action.href, 'https://apps.apple.com/us/app/web-midi-browser/id953846217')
   const iphoneAdvisory = buildMidiAdvisory(iphone)
-  assert.match(iphoneAdvisory.title, /USB device connection/i)
+  assert.match(iphoneAdvisory.title, /can play examples/i)
   assert.equal(iphoneAdvisory.action.href, iphoneIssue.action.href)
+
+  assert.equal(buildMidiAdvisory({...iphone, midi: true}), null, 'working iPhone API must not prompt a browser switch')
 
   const insecure = detectPlatformCapabilities({
     AudioContext,
@@ -507,6 +511,7 @@ test('phones gate on Web MIDI capability, not on device name', () => {
     navigator: {userAgent: 'Desktop'}
   })
   assert.equal(buildCompatibilityIssue(insecure, {requiresMidi: true}).kind, 'security')
+  assert.equal(buildMidiAdvisory(insecure).title, 'Open the secure Settings page')
 
   const noAudio = detectPlatformCapabilities({
     isSecureContext: true,
@@ -517,7 +522,7 @@ test('phones gate on Web MIDI capability, not on device name', () => {
 
 test('MIDI permission and security failures use actionable language', () => {
   assert.match(describeMidiAccessError({name: 'NotAllowedError'}), /Allow device access, then try again/i)
-  assert.match(describeMidiAccessError({name: 'SecurityError'}), /secure Playtronica Settings address/i)
+  assert.match(describeMidiAccessError({name: 'SecurityError'}), /site permissions and browser policy/i)
   assert.equal(describeMidiAccessError(new Error('driver unavailable')), 'driver unavailable')
 })
 

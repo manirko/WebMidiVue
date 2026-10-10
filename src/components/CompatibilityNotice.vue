@@ -3,31 +3,32 @@
     class="compatibility-notice"
     :class="{'compatibility-notice--advisory': advisory}"
     :role="advisory ? 'status' : 'alert'"
-    :aria-labelledby="headingId"
+    :aria-label="issue.title"
   >
     <div class="compatibility-notice__mark" aria-hidden="true">!</div>
     <div class="compatibility-notice__content">
-      <small>{{ advisory ? 'Limited mode' : 'Compatibility check' }}</small>
-      <component :is="advisory ? 'h2' : 'h1'" :id="headingId">{{ issue.title }}</component>
+      <small>{{ advisory ? 'Connection help' : 'Browser help' }}</small>
+      <component :is="advisory ? 'h2' : 'h1'">{{ issue.title }}</component>
       <p>{{ issue.summary }}</p>
       <ol v-if="issue.steps.length">
         <li v-for="step in issue.steps" :key="step">{{ step }}</li>
       </ol>
       <div v-if="issue.action || issue.copyLink || feedbackUrl" class="compatibility-notice__actions">
+        <button v-if="issue.copyLink" type="button" class="btn btn-dark" @click="copyPageLink">
+          {{ copied ? 'Link copied' : 'Copy page link' }}
+        </button>
         <a
           v-if="issue.action"
           :href="issue.action.href"
-          class="btn btn-dark"
+          class="btn btn-outline-secondary"
           target="_blank"
           rel="noopener"
         >{{ issue.action.label }}</a>
-        <button v-if="issue.copyLink" type="button" class="btn btn-outline-dark" @click="copyPageLink">
-          {{ copied ? 'Link copied' : 'Copy this page link' }}
-        </button>
         <a v-if="feedbackUrl" :href="feedbackUrl" class="btn btn-outline-dark" target="_blank" rel="noopener">Tell Andrey where it stopped</a>
       </div>
       <small v-if="issue.action && issue.action.note" class="compatibility-notice__action-note">{{ issue.action.note }}</small>
       <small v-if="feedbackUrl" class="compatibility-notice__action-note">WhatsApp opens with the version date and stopped stage. Nothing is sent until you press Send.</small>
+      <input v-if="copyStatus && !copied" class="form-control mt-2" aria-label="Page link" :value="pageLink" readonly @focus="$event.target.select()">
       <span v-if="copyStatus" class="compatibility-notice__copy-status" role="status">{{ copyStatus }}</span>
     </div>
   </section>
@@ -38,21 +39,19 @@ export default {
   name: 'CompatibilityNotice',
   props: {issue: {type: Object, required: true}, advisory: {type: Boolean, default: false}, feedbackUrl: {type: String, default: ''}},
   data() {
-    return {copied: false, copyStatus: ''}
-  },
-  computed: {
-    headingId() {
-      return `compatibility-${this.issue.kind}`
-    }
+    return {copied: false, copyStatus: '', pageLink: ''}
   },
   methods: {
     async copyPageLink() {
+      this.copied = false
+      this.copyStatus = ''
+      this.pageLink = window.location.href
       try {
-        await navigator.clipboard.writeText(window.location.href)
+        await navigator.clipboard.writeText(this.pageLink)
         this.copied = true
         this.copyStatus = 'Page link copied.'
       } catch (error) {
-        this.copyStatus = 'Could not copy the link. Copy it from the address bar.'
+        this.copyStatus = 'Copy was blocked. Select the link below and copy it.'
       }
     }
   }
@@ -111,6 +110,7 @@ export default {
 .compatibility-notice p { margin: 0; color: #66534d; line-height: 1.55; }
 .compatibility-notice ol { margin: 1rem 0 1.25rem; padding-left: 1.25rem; }
 .compatibility-notice li + li { margin-top: .4rem; }
+.compatibility-notice__actions .btn { min-height:44px; display:inline-flex; align-items:center; }
 .compatibility-notice__actions { display:flex; flex-wrap:wrap; gap:.65rem; margin-top:1rem; }
 .compatibility-notice__action-note,.compatibility-notice__copy-status { display:block; margin-top:.6rem; color:#66534d; font-size:var(--ui-text-small, .875rem); }
 

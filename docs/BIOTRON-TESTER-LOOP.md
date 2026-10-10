@@ -20,6 +20,18 @@ PCM/FFT/alias/tail/voice assertions remain unchanged. Realtime lifecycle is a
 separate test. Runner interruption controls wait for the fixture's readiness file
 before SIGINT; elapsed startup time is not a readiness signal.
 
+## Browser recovery — 10 October 2026
+
+The existing `test:sound:browser -- --capability-only` checks missing API,
+permission/policy denial, missing device and unavailable audio separately.
+A touch-only no-MIDI page must offer a working example, never a hidden keyboard.
+Quality checks cover Settings/Play/shared Sound, exact page-link copy,
+success→denial→success, a selectable fallback URL and unique accessible names.
+The shared production-isolation test also accepts `BIOTRON_QA_DIST_ROOT` and
+rejects beta recovery text in production JavaScript. Source capability detection,
+clipboard mocks and running browser audio do not prove native device transfer
+or audible phone output. Keep the b15 handoff bytes frozen for Sergey.
+
 ## Autonomous browser matrix — 9 October 2026
 
 The browser audition test sends trusted key down/up through the actual built UI.

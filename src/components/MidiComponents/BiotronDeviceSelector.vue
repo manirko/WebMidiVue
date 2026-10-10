@@ -30,7 +30,7 @@
     >
       Retry connection
     </button>
-    <div v-if="midiError" class="alert alert-warning mt-2 mb-0" role="alert">{{ midiError }}</div>
+    <div v-if="midiError" class="alert alert-warning mt-2 mb-0" role="alert">{{ midiError }} <a href="/midi-access.html" target="_blank" rel="noopener">Browser help</a></div>
   </div>
 </template>
 
@@ -143,7 +143,7 @@
             if (err && (err.name === "NotAllowedError" || err.name === "SecurityError")) {
               this.midiError = "MIDI access was blocked. Allow MIDI and SysEx for this site, then retry.";
             } else if (!navigator.requestMIDIAccess) {
-              this.midiError = "Web MIDI is not supported here. Use current Chrome or Edge on a computer. On iPhone or iPad 17.6+, try MIDIWeb Browser; Biotron support is experimental.";
+              this.midiError = "Device connection isn’t available in this browser. Open browser help for connection steps.";
             } else {
               this.midiError = "Could not open the MIDI port. Close your DAW or other MIDI apps, then retry.";
             }

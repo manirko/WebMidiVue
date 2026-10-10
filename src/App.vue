@@ -96,11 +96,8 @@
         </form>
         <details class="beta-compatibility">
           <summary>Browser &amp; phone compatibility</summary>
-          <ul>
-            <li><strong>Computer:</strong> current Chrome or Edge is the primary beta path.</li>
-            <li><strong>Android:</strong> current Chrome with USB host/OTG is experimental.</li>
-            <li><strong>iPhone or iPad:</strong> standard browsers do not provide Web MIDI. On iOS/iPadOS 17.6 or later, try <a href="https://apps.apple.com/us/app/midiweb-browser/id6757226617" target="_blank" rel="noopener">MIDIWeb Browser</a>; Biotron support is experimental.</li>
-          </ul>
+          <CompatibilityGate :route="$route" advisory><p>This browser can request device access. Connect USB with a data cable, then choose Start listening on Play.</p></CompatibilityGate>
+          <a href="/midi-access.html" target="_blank" rel="noopener">Connection and permission steps</a>
           <small>Firmware updates still require a computer and internet.</small>
         </details>
       </aside>

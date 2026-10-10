@@ -1,4 +1,4 @@
-export const MIDIWEB_BROWSER_URL = 'https://apps.apple.com/us/app/midiweb-browser/id6757226617'
+export const WEB_MIDI_BROWSER_URL = 'https://apps.apple.com/us/app/web-midi-browser/id953846217'
 export const taskFeedbackUrl = (result, reached, versionDate, task = 'first sound') => `https://wa.me/351937910673?text=${encodeURIComponent(`${result}\n\nReached: ${reached}\nVersion date: ${versionDate}\nTask: ${task}`)}`
 
 export const recordBiotronEvent = (name, input) => void import(/* webpackChunkName: 'biotron-telemetry' */ './biotron/telemetry.mjs').then(module => module.recordBiotronEvent(name, input)).catch(() => {})
@@ -52,36 +52,28 @@ export function buildCompatibilityIssue(capabilities, requirements = {}) {
     })
   }
 
-  // One capability check for every browser: an Android phone with Web MIDI passes, any browser without it stops here.
-  if (requirements.requiresMidi && !capabilities.midi) {
-    return Object.freeze({
-      kind: 'midi',
-      title: 'No MIDI in this browser',
-      summary: `${productName} connects over Web MIDI, and this browser does not provide it.`,
-      steps: Object.freeze([
-        'Use current Chrome or Edge on a computer.',
-        'Android is experimental: use current Chrome, a USB host/OTG connection, and a data-capable cable.',
-        `On iPhone or iPad, standard browsers cannot connect. Try MIDIWeb Browser on iOS or iPadOS 17.6 or later; ${productName} support is experimental.`
-      ]),
-      action: capabilities.appleMobile ? Object.freeze({
-        label: 'Get MIDIWeb Browser',
-        href: MIDIWEB_BROWSER_URL,
-        note: 'Then open this beta link inside MIDIWeb Browser.'
-      }) : null,
-      copyLink: true
-    })
-  }
-
   if (requirements.requiresAudio && !capabilities.audio) {
     return Object.freeze({
-      kind: 'audio',
-      title: 'Sound can’t start in this browser',
-      summary: 'This browser does not provide the audio engine needed by Playtronica Sound.',
-      steps: Object.freeze([
-        'Open this page in the latest Chrome or Edge on a computer.',
-        'Check that the browser is allowed to play audio.',
-        'Press Start sound again.'
+      kind: 'audio', title: 'Sound can’t start in this browser',
+      summary: 'Copy this page link and try Chrome or Edge on a computer.',
+      steps: Object.freeze(['Open the link in that browser, then start sound.']), copyLink: true
+    })
+  }
+  if (requirements.requiresMidi && !capabilities.midi) {
+    return Object.freeze({
+      kind: 'midi', title: 'Device connection isn’t available here',
+      summary: `To receive notes from ${productName}, open this page in a browser with device access.`,
+      steps: Object.freeze(capabilities.appleMobile ? [
+        'Using Web MIDI Browser with your instrument? Copy this page link and paste it into that app.',
+        'Connect USB with your cable or adapter, then choose Start listening on Play.'
+      ] : [
+        'Copy this page link. Open Chrome or Edge on your computer and paste the link.',
+        'Connect USB with a data cable, then start the device connection.'
       ]),
+      action: Object.freeze(capabilities.appleMobile ? {
+        label: 'Web MIDI Browser app details', href: WEB_MIDI_BROWSER_URL,
+        note: 'USB, adapter and device support need a separate check on your phone. Presets and permissions do not transfer between browsers.'
+      } : {label: 'Connection steps', href: '/midi-access.html#missing-midi'}),
       copyLink: true
     })
   }
@@ -91,16 +83,8 @@ export function buildCompatibilityIssue(capabilities, requirements = {}) {
 
 export function buildMidiAdvisory(capabilities) {
   if (capabilities.midi) return null
-  return Object.freeze({
-    kind: 'midi-advisory',
-    title: 'USB device connection isn’t available here',
-    summary: 'You can still try every sound with your keyboard or screen. For USB, use current Chrome or Edge on a computer. Android Chrome and MIDIWeb Browser on iPhone or iPad are experimental.',
-    steps: Object.freeze([]),
-    action: capabilities.appleMobile ? Object.freeze({
-      label: 'Get MIDIWeb Browser',
-      href: MIDIWEB_BROWSER_URL,
-      note: 'Requires iOS or iPadOS 17.6 or later.'
-    }) : null,
-    copyLink: false
-  })
+  const issue = buildCompatibilityIssue(capabilities, {requiresMidi: true})
+  if (issue.kind !== 'midi' || !capabilities.audio) return issue
+  return Object.freeze({...issue, title: capabilities.audio ? 'This browser can play examples.' : issue.title,
+    summary: 'To hear notes from your instrument, use a browser with device access.'})
 }

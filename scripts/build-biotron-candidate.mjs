@@ -124,8 +124,8 @@ page must stop and ask for one to be disconnected instead of choosing silently.
 
 ## Separate iPhone check — required before claiming an iOS fix
 
-Use MIDIWeb Browser, one Biotron and the same potted plant, with the phone model,
-iOS version, MIDIWeb version and cable/adapter recorded. Open the exact preview
+Use your tested Web MIDI Browser app, one Biotron and the same potted plant, with the phone model,
+iOS version, exact app name/version and cable/adapter recorded. Open the exact preview
 directly at \`/#/biotron/play\`. Do not update firmware.
 
 First confirm plant-triggered sound while the app stays visible. Then, as a

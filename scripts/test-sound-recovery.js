@@ -188,6 +188,7 @@ test('closed or releasing audio is never silently re-enabled', async () => {
 test('changing note limit names the available restart action after Stop resets keyboard intent', async () => {
   for (const [revealMode, keyboardOn, midi, examplePlaying, action] of [
     [false, false, true, false, 'Press Start sound'],
+    [false, false, false, false, 'Press Listen to example'],
     [true, true, true, false, 'Press Play with keyboard'],
     [true, false, true, false, 'Press Start listening'],
     [true, false, false, false, 'Open Sound, then press Listen to example'],

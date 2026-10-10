@@ -42,12 +42,12 @@ assert(!soundRoute.includes('requiresMidi: true'), 'Sound must preserve its audi
 assert(app.includes('<CompatibilityGate :route="$route">'), 'every beta route must pass through one compatibility gate')
 assert(webpack.includes("'src/components/CompatibilityGate.vue'"), 'beta must use the real compatibility gate')
 assert(webpack.includes("'src/components/DisabledCompatibilityGate.vue'"), 'normal production must use the no-op gate')
-assert(compatibility.includes('https://apps.apple.com/us/app/midiweb-browser/id6757226617'), 'iOS recovery must use the reviewed MIDIWeb Browser listing')
-assert(compatibility.includes('support is experimental'), 'iOS recovery must not claim verified device support')
-assert(notice.includes('issue.action.href'), 'the compatibility popup must expose the MIDIWeb recovery action')
+assert(compatibility.includes('https://apps.apple.com/us/app/web-midi-browser/id953846217'), 'iOS recovery must use the Web MIDI Browser listing used in the phone test')
+assert(compatibility.includes('need a separate check on your phone'), 'iOS recovery must not certify an untested phone or adapter')
+assert(notice.includes('issue.action.href'), 'the compatibility popup must expose the browser recovery action')
 assert(app.includes('Browser &amp; phone compatibility'), 'the beta must include a discoverable compatibility guide')
 
-console.log('Compatibility contract verified: device-only routes fail closed; beta Biotron local Settings and Sound remain available; MIDIWeb remains an explicit experimental iOS path.')
+console.log('Compatibility contract verified: device-only routes fail closed; beta Biotron local Settings and Sound remain available; browser help separates missing API from permission and device failures.')
 
 ;(async () => {
   const {biotronFirstSoundFeedbackUrl} = await import('../src/compatibility.mjs')

@@ -48,7 +48,8 @@ async function readQuality(page) {
     const smallPrimaryTargets = [...document.querySelectorAll(
       '[aria-label="Biotron tasks"] a, .beta-feedback__action, ' +
       'details.settings-section > summary, .sound-palette > summary, ' +
-      '.audio-compare button, .computer-keys button, .computer-keys select'
+      '.audio-compare button, .computer-keys button, .computer-keys select, ' +
+      '.compatibility-notice__actions .btn, .sound-lab__controls button'
     )]
       .filter(visible)
       .map(element => ({text: element.textContent.trim(), rect: element.getBoundingClientRect().toJSON()}))
@@ -223,6 +224,16 @@ async function auditProfile(browser, origin, profile) {
       `${profile.name}: visible settings slider uses a resize cursor`)
   }
 
+  if (!profile.midi) {
+    await page.getByText('Browser & phone compatibility', {exact: true}).click()
+    const notice = page.locator('.beta-compatibility .compatibility-notice')
+    await notice.getByRole('heading', {name: 'This browser can play examples.'}).waitFor()
+    await notice.getByRole('button', {name: 'Copy page link', exact: true}).click()
+    assert.equal(await page.evaluate(() => window.__copiedText), page.url())
+    await auditExpanded('Settings browser help')
+    await page.getByText('Browser & phone compatibility', {exact: true}).click()
+  }
+
   const hintCount = await auditHints(page, profile)
 
   // Feedback is a local editor. No mail client, backend or recorded outcome is
@@ -262,7 +273,7 @@ async function auditProfile(browser, origin, profile) {
     await page.evaluate(()=>window.__blockClipboard=false)
   }
 
-  await page.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
+  await page.goto(`${origin}/#/biotron/play${profile.midi ? '' : '?transfer=a%20b'}`, {waitUntil: 'domcontentloaded'})
   await page.getByRole('heading', {name: 'Plant music'}).waitFor()
   assert.strictEqual(await page.locator('.beta-feedback').count(), 0,
     `${profile.name}: first play must not duplicate the generic feedback block`)
@@ -270,6 +281,32 @@ async function auditProfile(browser, origin, profile) {
   // Hash-route navigation shares the observer with the prior disclosure gestures.
   assertQuality(playResult, `${profile.name}/Play closed`, false)
   assert.deepStrictEqual(pageErrors, [], `${profile.name}/Play closed: page errors`)
+  if (!profile.midi) {
+    const notice = page.locator('.sound-lab__reveal-copy .compatibility-notice')
+    const proof = {url: page.url(), noticeCount: await notice.count(),
+      startDisabled: await page.getByRole('button', {name: 'Start listening', exact: true}).isDisabled()}
+    fs.writeFileSync(path.join(artifacts, `${profile.name}-browser-recovery.json`), JSON.stringify(proof, null, 2))
+    assert.equal(proof.noticeCount, 1, `${profile.name}: missing MIDI leaves no browser recovery beside Start`)
+    assert.equal(proof.startDisabled, true)
+    await notice.getByRole('heading', {name: 'This browser can play examples.'}).waitFor()
+    assert.equal(await notice.getByRole('link', {name: 'Web MIDI Browser app details'}).getAttribute('href'),
+      'https://apps.apple.com/us/app/web-midi-browser/id953846217')
+    await notice.getByRole('button', {name: 'Copy page link', exact: true}).click()
+    assert.equal(await page.evaluate(() => window.__copiedText), page.url(), 'browser transfer lost URL components')
+    await notice.getByRole('button', {name: 'Link copied', exact: true}).waitFor()
+    await page.evaluate(() => window.__blockClipboard = true)
+    await notice.getByRole('button', {name: 'Link copied', exact: true}).click()
+    await notice.getByRole('button', {name: 'Copy page link', exact: true}).waitFor()
+    assert.equal(await notice.getByLabel('Page link', {exact: true}).inputValue(), page.url())
+    await page.evaluate(() => window.__blockClipboard = false)
+    await notice.getByRole('button', {name: 'Copy page link', exact: true}).click()
+    await notice.getByRole('button', {name: 'Link copied', exact: true}).waitFor()
+    assert.equal(await notice.getByLabel('Page link', {exact: true}).count(), 0)
+    await auditExpanded('Browser recovery and clipboard fallback')
+  } else {
+    assert.equal(await page.locator('.sound-lab__reveal-copy .compatibility-notice').count(), 0,
+      `${profile.name}: browser with MIDI is told to switch`)
+  }
   const sound = page.locator('.sound-palette')
   assert.equal(await sound.count(), 1, `${profile.name}: missing Sound palette`)
   assert.equal(await sound.evaluate(element => element.open), false,
@@ -293,6 +330,12 @@ async function auditProfile(browser, origin, profile) {
     await page.getByLabel('Keyboard octave', {exact: true}).waitFor()
     assert(await keyboard.isVisible(), `${profile.name}: computer keyboard controls are hidden`)
   }
+  if (!profile.midi) {
+    await sound.getByRole('button', {name: 'Listen to example', exact: true}).tap()
+    await page.locator('.sound-lab[data-example="playing"][data-audio-state="running"]').waitFor()
+    await sound.getByRole('button', {name: 'Stop example', exact: true}).tap()
+    await page.locator('.sound-lab[data-example="idle"]').waitFor()
+  }
   await auditExpanded('Play Sound open')
 
   if (profile.midi) {
@@ -313,6 +356,14 @@ async function auditProfile(browser, origin, profile) {
       return Math.round(feedback.getBoundingClientRect().top - main.getBoundingClientRect().bottom)
     })
     assert(feedbackGap <= 80, `${profile.name}: task feedback is hidden behind ${feedbackGap}px of empty space`)
+  }
+
+  if (!profile.midi) {
+    await page.goto(`${origin}/#/sound`, {waitUntil: 'domcontentloaded'})
+    await page.locator('.sound-lab .compatibility-notice').waitFor()
+    const sharedQuality = await readQuality(page)
+    fs.writeFileSync(path.join(artifacts, `${profile.name}-shared-sound-quality.json`), JSON.stringify(sharedQuality, null, 2))
+    assertQuality(sharedQuality, `${profile.name}/shared Sound`, false)
   }
 
   await context.close()
