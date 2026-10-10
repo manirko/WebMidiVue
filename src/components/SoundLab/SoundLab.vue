@@ -27,7 +27,7 @@
       />
       <header class="sound-lab__intro sound-lab__intro--reveal">
         <small>{{ revealProfile.eyebrow }}</small>
-        <h1>{{ revealProfile.title }}</h1>
+        <h1 tabindex="-1">{{ revealProfile.title }}</h1>
         <p>{{ revealProfile.promise }}</p>
       </header>
 

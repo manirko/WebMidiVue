@@ -6,10 +6,12 @@
         v-for="task in tasks"
         :key="task.id"
         :to="task.route"
+        custom v-slot="{href, navigate}"
+      ><a :href="href" @click="openTask($event, navigate, task)"
         class="device-task-nav__link"
         :class="{'device-task-nav__link--active': task.id === activeTask}"
         :aria-current="task.id === activeTask ? 'page' : null"
-      >{{ task.label }}</router-link>
+      >{{ task.label }}</a></router-link>
     </nav>
   </div>
 </template>
@@ -29,6 +31,16 @@ export default {
         {id: 'play', label: 'Play', route: this.playRoute},
         {id: 'settings', label: 'Settings', route: this.settingsRoute}
       ]
+    }
+  },
+  methods: {
+    async openTask(event, navigate, task) {
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button > 0) return
+      await navigate(event)
+      if (this.$route.path !== task.route) return
+      await this.$nextTick()
+      const title = document.querySelector(task.id === 'settings' ? '.settings-hero h2' : '.sound-lab__intro h1')
+      title?.focus({preventScroll: true}); title?.scrollIntoView({block: 'start'})
     }
   }
 }
@@ -81,7 +93,6 @@ export default {
   color: #fff;
   background: #315ee7;
   font-weight: 700;
-  pointer-events: none;
 }
 
 @media (max-width: 420px) {

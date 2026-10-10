@@ -9,7 +9,7 @@
         settings-route="/biotron"
     />
     <header :class="{'settings-hero': betaBuild}">
-      <component :is="embedded ? 'h2' : 'h1'" ref="settingsHeading" :tabindex="embedded ? -1 : null" class="text-center">{{ betaBuild ? 'Settings' : 'Biotron settings' }}</component>
+      <component :is="embedded ? 'h2' : 'h1'" :tabindex="embedded ? -1 : null" class="text-center">{{ betaBuild ? 'Settings' : 'Biotron settings' }}</component>
       <p v-if="betaBuild" class="settings-hero__intro">Change settings in this browser. Connect Biotron to change settings on the device.</p>
     </header>
     <div v-if="betaBuild && !embedded && (soundPlayer?.engine || soundPlayer?.midi || soundPlayer?.starting || soundPlayer?.releaseBlocked)" class="alert py-2" :class="soundPlayer?.releaseBlocked ? 'alert-warning' : 'alert-success'" role="status">
@@ -812,7 +812,6 @@ export default  {
     if (this.betaBuild && this.device) await this.loadPersistedSettings(this.device)
   },
   mounted() {
-    if (this.embedded) { this.$refs.settingsHeading.focus({preventScroll: true}); this.$refs.settingsHeading.scrollIntoView({block: 'start'}) }
     this.listenerScope = createListenerScope()
     if (!this.betaBuild) this.listenerScope.on(document, 'keyup', event => {
       if (event.code === 'Enter' && !this.is_loading) this.change_data_loader();

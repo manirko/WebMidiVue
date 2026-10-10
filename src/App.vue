@@ -123,8 +123,7 @@
 
 
 <script>
-import {defineAsyncComponent} from 'vue';
-const SoundLab = defineAsyncComponent(() => import(/* webpackChunkName: "sound-lab" */ '@sound-lab'));
+import SoundLab from '@sound-lab';
 import DeviceTaskNav from '@/components/DeviceTaskNav.vue';
 import SocialLinks from "@/components/SocialLinks.vue";
 import CompatibilityGate from "@compatibility-gate";
