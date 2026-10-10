@@ -15,6 +15,24 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  """
  checked=subprocess.run(['node','-'],input=metric_test,capture_output=True,text=True,timeout=5)
  assert checked.returncode==0,checked.stderr
+ # Initial DOM counts must wait for the lazily loaded Sound variants, without
+ # accepting missing/extra variants or different labels after that wait.
+ ready_start=browser.index("    await page.goto(`${origin}/#/sound`, {waitUntil: 'domcontentloaded'})")
+ ready_end=browser.index('    const volume = ',ready_start)
+ ready_test="const assert=require('node:assert/strict');const body="+json.dumps(browser[ready_start:ready_end])+r""";
+ const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+ async function check(missing=false,count=7,wrongLabels=false){
+  let mounted=false;
+  const variants={first(){return this},async waitFor(){await Promise.resolve();if(missing)throw Error('variant missing before deadline');mounted=true},async count(){return mounted?count:0},async allTextContents(){return wrongLabels?['bad']:['Round','Round Bright','Fat','Fat Bass','String','Soft String','Air']}};
+  const page={async goto(){},getByRole(){return {async count(){return 0}}},locator(selector){assert.equal(selector,'.sound-lab__variant');return variants}};
+  await new AsyncFunction('page','origin','assert',body)(page,'https://fixture.invalid',assert);
+  assert(mounted,'Inspection ran before the lazy Sound variants mounted');
+ }
+ (async()=>{await check();await assert.rejects(check(true),/variant missing/);await assert.rejects(check(false,8),assert.AssertionError);await assert.rejects(check(false,7,true),assert.AssertionError)})().catch(error=>{console.error(error);process.exitCode=1});
+ """
+ checked=subprocess.run(['node','-'],input=ready_test,capture_output=True,text=True,timeout=5)
+ assert checked.returncode==0,checked.stderr
+ print('Sound lazy readiness: missing/extra variants and changed labels still fail')
  # The real browser-bench generator must reject stale/ambiguous boundaries,
  # rather than silently copying the remaining Node launcher into browser JS.
  marker='// browser-qa:sound-body:start'

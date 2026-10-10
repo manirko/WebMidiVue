@@ -1076,6 +1076,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     const devtools = browser.browserType().name() === 'chromium' ? await context.newCDPSession(page) : null
     if (!devtools) console.log('NOT SUPPORTED: CDP CPU throttle, JS heap and realtime heap soak in this engine; generic audio/MIDI/lifecycle checks still run')
     await page.goto(`${origin}/#/sound`, {waitUntil: 'domcontentloaded'})
+    await page.locator('.sound-lab__variant').first().waitFor({state: 'visible'})
     assert.strictEqual(await page.getByRole('navigation', {name: 'Choose a device'}).count(), 0)
     assert.strictEqual(await page.getByRole('link', {name: 'TouchMe'}).count(), 0)
     assert.strictEqual(await page.locator('.sound-lab__variant').count(), 7)

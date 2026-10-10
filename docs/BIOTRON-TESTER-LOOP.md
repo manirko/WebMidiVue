@@ -331,3 +331,15 @@ selection; invalid stored IDs cannot inject a preset. Read-only Settings queries
 123/126 are allowed; selecting sounds cannot write settings/firmware. First
 failures remain private evidence. Windows/mobile/human musical acceptance stay
 open.
+
+## Online readiness and operator time —10 October
+
+`domcontentloaded` does not prove that a lazy route has mounted. The initial
+Sound check now waits for the first visible variant before preserving the exact
+7-count/labels assertions and the existing5s deadline. Existing runner controls
+reject missing/extra variants and altered labels; the original HTTPS faults
+and before-control0!=7 remain saved. This changes the tester, not runtime643.
+
+Sergey9Oct11:06 says he does not want his PC running overnight. Start with online
+W01–W03; offer bounded daytime Claude automation separately. Declined automation
+is NOT_RUN, neverPASS. Do not prescribe background/nightly machine commitments.
