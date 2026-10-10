@@ -133,7 +133,7 @@ async function testCreatorPrototype() {
     assert(await page.locator('#connect').isDisabled()); assert.match(await page.locator('#connection').innerText(), /MIDI-capable/)
     assert.equal(await page.evaluate(() => __creatorControls.camera), 0); pass('no-device page, truthful MIDI fallback, no permission on load')
     if (benchmark) {
-      await benchmarkCreator({browser, context, page, report, save, output, fs, hash})
+      await benchmarkCreator({browser, context, page, report, save, output, fs, hash, browserCall})
       await browserCall(browser, () => page.evaluate(() => __CreatorPrototype.close()), 'creator close')
       assert.equal(await page.evaluate(() => __CreatorPrototype.engine.context.state), 'closed')
       assert.equal(await page.evaluate(() => __CreatorPrototype.engine.core._timer), null)
@@ -387,7 +387,7 @@ async function testCreatorPrototype() {
   }
 }
 
-async function benchmarkCreator({browser, context, page, report, save, output, fs, hash}) {
+async function benchmarkCreator({browser, context, page, report, save, output, fs, hash, browserCall}) {
   const chromium = browser.browserType().name() === 'chromium'
   const cdp = chromium ? await context.newCDPSession(page) : null
   const system = chromium ? await browser.newBrowserCDPSession() : null
@@ -406,7 +406,7 @@ async function benchmarkCreator({browser, context, page, report, save, output, f
   await page.selectOption('#sound', 'tone-reference'); await phrase()
   await begin(); await phrase(); await finish(); await remove() // Warm engine and recording worklet before comparing.
   report.benchmark = {scope: 'Own Mac isolated page; same Round score/register0/volume70/standard8 voices. WAV recording only, no camera/MIDI, trace has no continuous images/DOM. Other machine load uncontrolled.',
-    cpuScope: 'CDP own browser process counters across all threads and renderer main-thread duration; not machine CPU percent. Matching process identities required.',
+    cpuScope: 'CDP own browser process CPU counters across all threads; TaskDuration uses default timeTicks and measures elapsed main-thread task time, not separate CPU time or machine CPU percent. Matching process identities required.',
     memoryScope: 'Instant isolate JS/embedder/ArrayBuffer storage and post-removal forced-GC snapshots, not native total memory or leak certification.',
     unsupported: chromium ? [] : ['CDP process CPU, main-thread duration and isolate heap NOT SUPPORTED in this engine'],
     order: [false, true, true, false, false, true], warmup: ['off', 'on'], rows: []}; save()
@@ -451,11 +451,11 @@ async function benchmarkCreator({browser, context, page, report, save, output, f
       const file = await page.evaluate(async () => ({bytes: Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer())), seconds: __CreatorPrototype.takes[0].seconds}))
       const name = `benchmark-${index}.wav`, bytes = Buffer.from(file.bytes); fs.writeFileSync(output + '/' + name, bytes)
       row.file = {name, bytes: bytes.length, seconds: file.seconds, sha256: hash(bytes)}; save() // Persist actual bytes before decoder/measurement asserts.
-      row.decoded = await page.evaluate(async () => {
+      row.decoded = await browserCall(browser, () => page.evaluate(async () => {
         const context = new AudioContext()
         try { const audio = await context.decodeAudioData(await __CreatorPrototype.takes[0].file.arrayBuffer()), pcm = audio.getChannelData(0); let peak = 0, sum = 0; for (const value of pcm) { if (!Number.isFinite(value)) throw Error('Non-finite benchmark PCM'); peak = Math.max(peak, Math.abs(value)); sum += value * value }; return {seconds: audio.duration, rms: Math.sqrt(sum / pcm.length), peak} }
         finally { await context.close() }
-      })
+      }), 'creator benchmark fresh WAV decode')
       assert(row.decoded.rms > .001 && row.decoded.peak < .99); await remove()
     } else { row.finalizationMs = null; assert.equal(row.observed.captureBlocks, 0); assert.equal(row.observed.capturePcmBytes, 0) }
     await page.evaluate(() => { window.__creatorBenchmark = null })
