@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import {analyze,wav,SCORE} from './analyze.mjs'
+import {analyze,wav,SCORE,creatorFixtureMetrics,creatorFixtureHasBoth} from './analyze.mjs'
 const rate=8000,n=rate*SCORE.seconds,good=new Float32Array(n)
 for(let i=rate;i<rate*3;i++)good[i]=.1*Math.sin(i*2*Math.PI*440/rate)
 assert.equal(analyze([good],rate).result,'PASS')
@@ -19,6 +19,13 @@ assert.deepEqual(analyze([good],rate,{clocksValid:false}).captureProblems,['INVA
 assert.deepEqual(analyze([good.slice(0,rate*2)],rate).captureProblems,['INCOMPLETE_PCM'])
 const view=new DataView(wav([good,good],rate));assert.equal(view.getUint16(20,true),3);assert.equal(view.getUint16(22,true),2);assert.equal(view.getUint32(40,true),n*8);assert.equal(view.getFloat32(44+rate*8,true),good[rate])
 console.log('PASS: signal, silence, lost Note Off before panic, stuck tail, clipping, non-finite, dropped blocks, timing, truncation and float WAV')
+const fixtureTone=frequency=>Float32Array.from({length:rate},(_,i)=>.04*Math.sin(2*Math.PI*frequency*i/rate))
+const fixtureMusic=fixtureTone(440*2**((60-69)/12)),fixtureMic=fixtureTone(310)
+const fixtureBaseline={synth:creatorFixtureMetrics(fixtureMusic,rate),micOnly:creatorFixtureMetrics(fixtureMic,rate)}
+assert(creatorFixtureHasBoth(creatorFixtureMetrics(fixtureMusic.map((x,i)=>x+fixtureMic[i]),rate),fixtureBaseline))
+for(const samples of [fixtureMusic,fixtureMic,fixtureMic.map(x=>2*x),new Float32Array(rate)])assert(!creatorFixtureHasBoth(creatorFixtureMetrics(samples,rate),fixtureBaseline))
+assert.throws(()=>creatorFixtureMetrics(Float32Array.of(NaN),rate),/Non-finite/)
+console.log('PASS: controlled music/mic mixture; music-only, mic-only, doubled mic-only and silence rejected')
 
 // Reuse the existing capture UI and production engine. This flag replaces the
 // manual three-button check; it does not introduce another audio renderer.
@@ -187,28 +194,25 @@ async function testCreatorPrototype() {
           assert.equal(probe.streams.find(stream => stream.codec_type === 'audio').codec_name, 'aac', 'Use explicit AAC when the browser can encode it')
         }
         const pcm = execFileSync('/opt/homebrew/bin/ffmpeg', ['-v', 'error', '-i', filename, '-vn', '-ac', '1', '-ar', '48000', '-f', 'f32le', '-'], {timeout: 10000, maxBuffer: 3000000})
-        let squares = 0, peak = 0, tone310 = 0
-        for (let at = 0; at < pcm.length; at += 4) { const value = pcm.readFloatLE(at); assert(Number.isFinite(value)); squares += value ** 2; peak = Math.max(peak, Math.abs(value)) }
-        // The controlled microphone is 310Hz; isolate it from the real synth score.
-        for (let block = 0; block + 24000 * 4 <= pcm.length; block += 24000 * 4) {
-          let sin = 0, cos = 0
-          for (let i = 0; i < 24000; i++) { const value = pcm.readFloatLE(block + i * 4), phase = i * 2 * Math.PI * 310 / 48000; sin += value * Math.sin(phase); cos += value * Math.cos(phase) }
-          tone310 = Math.max(tone310, 2 * Math.hypot(sin, cos) / 24000)
-        }
-        const rms = Math.sqrt(squares / (pcm.length / 4)); assert(rms > .001); assert(peak < .999)
-        videoAudio[label] = {rms, peak, tone310}; report.videoAudio = videoAudio; save()
+        const samples = Float32Array.from({length: pcm.length / 4}, (_, i) => pcm.readFloatLE(i * 4))
+        const metrics = creatorFixtureMetrics(samples, 48000), {rms, peak} = metrics
+        assert(rms > .001); assert(peak < .999)
+        videoAudio[label] = metrics; report.videoAudio = videoAudio; save()
         if (label === 'synth-and-mic') {
-          const bothPresent = metrics => metrics.rms > videoAudio['mic-only'].rms * 1.5 && metrics.tone310 > videoAudio['mic-only'].tone310 * .7
+          const baseline = {synth: videoAudio.synth, micOnly: videoAudio['mic-only']}
+          const bothPresent = metrics => creatorFixtureHasBoth(metrics, baseline)
           assert(bothPresent(videoAudio[label]), 'Final file must retain music and the known microphone signal together')
           assert(!bothPresent(videoAudio.synth), 'Missing microphone control must be rejected')
           assert(!bothPresent(videoAudio['mic-only']), 'Missing music control must be rejected')
-          pass('simultaneous music/microphone fixture retained; isolated missing-source controls rejected')
+          assert(!bothPresent(creatorFixtureMetrics(samples.map(x => 0), 48000)), 'Silence control must be rejected')
+          assert(!bothPresent({...videoAudio['mic-only'], music: videoAudio['mic-only'].music * 2, mic310: videoAudio['mic-only'].mic310 * 2}), 'Louder microphone without music must be rejected')
+          pass('simultaneous music/microphone fixture retained; missing-source, loud-mic-only and silence controls rejected')
         }
         report.checks.push({name: 'native encoded video: ' + label, mime: observed.mime, bytes: observed.bytes.length, sha256: hash(Buffer.from(observed.bytes)), rms, probe})
         await page.locator('#takes video').last().evaluate(video => video.play()); await page.waitForTimeout(350)
         assert(await page.locator('#takes video').last().evaluate(video => video.currentTime > 0 && video.videoWidth === 240)); save()
       }
-      pass('camera+synth and optional mic → actual video files → independent native decode; no physical camera/mic claim')
+      pass('camera+synth and optional mic → actual video files → ffmpeg decode + browser playback; no physical camera/mic claim')
       await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
       await page.evaluate(() => {
         window.__oldPlay = HTMLMediaElement.prototype.play

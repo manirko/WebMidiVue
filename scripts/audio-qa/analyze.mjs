@@ -28,3 +28,24 @@ export function wav(channels,sampleRate){
  for(let i=0;i<n;i++)for(let c=0;c<count;c++)v.setFloat32(44+(i*count+c)*4,channels[c][i],true)
  return b
 }
+
+// Known creator fixture only: microphone at 310Hz, synth plays MIDI 48/60/64/67/72/84.
+// A loud microphone is not evidence of music. Check their separate frequencies.
+export function creatorFixtureMetrics(samples,sampleRate){
+ if(!samples.length||!Number.isFinite(sampleRate)||sampleRate<2000)throw Error('Invalid creator PCM format')
+ let squares=0,peak=0,mic310=0,music=0
+ for(const x of samples){if(!Number.isFinite(x))throw Error('Non-finite creator PCM');squares+=x*x;peak=Math.max(peak,Math.abs(x))}
+ const size=Math.floor(sampleRate/2),frequencies=[310,...[48,60,64,67,72,84].map(note=>440*2**((note-69)/12))]
+ for(let at=0;at+size<=samples.length;at+=size){
+  const amplitudes=frequencies.map(frequency=>{
+   let sin=0,cos=0,weight=0
+   for(let i=0;i<size;i++){const w=.5-.5*Math.cos(2*Math.PI*i/(size-1)),phase=2*Math.PI*frequency*i/sampleRate,x=samples[at+i]*w;sin+=x*Math.sin(phase);cos+=x*Math.cos(phase);weight+=w}
+   return 2*Math.hypot(sin,cos)/weight
+  })
+  mic310=Math.max(mic310,amplitudes[0]);music=Math.max(music,...amplitudes.slice(1))
+ }
+ return {rms:Math.sqrt(squares/samples.length),peak,mic310,music}
+}
+export function creatorFixtureHasBoth(metrics,{synth,micOnly}){
+ return synth.music>.001&&micOnly.mic310>.001&&metrics.music>synth.music*.5&&metrics.mic310>micOnly.mic310*.7
+}
