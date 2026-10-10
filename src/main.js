@@ -33,7 +33,7 @@ if (!window.location.hash && knownDirectRoutes.has(window.location.pathname)) {
 
 const routes = [
     { path: '/', component: HomeComponent},
-    { path: '/biotron', component: BiotronPageUpdated, props: {id: "BiotronWebMidiId_2" }, meta: {...deviceMeta('Biotron'), requiresMidi: !betaBuild} },
+    { path: '/biotron', component: BiotronPageUpdated, props: {id: "BiotronWebMidiId_2", embedded: betaBuild}, meta: {...deviceMeta('Biotron'), requiresMidi: !betaBuild} },
 
     { path: '/touchme', component: TouchMePage, props: {id: "TouchmeWebMidiId_2", showPagedModes: false}, meta: deviceMeta('TouchMe') },
     { path: '/touchme/test', component: TouchMePage, props: {id: "TouchmeWebMidiId_2", showPagedModes: true}, meta: deviceMeta('TouchMe') },
@@ -66,6 +66,7 @@ if (betaBuild) {
 const router = createRouter({
     history: createWebHashHistory(),
     linkActiveClass: 'active',
+    scrollBehavior(to) { return betaBuild && to.path === '/biotron/play' ? {top: 0} : false },
     routes
 })
 
@@ -77,7 +78,7 @@ if (betaBuild) {
         const player = getSoundController()
         const biotronRoutes = ['/biotron', '/biotron/play', '/biotron/compare']
         if (biotronRoutes.includes(from.path) && biotronRoutes.includes(to.path) &&
-            !player?.examplePlaying && !player?.starting && !player?.audioStarting && !player?.midiOpening) {
+            !player?.starting && !player?.audioStarting && !player?.midiOpening) {
             player?.releaseHeldKeyboard()
             return true
         }

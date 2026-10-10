@@ -44,11 +44,8 @@ export default {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  border: 1px solid rgba(27, 31, 40, .1);
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, .86);
-  box-shadow: 0 10px 30px rgba(30, 37, 55, .05);
-  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--beta-line, #ddd);
+  background: var(--beta-surface, #fff);
   text-align: left;
 }
 
@@ -69,7 +66,7 @@ export default {
   min-height: 44px;
   padding: 0 1rem;
   place-items: center;
-  border-radius: .7rem;
+  border-radius: .35rem;
   color: #4f4a45;
   text-decoration: none;
 }
@@ -83,7 +80,6 @@ export default {
 .device-task-nav__link--active {
   color: #fff;
   background: #315ee7;
-  box-shadow: 0 6px 18px rgba(49, 94, 231, .22);
   font-weight: 700;
   pointer-events: none;
 }

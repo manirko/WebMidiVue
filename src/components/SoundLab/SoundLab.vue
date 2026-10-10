@@ -19,6 +19,7 @@
     <template v-if="controlsVisible">
     <template v-if="revealMode">
       <DeviceTaskNav
+        v-if="revealProfile.id !== 'biotron'"
         :device-name="revealProfile.productName"
         active-task="play"
         :play-route="`/${revealProfile.id}/play`"
@@ -73,7 +74,7 @@
             <ol><li>Check Volume here and on your computer or phone.</li><li>Check which speakers or headphones your device is using.</li><li v-if="audioState !== 'running'">Press Resume sound if available, or stop and start listening again.</li><li v-else>If notes are arriving but you hear nothing, try a different sound below.</li></ol>
             <p class="play-audio-state">Browser audio: {{ audioState === 'running' ? 'running' : audioState }}. Only you can confirm that sound is audible.</p>
             <DiagnosticCopy class="sound-lab__diagnostic" :packet="playDiagnosticPacket" />
-            <div v-if="firstSoundOutcome" class="sound-lab__task-feedback"><h3>Can you hear the notes?</h3><div class="sound-lab__reveal-actions"><a :href="firstSoundFeedbackUrl('helped')" @click="recordFirstSound('heard')" class="btn btn-outline-dark" target="_blank" rel="noopener">Yes — WhatsApp</a><a :href="firstSoundFeedbackUrl('not_yet')" @click="recordFirstSound('not_heard')" class="btn btn-outline-dark" target="_blank" rel="noopener">Not yet — WhatsApp</a></div><small>Opens a draft with the version and stop point. Send it to share.</small></div>
+            <div v-if="firstSoundOutcome && $route.meta.firstPlay" class="sound-lab__task-feedback"><h3>Can you hear the notes?</h3><div class="sound-lab__reveal-actions"><a :href="firstSoundFeedbackUrl('helped')" @click="recordFirstSound('heard')" class="btn btn-outline-dark" target="_blank" rel="noopener">Yes — WhatsApp</a><a :href="firstSoundFeedbackUrl('not_yet')" @click="recordFirstSound('not_heard')" class="btn btn-outline-dark" target="_blank" rel="noopener">Not yet — WhatsApp</a></div><small>Opens a draft with the version and stop point. Send it to share.</small></div>
           </details>
         </div>
       </section>
@@ -687,7 +688,7 @@ export default {
 .sound-lab__variant { min-height: 44px; border: 1px solid var(--ui-control-border); border-radius: var(--ui-radius); background: #fff; padding: 0 1rem; font: inherit; font-weight: 600; }
 .sound-lab__variant span { display: inline-block; padding: 0 .1rem; white-space: nowrap; font-weight: 500; }
 .sound-lab__variant--active { border-color: var(--ui-accent); background: #e8edff; color: #2446bd; }
-.sound-lab__reveal { display: grid; grid-template-columns: minmax(200px, 300px) minmax(0, 1fr); gap: clamp(1.5rem, 5vw, 4rem); align-items: start; max-width: 760px; margin: 0 auto; padding: var(--beta-card-inset,24px); border: 1px solid #ded9d1; border-radius: 1.5rem; background: #fbfaf7; }
+.sound-lab__reveal { display: grid; grid-template-columns: minmax(200px, 300px) minmax(0, 1fr); gap: clamp(1.5rem, 5vw, 4rem); align-items: start; max-width: 760px; margin: 0 auto; padding: var(--beta-card-inset,24px); border: 1px solid var(--beta-line,#ded9d1); border-radius: var(--ui-radius); background: var(--beta-surface,#fff); }
 .sound-lab__reveal-copy h2 { margin: .25rem 0 .5rem; font-size: var(--ui-text-section); }
 .sound-lab__reveal-copy p { max-width: 34rem; color: #625e58; line-height: 1.5; }
 .sound-lab__connect-notice { display:grid; gap:.2rem; margin:1rem 0; padding:.85rem 1rem; border:1px solid rgba(106,90,205,.28); border-radius:.9rem; color:#302763; background:#f0edff; }

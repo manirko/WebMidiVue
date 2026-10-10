@@ -72,9 +72,11 @@
     <div class="m-2 content ">
       <main :class="{'route-stage': betaBuild && !firstPlay, 'route-stage--compact': betaBuild && firstPlay}">
         <CompatibilityGate :route="$route">
+          <DeviceTaskNav v-if="betaBuild && biotronSoundRoute" class="workspace-nav" device-name="Biotron"
+            :active-task="$route.path === '/biotron' ? 'settings' : 'play'" play-route="/biotron/play" settings-route="/biotron" />
           <router-view v-slot="{ Component }">
             <!-- One Biotron player stays mounted while its settings change. -->
-            <SoundLab v-if="betaBuild && biotronSoundRoute" mode="reveal" profile-id="biotron" :controls-visible="firstPlay" />
+            <SoundLab v-if="betaBuild && biotronSoundRoute" mode="reveal" profile-id="biotron" />
             <component v-if="!firstPlay" :is="Component" />
           </router-view>
         </CompatibilityGate>
@@ -123,6 +125,7 @@
 <script>
 import {defineAsyncComponent} from 'vue';
 const SoundLab = defineAsyncComponent(() => import(/* webpackChunkName: "sound-lab" */ '@sound-lab'));
+const DeviceTaskNav = defineAsyncComponent(() => import('@/components/DeviceTaskNav.vue'));
 import SocialLinks from "@/components/SocialLinks.vue";
 import CompatibilityGate from "@compatibility-gate";
 import {
@@ -148,7 +151,7 @@ const runningStandalone = () => window.matchMedia('(display-mode: standalone)').
 
 export default {
   name: 'App',
-  components: {CompatibilityGate, SocialLinks, SoundLab},
+  components: {CompatibilityGate, SocialLinks, SoundLab, DeviceTaskNav},
   data() {
     return {
       offlineStatus: getOfflineStatus(),
@@ -322,7 +325,7 @@ export default {
 #app .settings_elem h2 { font-size:var(--ui-text-body); }
 #app .btn { --bs-btn-font-size:var(--ui-text-body); --bs-btn-font-weight:600; --bs-btn-line-height:1.25; --bs-btn-padding-x:1rem; --bs-btn-padding-y:.6rem; --bs-btn-border-radius:var(--ui-radius); min-height:44px; font-size:var(--ui-text-body); font-weight:600; line-height:1.25; border-radius:var(--ui-radius); }
 #app .btn:focus-visible { outline:2px solid var(--ui-accent); outline-offset:2px; box-shadow:none; }
-.beta-shell { --beta-card-inset:24px; --beta-page-inset:24px; --beta-ink:var(--ui-ink); --beta-muted:#686b73; --beta-line:rgba(27,31,40,.11); --beta-surface:rgba(255,255,255,.88); --beta-accent:var(--ui-accent); --beta-text-small:var(--ui-text-small); --beta-text-body:var(--ui-text-body); --beta-text-section:var(--ui-text-section); --beta-text-hero:var(--ui-text-hero); min-height:100vh; padding:.75rem 0 2rem; color:var(--beta-ink); font-size:var(--beta-text-body); line-height:1.5; background:radial-gradient(circle at 8% 0%,rgba(119,218,178,.13),transparent 28rem),radial-gradient(circle at 96% 12%,rgba(49,94,231,.09),transparent 24rem),#f6f5f1; }
+.beta-shell { --beta-card-inset:24px; --beta-page-inset:24px; --beta-ink:var(--ui-ink); --beta-muted:#686b73; --beta-line:rgba(27,31,40,.11); --beta-surface:#fff; --beta-accent:var(--ui-accent); --beta-text-small:var(--ui-text-small); --beta-text-body:var(--ui-text-body); --beta-text-section:var(--ui-text-section); --beta-text-hero:var(--ui-text-hero); min-height:100vh; padding:.75rem 0 2rem; color:var(--beta-ink); font-size:var(--beta-text-body); line-height:1.5; background:#f5f5f2; }
 #app .btn-primary,#app .btn-dark { --bs-btn-color:#fff; --bs-btn-bg:var(--ui-accent); --bs-btn-border-color:var(--ui-accent); --bs-btn-hover-color:#fff; --bs-btn-hover-bg:#254dc8; --bs-btn-hover-border-color:#254dc8; --bs-btn-active-color:#fff; --bs-btn-active-bg:#2144b4; --bs-btn-active-border-color:#2144b4; }
 #app .btn-outline-primary,#app .btn-outline-dark,#app .btn-outline-secondary,#app .btn-secondary { --bs-btn-color:var(--ui-ink); --bs-btn-bg:#fff; --bs-btn-border-color:var(--ui-control-border); --bs-btn-hover-color:var(--ui-ink); --bs-btn-hover-bg:#eef1f6; --bs-btn-hover-border-color:#8995a7; --bs-btn-active-color:var(--ui-ink); --bs-btn-active-bg:#e3e9f3; --bs-btn-active-border-color:#8995a7; }
 .beta-shell .compatibility-notice small { font-size:var(--beta-text-small); letter-spacing:0; text-transform:none; }
@@ -342,7 +345,7 @@ export default {
 .offline-status--ready { color:#0f5132; background:#d1e7dd; border-color:#badbcc; }
 .offline-status--preparing { color:#664d03; background:#fff3cd; border-color:#ffecb5; }
 .offline-status--error { color:#842029; background:#f8d7da; border-color:#f5c2c7; }
-.beta-feedback { width:min(760px,100%); padding:clamp(1.2rem,4vw,2rem); border:1px solid rgba(49,94,231,.14); border-radius:1.35rem; background:linear-gradient(135deg,rgba(255,255,255,.96),rgba(238,243,255,.9)); box-shadow:0 18px 50px rgba(30,37,55,.07); }
+.beta-feedback { width:min(760px,100%); padding:clamp(1.2rem,4vw,2rem); border:1px solid var(--beta-line); border-radius:var(--ui-radius); background:var(--beta-surface); }
 .beta-feedback__eyebrow { display:block; margin-bottom:.45rem; color:var(--beta-accent); font-size:var(--beta-text-small); font-weight:650; }
 .beta-compatibility { margin-top:1rem; padding-top:1rem; border-top:1px solid var(--beta-line); color:var(--beta-muted); }
 .beta-compatibility summary { min-height:44px; padding:.65rem 0; color:var(--beta-ink); font-weight:700; cursor:pointer; }
@@ -365,6 +368,7 @@ input:checked + .slider:before { transform:translateX(26px); }
 .wrapper { display:flex; flex-direction:column; min-height:100vh; }
 .route-stage { min-height:100vh; }
 .route-stage--compact { min-height:0; }
+.workspace-nav { position:sticky; top:0; z-index:2; }
 .bottom-panel { min-height:60px; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; border-top:1px solid rgba(27,31,40,.1); }
 .feedback-actions,.beta-footer nav { display:flex; flex-wrap:wrap; gap:.5rem 1rem; }
 .beta-footer { width:100%; max-width:760px; padding:1rem; font-size:var(--ui-text-small); }

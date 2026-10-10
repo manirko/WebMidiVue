@@ -187,6 +187,13 @@ async function auditProfile(browser, origin, profile) {
   }
   await page.getByText(/Offline mode is ready/i).waitFor({timeout: 15000})
 
+  assert(await page.locator('.sound-lab').isVisible(), `${profile.name}: Settings hides the shared player`)
+  assert.equal(await page.getByRole('navigation', {name: 'Biotron tasks'}).count(), 1,
+    `${profile.name}: repeated workspace navigation`)
+  assert.equal(await page.getByRole('heading', {level: 1}).count(), 1, `${profile.name}: competing page titles`)
+  assert.equal(await page.getByRole('heading', {name: 'Settings', level: 2}).count(), 1,
+    `${profile.name}: settings must be a section of the shared workspace`)
+
   const result = await readQuality(page)
   assert.deepStrictEqual(pageErrors, [], `${profile.name}: page errors`)
   assertQuality(result, profile.name)
@@ -272,6 +279,36 @@ async function auditProfile(browser, origin, profile) {
     await page.getByText('Copy was blocked. Open the preview, select the report and copy it.',{exact:true}).waitFor()
     await page.evaluate(()=>window.__blockClipboard=false)
   }
+
+  // Real example playback must keep the same player and sound when Settings opens.
+  const nav = page.getByRole('navigation', {name: 'Biotron tasks'})
+  await nav.getByRole('link', {name: 'Play', exact: true}).click()
+  const palette = page.locator('.sound-palette')
+  await palette.locator('summary').click()
+  await palette.getByRole('button', {name: 'Listen to example', exact: true}).click()
+  await page.locator('.sound-lab[data-example="playing"][data-audio-state="running"]').waitFor()
+  const playingSound = await page.locator('.sound-lab').getAttribute('data-sound')
+  await nav.getByRole('link', {name: 'Settings', exact: true}).click()
+  await page.getByRole('heading', {name: 'Settings', level: 2}).waitFor()
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Settings',
+    `${profile.name}: opening Settings lost the task focus`)
+  assert(await page.locator('.sound-lab').isVisible(), `${profile.name}: player hidden after opening settings`)
+  assert.equal(await page.locator('.sound-lab').getAttribute('data-example'), 'playing',
+    `${profile.name}: opening settings stopped the example`)
+  assert.equal(await page.locator('.sound-lab').getAttribute('data-sound'), playingSound)
+  assert.equal(await nav.count(), 1)
+  assert.equal(await nav.getByRole('link', {name: 'Settings'}).getAttribute('aria-current'), 'page')
+  await page.getByRole('heading', {name: 'Settings', level: 2}).scrollIntoViewIfNeeded()
+  const navRect = await nav.boundingBox()
+  assert(navRect.y >= 0 && navRect.y + navRect.height < profile.options.viewport.height,
+    `${profile.name}: workspace navigation disappeared above Settings`)
+  await palette.getByRole('button', {name: 'Stop example', exact: true}).click()
+  await page.locator('.sound-lab[data-example="idle"][data-audio-state="closed"][data-active-voices="0"]').waitFor()
+  await auditExpanded('Shared player and Settings after Stop')
+  fs.writeFileSync(path.join(artifacts, `${profile.name}-workspace.json`), JSON.stringify({
+    playerVisible: true, navigationCount: 1, preservedExample: true, playingSound, stopClosed: true,
+    scope: 'Real browser audio with empty fake MIDI; no native device or hearing acceptance'
+  }, null, 2))
 
   await page.goto(`${origin}/#/biotron/play${profile.midi ? '' : '?transfer=a%20b'}`, {waitUntil: 'domcontentloaded'})
   await page.getByRole('heading', {name: 'Plant music'}).waitFor()

@@ -28,6 +28,14 @@ const bind = (componentOptions, props = {}, withData = true) => {
 }
 
 ;(async () => {
+  let stops = 0, releases = 0
+  const example = {examplePlaying: true, stop: async () => { stops++ }, releaseHeldKeyboard: () => { releases++ }}
+  assert.equal(await runRouteGuard(example, {path: '/biotron'}), true)
+  assert.equal(stops, 0, 'Opening visible Settings interrupted a ready example')
+  assert.equal(releases, 1, 'Workspace navigation left computer keys held')
+  example.audioStarting = true
+  assert.equal(await runRouteGuard(example, {path: '/biotron'}), true)
+  assert.equal(stops, 1, 'Navigation during pending audio failed to cancel startup')
   const midiAccess = await import('../src/audio/midiAccess.mjs')
   let pending = deferred()
   let browserRequests = 0

@@ -2,17 +2,17 @@
   <LoaderComponent v-if="this.is_loading && !betaBuild" :key="forceRerender"/>
   <div :class="{'biotron-settings-beta': betaBuild}">
     <DeviceTaskNav
-        v-if="betaBuild"
+        v-if="betaBuild && !embedded"
         device-name="Biotron"
         active-task="settings"
         play-route="/biotron/play"
         settings-route="/biotron"
     />
     <header :class="{'settings-hero': betaBuild}">
-      <h1 class="text-center">{{ betaBuild ? 'Settings' : 'Biotron settings' }}</h1>
+      <component :is="embedded ? 'h2' : 'h1'" ref="settingsHeading" :tabindex="embedded ? -1 : null" class="text-center">{{ betaBuild ? 'Settings' : 'Biotron settings' }}</component>
       <p v-if="betaBuild" class="settings-hero__intro">Change settings in this browser. Connect Biotron to change settings on the device.</p>
     </header>
-    <div v-if="betaBuild && (soundPlayer?.engine || soundPlayer?.midi || soundPlayer?.starting || soundPlayer?.releaseBlocked)" class="alert py-2" :class="soundPlayer?.releaseBlocked ? 'alert-warning' : 'alert-success'" role="status">
+    <div v-if="betaBuild && !embedded && (soundPlayer?.engine || soundPlayer?.midi || soundPlayer?.starting || soundPlayer?.releaseBlocked)" class="alert py-2" :class="soundPlayer?.releaseBlocked ? 'alert-warning' : 'alert-success'" role="status">
       {{ soundPlayer?.releaseBlocked ? 'Release did not finish. Retry Stop.' : soundPlayer?.starting ? 'Connecting sound…' : soundSession.running ? 'Sound stays on while you adjust settings.' : 'Sound is paused. Use Play to resume or stop here.' }}
       <router-link to="/biotron/play" class="alert-link ms-1">Sound &amp; volume</router-link>
       <button type="button" class="btn btn-outline-dark btn-sm ms-2" @click="soundPlayer.stop()">{{ soundPlayer?.releaseBlocked ? 'Retry release' : soundPlayer?.starting ? 'Cancel connection' : 'Stop & release' }}</button>
@@ -451,10 +451,8 @@ export default  {
     GroupOfCommands,
     FileDropArea},
   props: {
-    id: {
-      type: String,
-      required: true,
-    },
+    embedded: {type: Boolean, default: false},
+    id: {type: String, required: true},
   },
   computed: {
     soundPlayer() { return getSoundController() },
@@ -814,6 +812,7 @@ export default  {
     if (this.betaBuild && this.device) await this.loadPersistedSettings(this.device)
   },
   mounted() {
+    if (this.embedded) { this.$refs.settingsHeading.focus({preventScroll: true}); this.$refs.settingsHeading.scrollIntoView({block: 'start'}) }
     this.listenerScope = createListenerScope()
     if (!this.betaBuild) this.listenerScope.on(document, 'keyup', event => {
       if (event.code === 'Enter' && !this.is_loading) this.change_data_loader();

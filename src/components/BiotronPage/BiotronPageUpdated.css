@@ -6,13 +6,13 @@
 @media (max-width:575.98px) { .calibration-control{align-items:stretch;flex-direction:column}.calibration-control__actions{display:grid}.calibration-control__actions .btn{min-height:44px} }
 @media (prefers-reduced-motion:reduce) { .calibration-control__status--active::before{animation:none} }
 .biotron-settings-beta { --surface:rgba(255,255,255,.9); --line:rgba(27,31,40,.11); --ink:#17191f; --muted:#6b6e76; --accent:#315ee7; color:var(--ink); }
-.settings-hero { margin:0 auto 1.25rem; text-align:center; }
-.settings-hero h1 { margin:0; font-size:var(--beta-text-hero); font-weight:750; letter-spacing:-.035em; line-height:1.1; }
+.settings-hero { margin:2rem auto 1.25rem; text-align:center; }
+.settings-hero h1,.settings-hero h2 { margin:0; scroll-margin-top:72px; font-size:var(--beta-text-section); font-weight:700; letter-spacing:-.035em; line-height:1.1; }
 .settings-hero__intro { max-width:34rem; margin:.65rem auto 0; color:var(--muted); font-size:var(--beta-text-body); }
 .settings-feedback { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.75rem; margin:1rem 0 0; }
 .settings-feedback span { flex:1 1 14rem; }
 .settings-feedback .btn { flex:0 0 auto; }
-.beta-connect-card,.beta-preset-card { margin-bottom:1rem; padding:clamp(1rem,3vw,1.35rem); border:1px solid var(--line); border-radius:1rem; background:var(--surface); box-shadow:0 8px 24px rgba(30,37,55,.045); text-align:left; }
+.beta-connect-card,.beta-preset-card { margin-bottom:1rem; padding:clamp(1rem,3vw,1.35rem); border:1px solid var(--line); border-radius:var(--ui-radius); background:var(--beta-surface,#fff); text-align:left; }
 .preset-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(12rem,1fr)); gap:.65rem; margin-top:.8rem; }
 .preset-actions > div { min-width:0; }
 .preset-actions :deep(.btn),.preset-actions :deep(.fileDropArea) { width:100%; min-height:44px; }

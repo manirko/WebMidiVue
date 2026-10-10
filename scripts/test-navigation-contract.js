@@ -73,7 +73,12 @@ assert(selector.includes('[0xf0, 0x14, 0x0d, RECALIBRATE_COMMAND, nonce, 0xf7]')
   'recalibration must use the vendor SysEx command with a request nonce')
 assert(selector.includes('data[1] === 0x0b'),
   'recalibration progress must require the device response envelope')
-assert(sound.includes('active-task="play"'), 'Biotron first play must show Play as current')
+assert(app.includes("$route.path === '/biotron' ? 'settings' : 'play'") &&
+  sound.includes("revealProfile.id !== 'biotron'"),
+  'the shared player must name the visible workspace task')
+assert(!app.includes(':controls-visible="firstPlay"') && biotron.includes('betaBuild && !embedded') &&
+  biotron.includes("embedded ? 'h2' : 'h1'"),
+  'embedded settings must keep one visible player, task navigation and page title')
 assert(sound.includes('class="sound-palette"') && sound.includes('<AudioCompare v-if="paletteVisited"'),
   'Biotron musical sound choices must be available lazily on Play before a device is connected')
 assert(compare.includes("bank.id !== 'calibration'") && biotron.includes('<AudioCompare calibration-only'),
