@@ -493,3 +493,39 @@ proof does not complete it: compare an actual finished-video task with usual
 tools and test the at-least2x-time hypothesis without extra help or lost quality,
 then voluntary reuse/viewer clarity. Current context T14 has the local page,
 source/scopes,53learning records and unchanged influencer/support frame limits.
+
+### Creator video handoff follow-up — 10 October 2026
+
+Prototype9a fixes a real transport failure: bare Chrome MP4 contained VP9/Opus,
+which Mac AVFoundation could not decode as video (-11833), while a known H264/AAC
+control decoded. Prefer explicitly supported `video/mp4;codecs=avc1,mp4a.40.2`
+in the existing format list. Keep WebM/generic fallback without claiming editor
+compatibility. No constructor-error fallback was added; previous files remain.
+Existing --creator-prototype now saves bytes/probe before asserting actual H264
+and AAC when explicit encoding is supported; checks synth, controlled310Hzmic,
+and their mixture. No real camera/mic/MIDI in controlled final tests.
+
+Exact9a: Chrome154 and PWWebKit26.5 each24groups PASS_SCOPED; six videos H264/AAC.
+Eight saved WAV/video files independently decode through Mac AVFoundation,
+separately from ffmpeg decode and browser playback. This does not certify a GUI
+editor, installed Safari, iPhone, human speech, hearing, lip-sync or finished clip.
+Before34841 regression FAIL/actual VP9 bytes and environment-control failures
+are retained. Current compiled creator.js61,336bytes equals9a UI-run bytes;
+this size observation is not a speed benchmark.
+
+Final testerf034 reanalyzes the saved files using the shared existing analyzer.
+RMS+310Hz falsely accepted2x mic-only; global source maxima falsely accepted
+non-overlapping source windows. Known score+310Hz now must exceed their separate
+baseline thresholds in the same0.5s Hann window. Six actual file SHAs/fresh PCM,
+positive mixtures and isolated music/mic/2xmic/silence/sequential controls PASS.
+These are known-fixture co-occurrence checks, not general speech detection or
+whole-take quality. Units/syntax/architecture and exact compiled readback PASS;
+no new f034 UI/fullgate/benchmark run. Source/firstfault/scopes live in the
+existing T14 ledger, now55learning entries. Production84inputs, DSP/firmware/
+dependencies, frozenb15/SergeyZIP and old local c702 page remain unchanged.
+
+Next actual creator test: preferred editor/device + intended task → local
+recording → transfer/import/export → finished clip reopened outside editor;
+compare total help/time/retries and quality with usual tools, then voluntary
+reuse and viewer clarity. Optional editor-name question is pending. No benefit,
+virality or profit is established by codec or PCM PASS.
