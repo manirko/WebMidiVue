@@ -587,3 +587,30 @@ existing tester changed. This closes measurement coverage, not creator time,
 phone audio, GUI editor, full memory/leaks, native GPU rendering or profitability.
 Next is the intended finished clip in familiar tools plus real-device/resource
 checks justified by that task. Frozenb15/Sergey packet and BOOT-owner gates stay.
+
+## Creator saved-WAV fidelity — 10 October 2026
+
+Existing analyzer7646131 adds `--creator-fidelity` and negative control
+`--creator-fidelity-fault`; the normal creator path reuses the same helper.
+An independent concurrent final-gain AudioWorklet copies all input channels and
+currentFrame. Contiguous captured frames align it with the actual saved WAV,
+which is preserved before fresh browser decode/every-sample comparison. Current
+engine output is mono with summed stereo reverb; mono export matches it, no
+DSP/stereo change. Exact bytes cover the captured interval, not all release tails.
+
+ActualChrome154 and PWWebKit26.5 each Round/Small room, standard8/volume70:
+4cases PASS_FIDELITY_SCOPED, sample error0. Native/reference5pairs byte-equal;
+11actualWAV/72Git input references/3testerSHAs/compiled0c verified. One saved-file
+float+.01 still passes old audible/unclipped metric subchecks but new equality
+rejects exit1; native/reference/firstfault preserved. This is not old full UI/
+duration replay or an engine fault. Empty/missing/swapped/truncated/nonfinite/
+silence/changed-sample unit controls, syntax/architecture and read-only review
+PASS. Learning58 in existing context ledger; old57 retained. No new product/
+prototype/dependency/sourcefile/framework. Existing tester824lines, production
+70src/10746lines/largest850 unchanged.
+
+Full normal path/full gate/benchmark on764 NOTRUN; previous174 cost observations
+remain separate. Phone/installedSafari/speakers/OS underruns/perceptual quality,
+all presets/registers/levels/rates/stereo/uncaptured tails, real camera/mic/speech/
+sync, GUI editor and creator time/reuse/viewer acceptance remain OPEN. Current
+65337prototype0c and frozenSergey b15/ZIP unchanged; no deployment/native requests.
