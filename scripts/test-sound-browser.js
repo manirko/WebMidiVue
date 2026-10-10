@@ -1568,14 +1568,14 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
               ui: Array.from(document.querySelectorAll('.sound-lab'), element => ({...element.dataset})),
               buttons: Array.from(document.querySelectorAll('button')).filter(element => /Start|Stop|keyboard|Find MIDI/.test(element.textContent))
                 .slice(0, 32).map(element => ({text: element.textContent.trim(), disabled: element.disabled})),
-              visibility: document.visibilityState,
+              visibility: document.visibilityState, touchPoints: navigator.maxTouchPoints,
               fonts: {status: document.fonts.status, faces: Array.from(document.fonts).map(face => ({family: face.family, status: face.status}))}
             })), 'first-fault state', 1500)
         } catch (captureError) { fault.captureError = captureError.message }
         fs.writeFileSync(`${prefix}.json`, JSON.stringify(fault, null, 2))
         try {
           fs.writeFileSync(`${prefix}.txt`, `${tab.url()}\n${await tab.locator('body').innerText({timeout: 1500})}`)
-          await tab.screenshot({path: `${prefix}.png`, fullPage: true, timeout: 2000})
+          await tab.screenshot({path: `${prefix}.png`, fullPage: fault.fixture?.touchPoints === 0, timeout: 2000})
         } catch (captureError) {
           console.error(`Could not capture failing page: ${captureError.message}`)
         }

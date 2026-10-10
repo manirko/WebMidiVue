@@ -277,6 +277,16 @@ async function auditProfile(browser, origin, profile) {
   await page.getByRole('heading', {name: 'Plant music'}).waitFor()
   assert.strictEqual(await page.locator('.beta-feedback').count(), 0,
     `${profile.name}: first play must not duplicate the generic feedback block`)
+  const captureState = () => page.evaluate(() => ({
+    hover: matchMedia('(any-hover: none)').matches, coarse: matchMedia('(any-pointer: coarse)').matches,
+    keyboard: getComputedStyle(document.querySelector('.computer-keys')).display
+  }))
+  const beforeCapture = await captureState()
+  // Chromium fullPage capture can reset mobile pointer emulation. Keep the viewport and verify it.
+  await page.screenshot({path: path.join(artifacts, `${profile.name}-play.png`), timeout: 2000})
+  const afterCapture = await captureState()
+  fs.writeFileSync(path.join(artifacts, `${profile.name}-capture-state.json`), JSON.stringify({beforeCapture, afterCapture}, null, 2))
+  assert.deepStrictEqual(afterCapture, beforeCapture, `${profile.name}: screenshot changed the device presentation`)
   const playResult = await readQuality(page)
   // Hash-route navigation shares the observer with the prior disclosure gestures.
   assertQuality(playResult, `${profile.name}/Play closed`, false)
