@@ -24,7 +24,7 @@ const root=path.resolve(process.env.BIOTRON_QA_DIST_ROOT||path.join(__dirname,'.
 const server=createStaticServer(root)
 const artifacts=process.env.AUDITION_BROWSER_OUTPUT||`/private/tmp/biotron-audition-browser-${Date.now()}`
 fs.mkdirSync(artifacts,{recursive:true})
-let page,stage='launch',starts=0
+let page, diagnosticPage, stage='launch',starts=0
 const shortGateFault=process.env.AUDITION_SHORT_GATE_FAULT||'none'
 assert(['none','late','silent'].includes(shortGateFault),'AUDITION_SHORT_GATE_FAULT must be none, late or silent')
 const deadlineMs=Number(process.env.AUDITION_BROWSER_TIMEOUT_MS||300000)
@@ -44,7 +44,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   const file=path.join(artifacts,'failure.json')
   if(!fs.existsSync(file))fs.writeFileSync(file,JSON.stringify({stage,starts,error:`Browser attempt exceeded ${deadlineMs}ms`,kind:'TIMEOUT'},null,2))
   console.error(`TIMEOUT at ${stage}; closing only this test browser`)
-  await boundedCapture(page?.screenshot({path:path.join(artifacts,'timeout.png'),timeout:1000}).catch(()=>{}))
+  await boundedCapture((diagnosticPage || page)?.screenshot({path:path.join(artifacts,'timeout.png'),timeout:1000}).catch(()=>{}))
   await browser.close()
   })().catch(error=>console.error(`Deadline cleanup failed: ${error.message}`))
  },deadlineMs)
@@ -727,19 +727,38 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   await keyboardPlay.getByRole('button',{name:'Stop keyboard',exact:true}).click()
   await keyboardPlay.locator('.sound-lab[data-audio-state=closed][data-tab-lease=free]').waitFor()
   await cold.close()
+  mark('audio-only narrow desktop keyboard and touch-only example restart')
   for(const profile of [{viewport:{width:320,height:700}},{...devices['iPhone 15'],isMobile:false}]){
    const mobile=await browser.newContext(contextOptions(profile,browser));await mobile.addInitScript(()=>Object.defineProperty(navigator,'requestMIDIAccess',{value:undefined,configurable:true}))
-   const tab=await mobile.newPage();await tab.goto(`${origin}/#/biotron/compare`)
+   await mobile.tracing.start({screenshots:true,snapshots:true})
+   const tab=await mobile.newPage()
+   diagnosticPage=tab
+   await tab.goto(`${origin}/#/biotron/compare`)
    await waitCompareAlias(tab)
    assert(await tab.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth),'comparison overflows mobile')
    await tab.getByRole('button',{name:'High-note treatments',exact:true}).click();assert.equal(await selection(tab).locator('option').count(),10)
    await tab.getByRole('button',{name:'Handpan',exact:true}).click();assert.equal(await selection(tab).locator('option').count(),6)
-   await tab.getByRole('button',{name:'Play with keyboard',exact:true}).click()
-   await tab.locator('.sound-lab[data-audio-state=running][data-keyboard=on]').waitFor({state:'attached'})
-   await tab.dispatchEvent('body','keydown',{code:'KeyA',key:'ф'})
-   await tab.locator('.sound-lab[data-active-voices="1"]').waitFor({state:'attached'})
-   await tab.getByRole('button',{name:'Stop keyboard',exact:true}).click()
+   if(profile.hasTouch){
+    assert.equal(await tab.getByRole('button',{name:'Play with keyboard',exact:true}).count(),0,'phone offers computer keyboard play')
+    await tab.getByRole('button',{name:'Listen to example',exact:true}).click()
+    await tab.locator('.sound-lab[data-audio-state=running][data-example=playing]').waitFor({state:'attached'})
+    await tab.getByLabel('Limit to 4 notes at once',{exact:true}).click()
+    await tab.locator('.sound-lab[data-audio-state=closed][data-example=idle]').waitFor({state:'attached'})
+    assert.match(await tab.locator('.sound-lab__status--reveal').innerText(),/Open Sound, then press Listen to example to start again\./)
+    await tab.getByRole('button',{name:'Listen to example',exact:true}).click()
+    await tab.waitForFunction(()=>Number(document.querySelector('.sound-lab').dataset.activeVoices)>0)
+    await tab.getByRole('button',{name:'Stop example',exact:true}).click()
+    await tab.locator('.sound-lab[data-audio-state=closed][data-example=idle][data-active-voices="0"][data-example-timers="0"]').waitFor({state:'attached'})
+   }else{
+    await tab.getByRole('button',{name:'Play with keyboard',exact:true}).click()
+    await tab.locator('.sound-lab[data-audio-state=running][data-keyboard=on]').waitFor({state:'attached'})
+    await tab.dispatchEvent('body','keydown',{code:'KeyA',key:'ф'})
+    await tab.locator('.sound-lab[data-active-voices="1"]').waitFor({state:'attached'})
+    await tab.getByRole('button',{name:'Stop keyboard',exact:true}).click()
+   }
+   await browserCall(browser,()=>mobile.tracing.stop({path:path.join(artifacts,profile.hasTouch?'touch-trace.zip':'narrow-trace.zip')}),'mobile trace export',10000)
    await mobile.close()
+   diagnosticPage=null
   }
   assert.deepEqual(errors,[])
   mark(keyboardOnly?'PASS keyboard development subset':'PASS')
@@ -747,12 +766,13 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   await context.tracing.stop({path:path.join(artifacts,'trace.zip')})
   console.log(keyboardOnly ? 'Keyboard development subset:43 trusted keyboard PCM/DSP choices including Classic, focused Sound/Octave and uncancelled native control keys, C2–C7, layout/edit/IME/release guards, live MIDI and cold device-free Play; full preview/startup gate not rerun.' : `Comparison browser: ${cases}/36 real-engine option Play/Stop, 100 repeated starts/closes without timers/Blobs, cancelled module load, failed-close route protection/retry, suspend/background release, four natural completions, switch/route release, reference, no preview MIDI or inferred outcome;36 live MIDI selections, six short-gate handpan modal rings and cue-only calibration changes, persistent selection through Settings/Play/reload, independent inline sections without voting, stock reset and 320/iPhone layout passed; 43 trusted keyboard PCM/DSP choices including Classic, focused Sound/Octave and uncancelled native control keys, C2–C7, four key layouts, typing/shadow/IME/modifier guards, repeat/focus/blur/background/route/Stop, keyboard/MIDI identity isolation and no screen keys, cold audio-only Play without a MIDI request.`)
  }catch(error){
-  const state=await boundedCapture(page?.evaluate(()=>({url:location.href,phase:document.querySelector('.audio-compare')?.dataset,player:document.querySelector('.sound-lab')?.dataset,contexts:window.__comparisonContexts.map(context=>({state:context.state,time:context.currentTime})),intervals:window.__comparisonIntervals.size,blobs:window.__comparisonBlobs.size,heap:performance.memory?.usedJSHeapSize})).catch(cause=>({unavailable:cause.message})))
+  const faultPage=diagnosticPage || page
+  const state=await boundedCapture(faultPage?.evaluate(()=>({url:location.href,phase:document.querySelector('.audio-compare')?.dataset,player:document.querySelector('.sound-lab')?.dataset,contexts:window.__comparisonContexts?.map(context=>({state:context.state,time:context.currentTime})) ?? null,intervals:window.__comparisonIntervals?.size ?? null,blobs:window.__comparisonBlobs?.size ?? null,heap:performance.memory?.usedJSHeapSize})).catch(cause=>({unavailable:cause.message})))
   if(!fs.existsSync(path.join(artifacts,'failure.json')))fs.writeFileSync(path.join(artifacts,'failure.json'),JSON.stringify({stage,starts,error:error.message,state},null,2))
-  await boundedCapture(page?.screenshot({path:path.join(artifacts,'failure.png'),timeout:1000}).catch(()=>{}))
+  await boundedCapture(faultPage?.screenshot({path:path.join(artifacts,'failure.png'),timeout:1000}).catch(()=>{}))
   // A ZIP export can outlast screenshot capture. Keep the browser alive until
   // it finishes or record UNAVAILABLE; never hide the original test failure.
-  const trace=await browserCall(browser,()=>page.context().tracing.stop({path:path.join(artifacts,'trace.zip')}),'trace export',10000)
+  const trace=await browserCall(browser,()=>faultPage.context().tracing.stop({path:path.join(artifacts,'trace.zip')}),'trace export',10000)
    .then(()=>({status:'COMPLETE'}),cause=>({status:'UNAVAILABLE',error:cause.message}))
   fs.writeFileSync(path.join(artifacts,'trace-capture.json'),JSON.stringify(trace,null,2))
   throw error
