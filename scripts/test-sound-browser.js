@@ -5,7 +5,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const {devices} = require('playwright-core')
-const {browserConfig, launchBrowser, contextOptions, createStaticServer} = require('./browser-test-harness')
+const {browserConfig, launchBrowser, contextOptions, qaOrigin, verifyOnlineIdentity, createStaticServer} = require('./browser-test-harness')
 
 const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
 
@@ -861,9 +861,20 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
 
 ;(async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
-  const origin = `http://127.0.0.1:${server.address().port}`
+  const origin = qaOrigin(server)
   const browser = await launchBrowser()
   try {
+    if (process.env.BIOTRON_QA_ORIGIN) {
+      const identityContext = await browser.newContext()
+      try {
+        const identity = await verifyOnlineIdentity(identityContext, origin, root)
+        console.log('ONLINE_IDENTITY ' + JSON.stringify(identity))
+        if (process.env.BIOTRON_TEST_EVIDENCE_DIR) {
+          fs.mkdirSync(process.env.BIOTRON_TEST_EVIDENCE_DIR, {recursive: true})
+          fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR, 'sound-online-identity.json'), JSON.stringify(identity, null, 2))
+        }
+      } finally { await identityContext.close() }
+    }
     if (process.argv.includes('--capability-only')) {
       await verifyCapabilityFallbacks(browser, origin)
       console.log('PASS capability development subset; full audio/MIDI suite NOT RUN')

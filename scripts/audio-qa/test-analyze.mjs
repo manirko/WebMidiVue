@@ -13,6 +13,10 @@ const invalid=good.slice();invalid[15]=NaN;assert(analyze([invalid],rate).reason
 assert.equal(analyze([good],rate,{dropped:1}).result,'INCONCLUSIVE')
 assert.equal(analyze([good],rate,{clocksValid:false}).result,'INCONCLUSIVE')
 assert.equal(analyze([good.slice(0,rate*2)],rate).result,'INCONCLUSIVE')
+assert.deepEqual(analyze([good],rate).captureProblems,[])
+assert.deepEqual(analyze([good],rate,{dropped:1}).captureProblems,['DROPPED_BLOCKS'])
+assert.deepEqual(analyze([good],rate,{clocksValid:false}).captureProblems,['INVALID_CLOCKS'])
+assert.deepEqual(analyze([good.slice(0,rate*2)],rate).captureProblems,['INCOMPLETE_PCM'])
 const view=new DataView(wav([good,good],rate));assert.equal(view.getUint16(20,true),3);assert.equal(view.getUint16(22,true),2);assert.equal(view.getUint32(40,true),n*8);assert.equal(view.getFloat32(44+rate*8,true),good[rate])
 console.log('PASS: signal, silence, lost Note Off before panic, stuck tail, clipping, non-finite, dropped blocks, timing, truncation and float WAV')
 

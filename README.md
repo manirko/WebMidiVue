@@ -19,7 +19,7 @@ Read [the tester loop](docs/BIOTRON-TESTER-LOOP.md) for commands and evidence ru
 [the QA contract](docs/BIOTRON-COMPREHENSIVE-QA.md) for gates, and
 [the architecture map](docs/WEB-TEST-STRATEGY.md) for the remaining checks.
 Runtime files: `src/components/SoundLab/` (UI), `src/audio/` (session and DSP),
-`src/components/AudioCompare.vue` (sound selection), `scripts/` (existing tester),
+`src/components/SoundLab/AudioCompare.vue` (sound selection), `scripts/` (existing tester),
 `tools/windows-tester/` (verified offline handoff). Build output is `dist/`;
 recordings, traces and archives belong in ProjectData, never Git.
 

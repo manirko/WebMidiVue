@@ -88,6 +88,41 @@ no automatic install button and visible footer; download/install remains explici
 NOT SUPPORTED. Actual picker browsers retain the original download/check oracle.
 No synthetic picker is injected to manufacture firmware support.
 
+## Exact online coverage — 10 October 2026
+
+Use the existing scripts against one immutable published origin and its extracted
+candidate `dist`. `BIOTRON_QA_ORIGIN` accepts only the unique eight-hex HTTPS beta
+origin; aliases, arbitrary sites and metadata differing from the pinned artifact
+are rejected. Sound, PWA, auditions, responsive quality and UI performance reuse
+this guard. Running the local full runner is not an online acceptance claim.
+
+```sh
+BIOTRON_QA_ORIGIN=https://EXACT8HEX.biotron-settings-beta.pages.dev \
+BIOTRON_QA_DIST_ROOT=/absolute/extracted-candidate/dist \
+BIOTRON_TEST_EVIDENCE_DIR=/absolute/unique-evidence \
+node scripts/test-pwa-browser.js
+```
+
+Replace EXACT8HEX with the verified publication ID. The PWA lane checks the actual,
+unmodified published worker bytes and controller URL, then reopens its own profile
+with network disabled. Permission, MIDI and missing-registration responses are
+fixtures, not native USB or OS installation. Controlled worker A→B replacement
+remains in the local fixture; it is **NOT RUN** on an immutable remote origin.
+Sound retains its simulated telemetry receiver; this does not close delivery503.
+First-fault JSON and bounded screenshots are recorded before cleanup when an
+evidence directory is supplied. Incorrect identity must stop before a page opens.
+
+The existing UI benchmark accepts `UI_PERF_QUALITY=safe` (4notes, no reverb) or
+`standard` (8notes, reverb). It selects the real control and checks the engine
+attribute. `UI_PERF_HEADED=1` records an explicit headed scope. Results keep phase,
+requested browser, test-source SHA, route distributions, native output PCM and
+cleanup. `captureProblems` explains invalid clocks, missing PCM or dropped blocks;
+these remain **INCONCLUSIVE**, with unchanged musical thresholds. Frame/latency
+samples are observations, not calibrated INP, physical latency or hearing tests.
+A missing driver or invalid browser cannot be silently called a product failure.
+The preserved headless first-click stall and actual-driver uncertainties remain
+open in the existing project ledger; a headed PASS does not erase them.
+
 ## Faults that must remain regressions
 
 | Observed fault | Automated oracle | Remaining physical oracle |

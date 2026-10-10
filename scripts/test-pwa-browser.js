@@ -2,13 +2,18 @@ const assert = require('assert')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const {launchPersistentContext, createStaticServer} = require('./browser-test-harness')
+const {launchPersistentContext, qaOrigin, verifyOnlineIdentity, createStaticServer} = require('./browser-test-harness')
 
 const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'biotron-pwa-profile-'))
 let origin
 let serviceWorkerVersion = 1
-let context
+let context, page
+const remotePreview = Boolean(process.env.BIOTRON_QA_ORIGIN)
+const evidence = process.env.BIOTRON_TEST_EVIDENCE_DIR
+const onlineIdentities = []
+let workerBytesChecked = false
+if (evidence) fs.mkdirSync(evidence, {recursive: true})
 const server = createStaticServer(root, {
   headers: {'Service-Worker-Allowed': '/'},
   transform(relative, body) {
@@ -28,6 +33,19 @@ async function waitFor(predicate, message, timeout = 10000) {
 async function openProfile(online, denyMidiOnce = false) {
   context = await launchPersistentContext(profile, {serviceWorkers: 'allow'})
   context.setDefaultTimeout(5000)
+  if (remotePreview && online) {
+    const identity = await verifyOnlineIdentity(context, origin, root)
+    if (!workerBytesChecked) {
+      const response = await context.request.get(origin + '/service-worker.js', {timeout: 15000, maxRedirects: 0})
+      assert.strictEqual(response.status(), 200)
+      assert((await response.body()).equals(fs.readFileSync(path.join(root, 'service-worker.js'))),
+        'Published service worker differs from the pinned unmodified worker')
+      workerBytesChecked = true
+    }
+    onlineIdentities.push(identity)
+    console.log('ONLINE_IDENTITY ' + JSON.stringify(identity))
+    if (evidence) fs.writeFileSync(path.join(evidence, 'pwa-online-identity.json'), JSON.stringify({workerBytesChecked, onlineIdentities}, null, 2))
+  }
   await context.addInitScript(({ initiallyOnline, initiallyDenyMidi }) => {
     window.__testOnline = initiallyOnline
     window.__midiRequestCount = 0
@@ -131,6 +149,10 @@ async function closeProfile() {
 }
 
 async function controllerVersion(page) {
+  if (remotePreview) return page.evaluate(() => {
+    if (!navigator.serviceWorker.controller) throw new Error('No active service worker controller')
+    return navigator.serviceWorker.controller.scriptURL
+  })
   return page.evaluate(() => new Promise((resolve, reject) => {
     if (!navigator.serviceWorker.controller) {
       reject(new Error('No active service worker controller'))
@@ -148,9 +170,11 @@ async function controllerVersion(page) {
 
 (async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
-  origin = `http://127.0.0.1:${server.address().port}`
+  origin = qaOrigin(server)
+  const initialWorker = remotePreview ? origin + '/service-worker.js' : 1
+  const finalWorker = remotePreview ? initialWorker : 2
 
-  let page = await openProfile(true, true)
+  page = await openProfile(true, true)
   await page.goto(`${origin}/biotron`, { waitUntil: 'load' })
   await page.getByText(/Offline mode is ready/i).waitFor({state: 'visible', timeout: 15000})
   assert.strictEqual(await page.getByRole('button', {name: 'Update app', exact: true}).count(), 0,
@@ -165,7 +189,7 @@ async function controllerVersion(page) {
   assert(feedbackLink.includes(`Version: ${versionStamp.split(' · ')[1]}`),
     'feedback should carry the same version date shown to the user')
   await page.getByRole('button', {name: 'Close', exact: true}).click()
-  assert.strictEqual(await controllerVersion(page), 1)
+  assert.strictEqual(await controllerVersion(page), initialWorker)
   await page.getByText(/MIDI access was blocked/i).waitFor({state: 'visible', timeout: 5000})
   await page.getByRole('button', {name: /Retry connection/i}).click()
   await waitFor(() => page.evaluate(() => window.__midiRequestCount === 2), 'MIDI permission retry did not run')
@@ -216,7 +240,7 @@ async function controllerVersion(page) {
   await waitFor(() => page.url().includes('/#/biotron/play'), 'first-play route was not normalized to the cached hash route')
   await page.getByRole('heading', {name: 'Plant music', exact: true}).waitFor({state: 'visible', timeout: 10000})
   assert.strictEqual(await page.locator('.offline-status').count(), 0, 'first-play was crowded by the global offline banner')
-  assert.strictEqual(await controllerVersion(page), 1)
+  assert.strictEqual(await controllerVersion(page), initialWorker)
   assert.strictEqual(await page.evaluate(() => window.__midiRequestCount), 0, 'first-play requested MIDI before a user gesture')
   await page.getByRole('button', {name: 'Start listening', exact: true}).click()
   await page.locator('.sound-lab[data-reveal-stage="settling"][data-audio-state="running"]').waitFor()
@@ -264,7 +288,7 @@ async function controllerVersion(page) {
   await waitFor(() => page.evaluate(() => window.__midiRequestCount === 1), 'Settings did not retain first-play MIDI access')
   assert.deepStrictEqual(await page.evaluate(() => window.__midiRequestOptions.map(options => options.sysex)),
     [true], 'Settings did not reuse first-play SysEx access')
-  console.log('2/7 full Chrome restart, first-play reveal, cached Sound/comparison routes and any-layout keyboard with network disabled verified')
+  console.log('2/7 full isolated browser restart, first-play reveal, cached Sound/comparison routes and any-layout keyboard with network disabled verified')
 
   const sendButton = page.getByRole('button', {name: /Check saved settings|Send to Device/i})
   await waitFor(() => sendButton.isEnabled(), 'fake Biotron did not connect offline')
@@ -408,51 +432,60 @@ async function controllerVersion(page) {
     window.__testOnline = true
     window.dispatchEvent(new Event('online'))
   })
-  serviceWorkerVersion = 2
-  await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update())
-  await waitFor(
-    () => page.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration()).waiting)),
-    'updated worker did not enter waiting state'
-  )
-  assert.strictEqual(await controllerVersion(page), 1, 'updated worker replaced the active session')
+  if (!remotePreview) {
+    serviceWorkerVersion = 2
+    await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update())
+    await waitFor(
+      () => page.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration()).waiting)),
+      'updated worker did not enter waiting state'
+    )
+    assert.strictEqual(await controllerVersion(page), 1, 'updated worker replaced the active session')
 
-  const spectator = await context.newPage()
-  await spectator.goto(`${origin}/#/biotron/play`, {waitUntil: 'load'})
-  await spectator.evaluate(() => { window.__pwaSpectator = 'still-open' })
-  await Promise.all([
-    page.waitForNavigation({waitUntil: 'domcontentloaded'}),
-    page.getByRole('button', {name: 'Update app', exact: true}).click()
-  ])
-  await waitFor(async () => await controllerVersion(page) === 2, 'explicit update did not activate the new worker')
-  // First-play intentionally hides readiness. Verify it on Settings after the explicit reload.
-  await page.goto(`${origin}/#/biotron`, {waitUntil: 'domcontentloaded'})
-  await page.getByText(/Offline mode.*Settings.*without internet/i).waitFor({state: 'visible'})
-  await spectator.getByRole('button', {name: 'Update app', exact: true}).waitFor()
-  assert.strictEqual(await spectator.evaluate(() => window.__pwaSpectator), 'still-open',
-    'an update accepted in another tab reloaded the spectator')
-  await spectator.getByLabel('Biotron tasks').getByRole('link', {name: 'Settings', exact: true}).click()
-  assert(spectator.url().endsWith('/#/biotron/play'), 'Old tab navigated toward a removed route chunk')
-  assert.strictEqual(await spectator.evaluate(() => document.activeElement?.textContent.trim()), 'Update app',
-    'Blocked route did not focus the explicit update action')
-  await Promise.all([
-    spectator.waitForNavigation({waitUntil: 'domcontentloaded'}),
-    spectator.getByRole('button', {name: 'Update app', exact: true}).click()
-  ])
-  await spectator.getByRole('heading', {name: 'Plant music', exact: true}).waitFor()
-  assert.strictEqual(await spectator.evaluate(() => window.__pwaSpectator), undefined,
-    'spectator explicit update did not reload its page')
+    const spectator = await context.newPage()
+    await spectator.goto(`${origin}/#/biotron/play`, {waitUntil: 'load'})
+    await spectator.evaluate(() => { window.__pwaSpectator = 'still-open' })
+    await Promise.all([
+      page.waitForNavigation({waitUntil: 'domcontentloaded'}),
+      page.getByRole('button', {name: 'Update app', exact: true}).click()
+    ])
+    await waitFor(async () => await controllerVersion(page) === 2, 'explicit update did not activate the new worker')
+    // First-play intentionally hides readiness. Verify it on Settings after the explicit reload.
+    await page.goto(`${origin}/#/biotron`, {waitUntil: 'domcontentloaded'})
+    await page.getByText(/Offline mode.*Settings.*without internet/i).waitFor({state: 'visible'})
+    await spectator.getByRole('button', {name: 'Update app', exact: true}).waitFor()
+    assert.strictEqual(await spectator.evaluate(() => window.__pwaSpectator), 'still-open',
+      'an update accepted in another tab reloaded the spectator')
+    await spectator.getByLabel('Biotron tasks').getByRole('link', {name: 'Settings', exact: true}).click()
+    assert(spectator.url().endsWith('/#/biotron/play'), 'Old tab navigated toward a removed route chunk')
+    assert.strictEqual(await spectator.evaluate(() => document.activeElement?.textContent.trim()), 'Update app',
+      'Blocked route did not focus the explicit update action')
+    await Promise.all([
+      spectator.waitForNavigation({waitUntil: 'domcontentloaded'}),
+      spectator.getByRole('button', {name: 'Update app', exact: true}).click()
+    ])
+    await spectator.getByRole('heading', {name: 'Plant music', exact: true}).waitFor()
+    assert.strictEqual(await spectator.evaluate(() => window.__pwaSpectator), undefined,
+      'spectator explicit update did not reload its page')
 
-  await closeProfile()
-  page = await openProfile(false)
-  await page.goto(`${origin}/biotron`, {waitUntil: 'load'})
-  await page.getByText(/Offline mode — Settings are working without internet/i).waitFor({state: 'visible', timeout: 10000})
-  assert.strictEqual(await controllerVersion(page), 2, 'accepted update did not persist for the offline restart')
-  assert.strictEqual(
-    await page.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration()).waiting)),
-    false,
-    'old waiting worker remains after deliberate restart'
-  )
-  console.log('5/7 A→B update required a click, left another tab open, and persisted for an offline restart')
+    await closeProfile()
+    page = await openProfile(false)
+    await page.goto(`${origin}/biotron`, {waitUntil: 'load'})
+    await page.getByText(/Offline mode — Settings are working without internet/i).waitFor({state: 'visible', timeout: 10000})
+    assert.strictEqual(await controllerVersion(page), finalWorker, 'accepted update did not persist for the offline restart')
+    assert.strictEqual(
+      await page.evaluate(async () => Boolean((await navigator.serviceWorker.getRegistration()).waiting)),
+      false,
+      'old waiting worker remains after deliberate restart'
+    )
+    console.log('5/7 A→B update required a click, left another tab open, and persisted for an offline restart')
+  } else {
+    await closeProfile()
+    page = await openProfile(false)
+    await page.goto(`${origin}/biotron`, {waitUntil: 'load'})
+    await page.getByText(/Offline mode — Settings are working without internet/i).waitFor({state: 'visible', timeout: 10000})
+    assert.strictEqual(await controllerVersion(page), finalWorker)
+    console.log('5/7 published unmodified worker survives offline restart; controlled A→B update NOT RUN on immutable remote origin (local fixture only)')
+  }
 
   await context.addInitScript(() => {
     const getRegistration = navigator.serviceWorker.getRegistration.bind(navigator.serviceWorker)
@@ -463,7 +496,7 @@ async function controllerVersion(page) {
   })
   await page.reload({waitUntil: 'load'})
   await page.getByText(/Connect once to install the offline copy/i).waitFor({state: 'visible', timeout: 10000})
-  console.log('6/7 clean-profile offline failure is truthful and actionable')
+  console.log('6/7 simulated missing-registration offline failure is truthful and actionable')
 
   await context.setOffline(false)
   await page.evaluate(() => {
@@ -471,16 +504,26 @@ async function controllerVersion(page) {
     window.__simulateMissingRegistration = false
     window.dispatchEvent(new Event('online'))
   })
+  if (remotePreview) onlineIdentities.push(await verifyOnlineIdentity(context, origin, root))
   await page.getByRole('button', {name: 'Retry', exact: true}).click()
   await page.getByText(/Offline mode is ready/i).waitFor({state: 'visible', timeout: 15000})
   await closeProfile()
   page = await openProfile(false)
   await page.goto(`${origin}/biotron`, {waitUntil: 'load'})
   await page.getByText(/Offline mode — Settings are working without internet/i).waitFor({state: 'visible', timeout: 10000})
+  assert.strictEqual(await controllerVersion(page), finalWorker)
+  if (evidence) fs.writeFileSync(path.join(evidence, 'pwa-online-identity.json'), JSON.stringify({remotePreview, workerBytesChecked, onlineIdentities}, null, 2))
   console.log('7/7 Retry repairs offline setup and the same profile launches offline again')
 
-  console.log(`Browser PWA verified across persistent-profile restarts: offline app shell, simulated permission/retry and MIDI setting write, firmware isolation and controlled update. ${installabilityChecked ? 'CDP manifest/installability checks ran; OS installation NOT RUN.' : context.browser().browserType().name() === 'chromium' ? 'CDP manifest checked; installability oracle NOT SUPPORTED; OS installation NOT RUN.' : 'CDP installability oracle NOT SUPPORTED; OS installation NOT RUN.'}`)
-})().catch(error => {
+  console.log(`Browser PWA verified across persistent-profile restarts: offline app shell, simulated permission/retry and MIDI setting write, firmware isolation. Controlled update: ${remotePreview ? 'NOT RUN on immutable remote origin' : 'local fixture verified'}. ${installabilityChecked ? 'CDP manifest/installability checks ran; OS installation NOT RUN.' : context.browser().browserType().name() === 'chromium' ? 'CDP manifest checked; installability oracle NOT SUPPORTED; OS installation NOT RUN.' : 'CDP installability oracle NOT SUPPORTED; OS installation NOT RUN.'}`)
+})().catch(async error => {
+  if (evidence) {
+    const prefix = path.join(evidence, 'pwa-first-fault')
+    fs.writeFileSync(prefix + '.json', JSON.stringify({error: error.stack, beforeCleanup: true,
+      url: page?.url(), profile, remotePreview, workerBytesChecked, onlineIdentities}, null, 2))
+    try { if (page && !page.isClosed()) await page.screenshot({path: prefix + '.png', fullPage: true, timeout: 2000}) }
+    catch (captureError) { console.error('First-fault screenshot unavailable: ' + captureError.message) }
+  }
   console.error(error)
   process.exitCode = 1
 }).finally(async () => {

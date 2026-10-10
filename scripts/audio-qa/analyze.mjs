@@ -15,8 +15,11 @@ export function analyze(channels,sampleRate,{dropped=0,clocksValid=true}={}){
  // Check Note Off before panic; a later panic must not hide a lost release.
  if(metrics.some(m=>m.releaseRms!==null&&m.releaseRms>.001))reasons.push('UNRELEASED_NOTE')
  if(metrics.some(m=>m.tailRms!==null&&m.tailRms>.001))reasons.push('STUCK_TAIL')
- const incomplete=dropped>0||!clocksValid||metrics.some(m=>m.seconds<SCORE.seconds-.1||m.releaseRms===null||m.tailRms===null)
- return {result:incomplete?'INCONCLUSIVE':reasons.length?'FAIL':'PASS',reasons,metrics,dropped,scope:'engine final gain PCM; no speaker or system-output claim',score:SCORE.id}
+ const captureProblems=[]
+ if(dropped>0)captureProblems.push('DROPPED_BLOCKS')
+ if(!clocksValid)captureProblems.push('INVALID_CLOCKS')
+ if(metrics.some(m=>m.seconds<SCORE.seconds-.1||m.releaseRms===null||m.tailRms===null))captureProblems.push('INCOMPLETE_PCM')
+ return {result:captureProblems.length?'INCONCLUSIVE':reasons.length?'FAIL':'PASS',reasons,captureProblems,metrics,dropped,scope:'engine final gain PCM; no speaker or system-output claim',score:SCORE.id}
 }
 export function wav(channels,sampleRate){
  const count=channels.length,n=channels[0].length,b=new ArrayBuffer(44+n*count*4),v=new DataView(b)

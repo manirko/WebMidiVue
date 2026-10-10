@@ -13,9 +13,10 @@ const {pathToFileURL} = require('node:url')
 
 const repo = path.resolve(process.argv[2] || path.join(__dirname, '..'))
 const localRequire = createRequire(path.join(repo, 'package.json'))
-const {launchBrowser, qaOrigin, verifyOnlineIdentity, createStaticServer} = localRequire(path.join(repo, 'scripts/browser-test-harness.js'))
+const {launchBrowser, browserCall, qaOrigin, verifyOnlineIdentity, createStaticServer} = localRequire(path.join(repo, 'scripts/browser-test-harness.js'))
 const outputParent = process.env.BIOTRON_QA_OUTPUT || process.argv[3] || os.tmpdir()
 const fault = process.env.UI_PERF_FAULT || 'none'
+const quality = process.env.UI_PERF_QUALITY || 'safe'
 const output = fs.mkdtempSync(path.join(outputParent, 'ui-performance-'))
 const dist = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(repo, 'dist'))
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
@@ -29,12 +30,12 @@ const distribution = values => {
   return {n: sorted.length, min: sorted[0] ?? null, p50: quantile(.5), p95: quantile(.95), max: sorted.at(-1) ?? null}
 }
 const report = {
-  status: 'RUNNING', capturedAt: new Date().toISOString(), routes: [], audio: [], errors: [], requestFailures: [],
+  status: 'RUNNING', phase: 'setup', requestedBrowser: process.env.BIOTRON_QA_BROWSER || 'chrome', capturedAt: new Date().toISOString(), routes: [], audio: [], errors: [], requestFailures: [],
   scope: 'Exact built UI, actual Garden and existing production-engine final-gain PCM; keyboard input and synthetic CPU contention, no physical MIDI/speaker, perceptual or release acceptance',
   limits: {routeResponseMs: 5000, firstKeyboardStartMs: 5000, gardenHandshakeMs: 20000},
   performanceDistributions: 'Observations only; no calibrated p50/p95 or hardware-latency acceptance',
   traceScope: 'Protocol events only; continuous screenshots/DOM snapshots delay trusted keys and invalidate audio timing. First-fault screenshot remains separate.',
-  fault,
+  fault, quality, testSourceSha256: hash(fs.readFileSync(__filename)),
   faultScope: fault === 'mute' ? 'Test-only capture worklet substitutes zero PCM; production output is unchanged' :
     fault === 'drop' ? 'Test-only capture omits the second observed block; production output is unchanged' :
     fault === 'late-release' ? 'Test-only keyboard Note Off is delayed by 500ms; timing must remain INCONCLUSIVE' : 'No injected capture fault',
@@ -84,6 +85,7 @@ async function cleanup() {
 (async () => {
   const {SCORE, analyze, wav} = await import(pathToFileURL(path.join(repo, 'scripts/audio-qa/analyze.mjs')).href)
   assert(['none', 'mute', 'drop', 'late-release'].includes(fault), 'UI_PERF_FAULT must be none, mute, drop or late-release')
+  assert(['safe', 'standard'].includes(quality), 'UI_PERF_QUALITY must be safe or standard')
   assert(fs.existsSync(path.join(dist, 'service-worker.js')), 'Existing beta dist required; this lane never builds')
   initialDist = snapshot()
   report.distHashes = initialDist
@@ -105,6 +107,7 @@ async function cleanup() {
   save()
   server = createStaticServer(dist)
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve) })
+  report.phase = 'browser-launch'
   browser = await launchBrowser({headless: process.env.UI_PERF_HEADED !== '1'})
   report.browser = browser.version()
   report.browserSelector = process.env.BIOTRON_QA_BROWSER || 'chrome'
@@ -113,9 +116,13 @@ async function cleanup() {
   const origin = qaOrigin(server)
   report.origin = origin
   // PWA update has its own lane. A fresh, SW-free profile isolates UI/engine timing.
+  report.phase = 'context-create'
   context = await browser.newContext({viewport: {width: 1366, height: 900}, serviceWorkers: 'block'})
   context.setDefaultTimeout(5000)
-  if (process.env.BIOTRON_QA_ORIGIN !== undefined) report.onlineIdentityBefore = await verifyOnlineIdentity(context, origin, dist)
+  if (process.env.BIOTRON_QA_ORIGIN !== undefined) {
+    report.phase = 'remote-identity'
+    report.onlineIdentityBefore = await verifyOnlineIdentity(context, origin, dist)
+  }
   await context.tracing.start({screenshots: false, snapshots: false, sources: false})
   await context.addInitScript(injectedFault => {
     const q = window.__uiPerf = {contexts: [], output: null, gesture: null, gardenAt: null,
@@ -172,12 +179,14 @@ async function cleanup() {
   page = await context.newPage()
   page.on('pageerror', error => report.errors.push(String(error)))
   page.on('requestfailed', request => report.requestFailures.push({url: request.url(), failure: request.failure()}))
+  report.phase = 'cold-navigation'
   const coldStarted = Date.now()
   await page.goto(`${origin}/#/biotron/play`)
   await page.locator('.sound-lab:visible').waitFor()
   report.coldNavigationWallMs = Date.now() - coldStarted
   for (let index = 0; index < 20; index++) {
     const destination = index % 2 === 0 ? 'Settings' : 'Play'
+    report.phase = 'route-transition'; report.routeAttempt = {sequence: index + 1, destination}; save()
     await page.locator('.device-task-nav:visible').getByRole('link', {name: destination, exact: true}).click()
     if (destination === 'Settings') await page.getByRole('heading', {name: 'Settings', exact: true}).waitFor()
     else await page.locator('.sound-lab:visible').waitFor()
@@ -193,15 +202,21 @@ async function cleanup() {
   report.routeDistributions = Object.fromEntries(['Settings', 'Play'].flatMap(destination => ['first-pass', 'warm'].map(phase => [
     destination + '/' + phase, distribution(report.routes.filter(row => row.destination === destination && row.phase === phase).map(row => row.latencyMs)),
   ])))
+  report.phase = 'garden-renderer'
   await page.waitForFunction(() => window.__uiPerf.gardenAt !== null, {}, {timeout: report.limits.gardenHandshakeMs})
   report.midiCallsBeforeAudio = await page.evaluate(() => window.__uiPerf.midiCalls)
   report.midiBaseline = report.midiCallsBeforeAudio.length
   assert(report.midiCallsBeforeAudio.every(call => call.route === '#/biotron' && call.phase === 'settings-route'),
     'A synthetic MIDI access call occurred on cold or returning Play')
+  report.phase = 'quality-selection'
+  await page.getByLabel('Limit to 4 notes at once', {exact: true}).setChecked(quality === 'safe')
   await page.evaluate(() => { window.__uiPerf.measurementPhase = 'keyboard-start' })
+  report.phase = 'keyboard-start'
   const start = Date.now()
   await page.getByRole('button', {name: 'Play with keyboard', exact: true}).click()
   await page.locator('.sound-lab[data-keyboard="on"][data-audio-state="running"][data-sound="Round"][data-volume="70"]').waitFor()
+  report.observedQuality = await page.locator('.sound-lab:visible').getAttribute('data-quality')
+  assert.equal(report.observedQuality, quality, 'Selected note limit did not reach the actual engine')
   report.firstKeyboardStartWallMs = Date.now() - start
   assert(report.firstKeyboardStartWallMs < report.limits.firstKeyboardStartMs, 'Keyboard start exceeded existing 5-second audio start budget')
   const worklet = `class Capture extends AudioWorkletProcessor {
@@ -229,6 +244,7 @@ async function cleanup() {
     return q.output.context.currentTime - q.phase.firstFrame / q.output.context.sampleRate >= seconds
   }, seconds, {timeout: 10000})
   for (const budget of [0, 4, 10]) {
+    report.phase = 'audio-load'; report.currentLoadMs = budget; save()
     await page.evaluate(async milliseconds => {
       const q = window.__uiPerf
       q.measurementPhase = 'audio-load'
@@ -289,9 +305,10 @@ async function cleanup() {
     save()
     if (analysis.result !== 'PASS') {
       report.status = analysis.result
-      throw Error(`Production UI load ${budget}ms: ${analysis.result}/${analysis.reasons.join(',')}`)
+      throw Error(`Production UI load ${budget}ms: ${analysis.result}/${[...analysis.captureProblems, ...analysis.reasons].join(',')}`)
     }
   }
+  report.phase = 'cleanup'
   await cleanup()
   assert.equal(report.cleanup.contexts.length, 1, 'Lane created more than one production AudioContext')
   assert(report.cleanup.contexts.every(state => state === 'closed'), 'Stop retained an open production context')
@@ -303,14 +320,16 @@ async function cleanup() {
   assert.deepEqual(report.errors, [], 'Uncaught browser error')
   assert.deepEqual(snapshot(), initialDist, 'dist changed during this lane; evidence is not bound to one artifact')
   if (process.env.BIOTRON_QA_ORIGIN !== undefined) report.onlineIdentityAfter = await verifyOnlineIdentity(context, origin, dist)
+  report.phase = 'complete'
   report.status = 'PASS'
   console.log('PASS: 20 UI route clicks, actual Garden, existing engine PCM under three synthetic loads, trusted keyboard Note Off and complete release')
 })().catch(async error => {
   if (error.code === 'PCM_INCONCLUSIVE') report.status = 'INCONCLUSIVE'
   else if (report.status !== 'INCONCLUSIVE') report.status = 'FAIL'
+  report.firstFailurePhase = report.phase
   report.error = String(error.stack || error)
   save()
-  if (page && !page.isClosed()) await page.screenshot({path: path.join(output, 'first-fault.png')}).catch(() => {})
+  if (page && !page.isClosed()) await page.screenshot({path: path.join(output, 'first-fault.png'), timeout: 2000}).catch(() => {})
   process.exitCode = report.status === 'INCONCLUSIVE' ? 2 : 1
 }).finally(async () => {
   try { await cleanup() } catch (error) { report.cleanupError = String(error); report.status = 'FAIL'; process.exitCode = 1 }
@@ -318,7 +337,7 @@ async function cleanup() {
     report.midiCleanupError = 'Cleanup or audio introduced an additional synthetic MIDI access call'
     report.status = 'FAIL'; process.exitCode = 1
   }
-  if (context) await context.tracing.stop({path: path.join(output, 'trace.zip')}).catch(error => { report.traceError = String(error); report.status = 'FAIL'; process.exitCode = 1 })
+  if (context) await browserCall(browser, () => context.tracing.stop({path: path.join(output, 'trace.zip')}), 'UI performance trace export', 10000).catch(error => { report.traceError = String(error); report.status = 'FAIL'; process.exitCode = 1 })
   if (browser) await browser.close().catch(error => { report.browserCloseError = String(error); report.status = 'FAIL'; process.exitCode = 1 })
   if (server?.listening) await new Promise(resolve => server.close(resolve))
   save()
