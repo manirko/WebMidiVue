@@ -1,6 +1,6 @@
 <template>
   <section class="audio-compare" :data-variant="variant.id">
-    <p>{{ calibrationOnly ? 'Selecting a cue replaces the current experiment; plant notes use the last Classic sound.' : 'Choose a sound, then play it with Biotron or your computer keyboard. Experimental sounds stay selected when you reopen this browser.' }}</p>
+    <p>{{ calibrationOnly ? 'Selecting a cue replaces the current experiment; plant notes use the last Classic sound.' : 'Choose a sound, then play it with Biotron or listen to an example. Experimental sounds stay selected when you reopen this browser.' }}</p>
     <div class="compare-groups" role="group" aria-label="Sound experiment group">
       <button v-for="group in banks" :key="group.id" type="button" class="btn btn-outline-primary" :class="{active: bankId === group.id}" :aria-pressed="bankId === group.id" @click="changeBank(group.id)">{{ group.label }}</button>
     </div>

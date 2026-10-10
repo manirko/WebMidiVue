@@ -190,7 +190,8 @@ test('changing note limit names the available restart action after Stop resets k
     [false, false, true, false, 'Press Start sound'],
     [true, true, true, false, 'Press Play with keyboard'],
     [true, false, true, false, 'Press Start listening'],
-    [true, false, false, false, 'Press Play with keyboard'],
+    [true, false, false, false, 'Open Sound, then press Listen to example'],
+    [true, true, false, false, 'Press Play with keyboard'],
     [true, false, true, true, 'Open Sound, then press Listen to example']
   ]) {
     const {target} = fixture()

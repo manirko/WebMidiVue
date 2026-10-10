@@ -23,4 +23,5 @@ export default {
 .keys-controls label { display:flex; gap:.5rem; align-items:center; }
 .keys-controls select,.keys-controls button { min-height:44px; }
 .computer-keys p,.computer-keys small { color:#625e58; font-size:.85rem; }
+@media (any-hover: none) and (any-pointer: coarse) { .computer-keys { display:none; } }
 </style>

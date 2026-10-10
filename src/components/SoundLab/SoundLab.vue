@@ -109,7 +109,6 @@
     <header class="sound-lab__intro">
       <small>Beta sound lab</small>
       <h1>Play your device</h1>
-      <p>Choose a sound, then play from a Playtronica device or your computer keyboard.</p>
     </header>
 
     <CompatibilityNotice v-if="midiAdvisory" :issue="midiAdvisory" advisory />

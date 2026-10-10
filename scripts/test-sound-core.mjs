@@ -441,8 +441,8 @@ test('sound capabilities fail closed without hiding the audio-only fallback', ()
 
   const audioOnly = detectSoundCapabilities({AudioContext, navigator: {}})
   assert.deepEqual(audioOnly, {audio: true, midi: false})
-  assert.match(soundCapabilityMessage(audioOnly), /Keyboard and screen sound work/i)
-  assert.match(soundCapabilityMessage(audioOnly, {requiresMidi: true}), /cannot hear your device/i)
+  assert.match(soundCapabilityMessage(audioOnly), /listen to examples/i)
+  assert.match(soundCapabilityMessage(audioOnly, {requiresMidi: true}), /cannot connect to your device/i)
 
   const unsupported = detectSoundCapabilities({navigator: {requestMIDIAccess() {}}})
   assert.deepEqual(unsupported, {audio: false, midi: true})

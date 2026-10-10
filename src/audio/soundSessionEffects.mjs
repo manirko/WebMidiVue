@@ -1,6 +1,5 @@
 import {markRaw} from 'vue'
-// Sound-session effects used by the Play view. Vue owns rendering; this owns
-// recovery and Biotron calibration timeouts for the live session.
+// Live Play effects: recovery and Biotron calibration timeouts.
 export function createSoundSessionEffects({resumeAudioWithin, trace, updateSoundSession, parseBiotronCalibrationState,
   MIDI_PROMPT_HINT, selectRevealInput, recordBiotronEvent, soundCapabilityMessage}) {
   return {
@@ -135,7 +134,8 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
     async changeQuality(event) {
       if (this.starting || this.releaseBlocked) { event.target.checked = this.lowCpu; return }
       const previous = this.lowCpu, safe = event.target.checked
-      const restartAction = this.examplePlaying ? 'Open Sound, then press Listen to example' : `Press ${!this.revealMode ? 'Start sound' : (this.keyboardOn || !this.capabilities.midi ? 'Play with keyboard' : this.revealProfile.startLabel)}`
+      const restartExample = this.examplePlaying || (this.revealMode && !this.capabilities.midi && !this.keyboardOn)
+      const restartAction = restartExample ? 'Open Sound, then press Listen to example' : `Press ${!this.revealMode ? 'Start sound' : (this.keyboardOn ? 'Play with keyboard' : this.revealProfile.startLabel)}`
       this.lowCpu = safe
       if (this.engine) await this.stop()
       if (this.releaseBlocked) { this.lowCpu = previous; return }

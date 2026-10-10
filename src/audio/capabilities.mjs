@@ -10,10 +10,10 @@ export function soundCapabilityMessage(capabilities, {requiresMidi = false} = {}
     return 'Sound is not available in this browser. Open this page in current Chrome or Edge on a computer.'
   }
   if (!capabilities.midi && requiresMidi) {
-    return 'This browser can play sound, but it cannot hear your device. Use current Chrome or Edge on a computer; Android Chrome is experimental.'
+    return 'This browser can play examples, but it cannot connect to your device. Use a browser or app with Web MIDI support.'
   }
   if (!capabilities.midi) {
-    return 'Keyboard and screen sound work here. USB devices need current Chrome or Edge on a computer; Android Chrome is experimental.'
+    return 'You can listen to examples here. USB devices need a browser with Web MIDI support.'
   }
   return ''
 }

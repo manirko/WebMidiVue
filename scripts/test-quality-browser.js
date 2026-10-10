@@ -12,6 +12,7 @@ let currentPage, currentProfile
 
 const profiles = [
   {name: 'desktop', options: {viewport: {width: 1440, height: 900}}, midi: true, heading: 'Settings'},
+  {name: 'narrow-desktop', options: {viewport: {width: 320, height: 568}}, midi: true, heading: 'Settings'},
   {name: 'pixel-7', options: devices['Pixel 7'], midi: true, heading: 'Settings'},
   {
     name: 'compact-320',
@@ -19,7 +20,8 @@ const profiles = [
     midi: true,
     heading: 'Settings'
   },
-  {name: 'iphone-15-no-midi', options: devices['iPhone 15'], midi: false, heading: 'Settings'}
+  {name: 'iphone-15-no-midi', options: devices['iPhone 15'], midi: false, heading: 'Settings'},
+  {name: 'ipad-touch', options: devices['iPad Pro 11'], midi: true, heading: 'Settings'}
 ]
 
 async function readQuality(page) {
@@ -217,7 +219,17 @@ async function auditProfile(browser, origin, profile) {
   assert.equal(await sound.getByLabel('Sound', {exact: true}).locator('option').count(), 7,
     `${profile.name}: Classic sound choices are missing`)
   await page.getByLabel('Limit to 4 notes at once', {exact: true}).waitFor()
-  await page.getByLabel('Keyboard octave', {exact: true}).waitFor()
+  const keyboard = page.getByRole('region', {name: 'Computer keyboard', exact: true, includeHidden: true})
+  if (profile.options.hasTouch) {
+    assert.equal(await keyboard.isVisible(), false, `${profile.name}: touch-only page offers computer keyboard controls`)
+    assert.equal(await page.getByRole('button', {name: 'Play with keyboard', exact: true}).count(), 0,
+      `${profile.name}: touch-only page exposes keyboard action to accessibility tools`)
+    assert(!(await sound.locator('p').allTextContents()).some(text => text.includes('computer keyboard')),
+      `${profile.name}: sound instructions assume a computer keyboard`)
+  } else {
+    await page.getByLabel('Keyboard octave', {exact: true}).waitFor()
+    assert(await keyboard.isVisible(), `${profile.name}: computer keyboard controls are hidden`)
+  }
   await auditExpanded('Play Sound open')
 
   if (profile.midi) {
