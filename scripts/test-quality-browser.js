@@ -85,6 +85,67 @@ function assertQuality(result, label, checkCls = true) {
   assert.deepStrictEqual(result.logo, {source: '/Logo-Black-280.webp', width: '280', height: '199'})
 }
 
+async function auditHints(page, profile) {
+  const hints = page.locator('details.hint:visible')
+  const readings = []
+  const controls = () => page.locator('.biotron-settings-beta input, .biotron-settings-beta select')
+    .evaluateAll(elements => elements.map(element => ({value: element.value, checked: element.checked})))
+  const originalControls = await controls()
+  assert(await hints.count() > 0, `${profile.name}: no settings explanations checked`)
+  for (let index = 0; index < await hints.count(); index++) {
+    const hint = hints.nth(index), trigger = hint.locator('summary')
+    if (profile.options.hasTouch) await trigger.tap(); else await trigger.click()
+    const text = hint.locator('[role="tooltip"], .hint-text')
+    await text.scrollIntoViewIfNeeded()
+    const reading = await text.evaluate(element => {
+      const style = getComputedStyle(element), rect = element.getBoundingClientRect()
+      return {text: element.textContent, rect: rect.toJSON(), viewport: document.documentElement.clientWidth,
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        style: Object.fromEntries(['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing',
+          'textTransform', 'textAlign', 'whiteSpace'].map(key => [key, style[key]]))}
+    })
+    readings.push(reading)
+    fs.writeFileSync(path.join(artifacts, `${profile.name}-hints.json`), JSON.stringify(readings, null, 2))
+    assert(reading.rect.left >= 0 && reading.rect.right <= reading.viewport + 1 && reading.overflow <= 1,
+      `${profile.name}: help outside viewport: ${JSON.stringify(reading)}`)
+    assert.equal(reading.style.fontWeight, '400', `${profile.name}: help inherits bold label`)
+    assert.equal(reading.style.textAlign, 'left', `${profile.name}: help alignment differs`)
+    if (index === 0) await page.screenshot({path: path.join(artifacts, `${profile.name}-help.png`), timeout: 2000})
+    assert.deepStrictEqual(reading.style, readings[0].style, `${profile.name}: help formatting differs`)
+    if (profile.options.hasTouch) await trigger.tap(); else await trigger.click()
+    assert.equal(await hint.evaluate(element => element.open), false, `${profile.name}: help did not close`)
+    assert.equal(await text.isVisible(), false, `${profile.name}: closed help remains visible`)
+  }
+  // Text enlargement and an unbroken token must remain readable in the same real disclosure.
+  const firstHint = hints.first()
+  await firstHint.locator('summary').click()
+  await firstHint.locator('[role="tooltip"], .hint-text').evaluate(element => {
+    element.textContent = 'Long explanation\n' + 'x'.repeat(200)
+    document.documentElement.style.fontSize = '200%'
+  })
+  await firstHint.locator('[role="tooltip"], .hint-text').scrollIntoViewIfNeeded()
+  const enlarged = await firstHint.locator('[role="tooltip"], .hint-text').evaluate(element => ({
+    overflow: element.scrollWidth - element.clientWidth, text: element.textContent,
+    left: element.getBoundingClientRect().left, right: element.getBoundingClientRect().right,
+    viewport: document.documentElement.clientWidth
+  }))
+  fs.writeFileSync(path.join(artifacts, `${profile.name}-enlarged-help.json`), JSON.stringify(enlarged, null, 2))
+  assert(enlarged.overflow <= 1 && enlarged.left >= 0 && enlarged.right <= enlarged.viewport + 1,
+    `${profile.name}: enlarged/long explanation is clipped`)
+  assert.equal(enlarged.text, 'Long explanation\n' + 'x'.repeat(200))
+  await page.evaluate(() => document.documentElement.style.removeProperty('font-size'))
+  await firstHint.locator('summary').click()
+  assert.deepStrictEqual(await controls(), originalControls, `${profile.name}: help changed settings values`)
+  if (!profile.options.hasTouch) {
+    const first = hints.first(), summary = first.locator('summary')
+    await summary.focus(); await page.keyboard.press('Enter')
+    assert(await first.evaluate(element => element.open), `${profile.name}: Enter did not open help`)
+    await page.keyboard.press('Space')
+    assert.equal(await first.evaluate(element => element.open), false, `${profile.name}: Space did not close help`)
+  }
+  return readings.length
+}
+
 async function auditProfile(browser, origin, profile) {
   currentProfile = profile.name
   const context = await browser.newContext(contextOptions({...profile.options, reducedMotion: 'reduce'}, browser))
@@ -161,6 +222,8 @@ async function auditProfile(browser, origin, profile) {
     assert(sliders.length > 0 && sliders.every(cursor => cursor === 'pointer'),
       `${profile.name}: visible settings slider uses a resize cursor`)
   }
+
+  const hintCount = await auditHints(page, profile)
 
   // Feedback is a local editor. No mail client, backend or recorded outcome is
   // required to write, close/reopen or copy a rejection on a phone.
@@ -254,7 +317,7 @@ async function auditProfile(browser, origin, profile) {
 
   await context.close()
   const cls = value => value === null ? 'NOT MEASURABLE in this engine' : value.toFixed(3)
-  return `${profile.name}: initial CLS ${cls(result.cls)}, overflow ${result.documentOverflow}px; Play CLS ${cls(playResult.cls)}; ${expandedResults.length} opened states checked`
+  return `${profile.name}: initial CLS ${cls(result.cls)}, overflow ${result.documentOverflow}px; Play CLS ${cls(playResult.cls)}; ${expandedResults.length} opened states checked; ${hintCount} explanations checked`
 }
 
 ;(async () => {
