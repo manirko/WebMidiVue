@@ -41,6 +41,32 @@ for 43 choices: 7 Classic, 10 Timbres, 10 calibration cues, 10 high-note treatme
 changes, repeated keys and cold device-free Play are separate cases. The native
 popup's actual OS selection behavior remains a physical case.
 
+The same audition tester now captures continuous final-gain PCM during examples:
+9 active timbre changes, 9 same-timbre controls, and 6 Stop/restart segments for
+Round reference, Clear glass and Deep bass. It saves WAV and change-time windows
+before asserting finite samples, no clipping or missing blocks, RMS > .001,
+the actually applied timbre and no MIDI requests. This is part of the full
+audition path; `--keyboard-only` keeps its existing scope. Run the narrow subset:
+
+```sh
+BIOTRON_QA_DIST_ROOT=/absolute/path/to/pinned/dist \
+AUDITION_BROWSER_OUTPUT=/absolute/path/to/new/evidence \
+BIOTRON_QA_BROWSER=chrome node scripts/test-audition-browser.js --transitions-only
+```
+
+`AUDITION_TRANSITION_FAULT=clip` or `gap` deliberately damages the recorded PCM
+in this subset. Each must exit nonzero and retain the first fault and WAV;
+these are capture-oracle controls, not production defects. The recorder closes
+with its AudioContext, so the boundary between Stop and a new context is
+**not measured**. Contiguous final-gain blocks do not prove speaker output or
+absence of device underruns. Large sample steps can belong to the timbre:
+compare the same-timbre windows; no perceptual PASS is inferred.
+
+10 October: exact frozen b15 passed 24 captures each in Chrome154 and
+Playwright WebKit26.5. Earlier next-runtime0a diagnostic captures and oracle
+faults are separate evidence. Phone crackle FB63 remains open; no DSP patch,
+phone-hearing acceptance, full gate or replacement of the sent packet is claimed.
+
 Select a browser without editing a test:
 
 ```sh

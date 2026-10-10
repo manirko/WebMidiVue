@@ -27,6 +27,9 @@ fs.mkdirSync(artifacts,{recursive:true})
 let page, diagnosticPage, stage='launch',starts=0
 const shortGateFault=process.env.AUDITION_SHORT_GATE_FAULT||'none'
 assert(['none','late','silent'].includes(shortGateFault),'AUDITION_SHORT_GATE_FAULT must be none, late or silent')
+const transitionFault=process.env.AUDITION_TRANSITION_FAULT||'none'
+assert(['none','clip','gap'].includes(transitionFault),'AUDITION_TRANSITION_FAULT must be none, clip or gap')
+assert(transitionFault==='none'||process.argv.includes('--transitions-only'),'Capture mutations require the transition subset')
 const deadlineMs=Number(process.env.AUDITION_BROWSER_TIMEOUT_MS||300000)
 assert(Number.isFinite(deadlineMs)&&deadlineMs>0,'AUDITION_BROWSER_TIMEOUT_MS must be finite and positive')
 const progress=[]
@@ -191,7 +194,9 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   }
   let cases=0
   const keyboardOnly=process.argv.includes('--keyboard-only')
-  if(!keyboardOnly){
+  const transitionsOnly=process.argv.includes('--transitions-only')
+  assert(!(keyboardOnly&&transitionsOnly),'Choose one development subset')
+  if(!keyboardOnly&&!transitionsOnly){
   mark('note-limit restart instructions when Sound is closed during an example')
   await selectBank('Timbres');await startExample()
   await page.locator('.sound-lab[data-example="playing"][data-audio-state="running"]').waitFor({state:'attached'})
@@ -291,6 +296,108 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
    }
    return window.__comparisonSpectrum(fundamental)
   },fundamental)
+  if(!keyboardOnly){
+   const {wav}=await import('./audio-qa/analyze.mjs')
+   const {AUDITION_BANKS:transitionBanks}=await import('../src/audio/auditionBanks.mjs')
+   const timbreNames=new Map(transitionBanks.find(bank=>bank.id==='timbres').variants.map(variant=>[variant.id,variant.preset.name]))
+   const observations=[]
+   await page.evaluate(()=>{
+    window.__transitionBegin=async()=>{
+     const output=window.__comparisonOutput,context=output.context,blocks=[],marks=[]
+     const code=`class Capture extends AudioWorkletProcessor{process(inputs){const pcm=inputs[0]?.[0]||new Float32Array(128);this.port.postMessage({frame:currentFrame,pcm:pcm.slice()});return true}}registerProcessor('transition-capture',Capture)`
+     const url=URL.createObjectURL(new Blob([code],{type:'text/javascript'}))
+     try{await context.audioWorklet.addModule(url)}finally{URL.revokeObjectURL(url)}
+     const tap=new AudioWorkletNode(context,'transition-capture'),drain=context.createGain()
+     drain.gain.value=0;tap.connect(drain);drain.connect(context.destination);output.connect(tap)
+     tap.port.onmessage=({data})=>blocks.push(data)
+     const mark=event=>{
+      if(event.type==='change'||event.target.closest('button')?.textContent==='Stop example')marks.push({event:event.type,at:context.currentTime,value:event.target.value??null})
+     }
+     document.addEventListener('change',mark);document.addEventListener('click',mark)
+     window.__transitionCapture={context,output,tap,drain,blocks,marks,mark}
+    }
+    window.__transitionEnd=()=>{
+     const {context,output,tap,drain,blocks,marks,mark}=window.__transitionCapture
+     document.removeEventListener('change',mark);document.removeEventListener('click',mark)
+     try{output.disconnect(tap)}catch{/* Stop may have disconnected all outputs already. */}
+     tap.disconnect();drain.disconnect();tap.port.onmessage=null;tap.port.close()
+     const player=document.querySelector('.sound-lab').dataset
+     return {sampleRate:context.sampleRate,contextState:context.state,marks,
+      fixture:{sound:player.sound??null,quality:player.quality,volume:player.volume,midiRequests:window.__comparisonMidiRequests},
+      blocks:blocks.map(({frame,pcm})=>({frame,pcm:Array.from(pcm)}))}
+    }
+   })
+   const saveCapture=(name,from,to,repeat,capture,kind='active-change')=>{
+     // Synthetic capture faults test this oracle, never the production engine.
+     if(transitionFault==='clip')capture.blocks[0].pcm[0]=2
+     if(transitionFault==='gap')capture.blocks.splice(2,1)
+     const first=capture.blocks[0]?.frame,last=capture.blocks.at(-1)
+     const pcm=new Float32Array(last?last.frame+last.pcm.length-first:0)
+     for(const block of capture.blocks)pcm.set(block.pcm,block.frame-first)
+     let next=first,dropped=0,peak=0,nonFinite=0,clipped=0,maxStep=0,squares=0
+     for(const block of capture.blocks){if(block.frame!==next)dropped++;next=block.frame+block.pcm.length}
+     for(let i=0;i<pcm.length;i++){
+      const value=pcm[i];if(!Number.isFinite(value)){nonFinite++;continue}
+      peak=Math.max(peak,Math.abs(value));clipped+=Math.abs(value)>=.999;squares+=value*value
+      if(i)maxStep=Math.max(maxStep,Math.abs(value-pcm[i-1]))
+     }
+     const windows=capture.marks.map(event=>{
+      const center=Math.round(event.at*capture.sampleRate-first)
+      const sampleWindow=(start,end)=>{
+       let sum=0,step=0,n=0
+       for(let i=Math.max(1,start);i<Math.min(pcm.length,end);i++){sum+=pcm[i]*pcm[i];step=Math.max(step,Math.abs(pcm[i]-pcm[i-1]));n++}
+       return {samples:n,rms:n?Math.sqrt(sum/n):null,maxStep:n?step:null}
+      }
+      const width=Math.round(capture.sampleRate*.02)
+      return {...event,center,before:sampleWindow(center-width*5,center-width),transition:sampleWindow(center-width,center+width),after:sampleWindow(center+width,center+width*5)}
+     })
+     fs.writeFileSync(path.join(artifacts,`${name}.wav`),Buffer.from(wav([pcm],capture.sampleRate)))
+     const row={name,kind,from,to,repeat,captureMutation:transitionFault,sampleRate:capture.sampleRate,blocks:capture.blocks.length,samples:pcm.length,
+      dropped,peak,clipped,nonFinite,maxStep,rms:Math.sqrt(squares/pcm.length),windows,contextState:capture.contextState,fixture:capture.fixture}
+     observations.push(row)
+     fs.writeFileSync(path.join(artifacts,'transitions.json'),JSON.stringify({scope:'Actual UI example final-gain PCM. Same-timbre controls, active changes and Stop/restart. The recorder closes with each context: the boundary between contexts is NOT MEASURED. No perceptual crackle verdict or physical output proof.',observations},null,2))
+     assert(pcm.length>capture.sampleRate*(kind==='active-change' ? .7 : .25),'Incomplete transition PCM')
+     assert.equal(dropped,0,'Dropped transition capture blocks')
+     assert.equal(nonFinite,0,'Non-finite transition PCM');assert.equal(clipped,0,'Clipped transition PCM')
+     assert(row.rms>.001,'Silent transition capture')
+     assert.equal(capture.fixture.midiRequests,settingsMidiRequests,'Example requested MIDI')
+     if(kind==='active-change'){
+      assert(windows.some(event=>event.event==='change'),'Missing change timing')
+      assert.equal(capture.fixture.sound,timbreNames.get(to),'Selected timbre did not reach the running engine')
+     }else assert.equal(capture.contextState,'closed','Stop left the capture context running')
+   }
+   await selectBank('Timbres')
+   for(const [from,to] of [['tone-reference','tone-reference'],['tone-glass','tone-glass'],['tone-bass','tone-bass'],['tone-reference','tone-glass'],['tone-glass','tone-bass'],['tone-bass','tone-reference']]){
+    for(let repeat=0;repeat<3;repeat++){
+     mark(`transition ${from}->${to} #${repeat+1}`)
+     await selection().selectOption(from);await startExample()
+     await page.locator('.sound-lab[data-example="playing"][data-audio-state="running"]').waitFor({state:'attached'})
+     await page.evaluate(()=>window.__transitionBegin())
+     await page.waitForTimeout(480)
+     await selection().selectOption(to)
+     await page.waitForTimeout(420)
+     saveCapture(`${from}-${to}-${repeat+1}`,from,to,repeat,await page.evaluate(()=>window.__transitionEnd()))
+     await page.getByRole('button',{name:'Stop example',exact:true}).click();await stopped()
+    }
+   }
+   for(const sound of ['tone-reference','tone-glass','tone-bass']){
+    for(const phase of ['stop','restart']){
+     mark(`${phase} example ${sound}`)
+     await selection().selectOption(sound);await startExample()
+     await page.locator('.sound-lab[data-example="playing"][data-audio-state="running"]').waitFor({state:'attached'})
+     await page.evaluate(()=>window.__transitionBegin());await page.waitForTimeout(380)
+     await page.getByRole('button',{name:'Stop example',exact:true}).click();await stopped()
+     saveCapture(`${sound}-${phase}`,sound,sound,0,await page.evaluate(()=>window.__transitionEnd()),phase)
+    }
+   }
+   assert.deepEqual(errors,[])
+   if(transitionsOnly){
+    await context.tracing.stop({path:path.join(artifacts,'trace.zip')})
+    mark('PASS transition capture subset; hearing and context boundary OPEN')
+    console.log(`${observations.length} example PCM captures with same-timbre controls, active changes and Stop/restart; finite/unclipped/contiguous, not hearing acceptance`)
+    return
+   }
+  }
   mark('Low CPU can change safely; same-bank preview keeps the existing engine')
   const qualityMidiRequests=await page.evaluate(()=>window.__comparisonMidiRequests)
   await selectBank('Timbres')
