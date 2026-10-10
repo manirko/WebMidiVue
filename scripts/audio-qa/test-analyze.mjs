@@ -163,25 +163,48 @@ async function testCreatorPrototype() {
       pass('cancel permission while pending, late camera stream released, previous takes kept')
       await page.evaluate(() => { __creatorControls.cameraMode = 'success' })
       await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
-      for (const voice of [false, true]) {
+      const mp4Expected = await page.evaluate(() => MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2'))
+      const videoAudio = {}
+      for (const [label, voice, volume] of [['synth', false, '70'], ['mic-only', true, '0'], ['synth-and-mic', true, '70']]) {
+        if (label !== 'synth') await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
         await page.locator('#voice').setChecked(voice)
-        await page.locator('#volume').fill(voice ? '0' : '70'); await page.locator('#volume').dispatchEvent('input')
+        await page.locator('#volume').fill(volume); await page.locator('#volume').dispatchEvent('input')
         await page.locator('#record-video').click(); await page.waitForFunction(() => __CreatorPrototype.capture?.kind === 'video' && !document.querySelector('#stop').disabled)
-        if (!voice) await page.locator('#example').click()
+        if (volume !== '0') await page.locator('#example').click()
         await page.waitForTimeout(3400); await page.locator('#stop').click(); await page.waitForFunction(() => !__CreatorPrototype.capture)
         const observed = await page.evaluate(async () => {
           const take = __CreatorPrototype.takes.at(-1), bytes = await take.file.arrayBuffer()
           return {bytes: Array.from(new Uint8Array(bytes)), mime: take.file.type, seconds: take.seconds, trackStates: __creatorControls.fixtureTracks.map(track => track.readyState), timers: __creatorControls.fixtureTimers.size}
         })
-        const extension = observed.mime.includes('mp4') ? 'mp4' : 'webm', filename = path.join(output, `video-${voice ? 'mic-only' : 'synth'}.${extension}`)
+        const extension = observed.mime.includes('mp4') ? 'mp4' : 'webm', filename = path.join(output, `video-${label}.${extension}`)
         fs.writeFileSync(filename, Buffer.from(observed.bytes))
         assert(observed.bytes.length > 1000); assert(observed.trackStates.every(state => state === 'ended')); assert.equal(observed.timers, 0)
         const probe = JSON.parse(execFileSync('/opt/homebrew/bin/ffprobe', ['-v', 'quiet', '-show_streams', '-show_format', '-of', 'json', filename], {encoding: 'utf8', timeout: 10000}))
+        report.videoFormats ||= {}; report.videoFormats[label] = {mime: observed.mime, bytes: observed.bytes.length, sha256: hash(Buffer.from(observed.bytes)), probe}; save()
         assert(probe.streams.some(stream => stream.codec_type === 'video' && stream.width === 240 && stream.height === 320)); assert(probe.streams.some(stream => stream.codec_type === 'audio'))
+        if (mp4Expected) {
+          assert.equal(probe.streams.find(stream => stream.codec_type === 'video').codec_name, 'h264', 'Use explicit H.264 when the browser can encode it; bare MP4 may select VP9')
+          assert.equal(probe.streams.find(stream => stream.codec_type === 'audio').codec_name, 'aac', 'Use explicit AAC when the browser can encode it')
+        }
         const pcm = execFileSync('/opt/homebrew/bin/ffmpeg', ['-v', 'error', '-i', filename, '-vn', '-ac', '1', '-ar', '48000', '-f', 'f32le', '-'], {timeout: 10000, maxBuffer: 3000000})
-        let squares = 0; for (let at = 0; at < pcm.length; at += 4) squares += pcm.readFloatLE(at) ** 2
-        const rms = Math.sqrt(squares / (pcm.length / 4)); assert(rms > .001)
-        report.checks.push({name: voice ? 'native encoded video with known microphone fixture; synth muted' : 'native encoded video with production synth; microphone off', mime: observed.mime, bytes: observed.bytes.length, sha256: hash(Buffer.from(observed.bytes)), rms, probe})
+        let squares = 0, peak = 0, tone310 = 0
+        for (let at = 0; at < pcm.length; at += 4) { const value = pcm.readFloatLE(at); assert(Number.isFinite(value)); squares += value ** 2; peak = Math.max(peak, Math.abs(value)) }
+        // The controlled microphone is 310Hz; isolate it from the real synth score.
+        for (let block = 0; block + 24000 * 4 <= pcm.length; block += 24000 * 4) {
+          let sin = 0, cos = 0
+          for (let i = 0; i < 24000; i++) { const value = pcm.readFloatLE(block + i * 4), phase = i * 2 * Math.PI * 310 / 48000; sin += value * Math.sin(phase); cos += value * Math.cos(phase) }
+          tone310 = Math.max(tone310, 2 * Math.hypot(sin, cos) / 24000)
+        }
+        const rms = Math.sqrt(squares / (pcm.length / 4)); assert(rms > .001); assert(peak < .999)
+        videoAudio[label] = {rms, peak, tone310}; report.videoAudio = videoAudio; save()
+        if (label === 'synth-and-mic') {
+          const bothPresent = metrics => metrics.rms > videoAudio['mic-only'].rms * 1.5 && metrics.tone310 > videoAudio['mic-only'].tone310 * .7
+          assert(bothPresent(videoAudio[label]), 'Final file must retain music and the known microphone signal together')
+          assert(!bothPresent(videoAudio.synth), 'Missing microphone control must be rejected')
+          assert(!bothPresent(videoAudio['mic-only']), 'Missing music control must be rejected')
+          pass('simultaneous music/microphone fixture retained; isolated missing-source controls rejected')
+        }
+        report.checks.push({name: 'native encoded video: ' + label, mime: observed.mime, bytes: observed.bytes.length, sha256: hash(Buffer.from(observed.bytes)), rms, probe})
         await page.locator('#takes video').last().evaluate(video => video.play()); await page.waitForTimeout(350)
         assert(await page.locator('#takes video').last().evaluate(video => video.currentTime > 0 && video.videoWidth === 240)); save()
       }
