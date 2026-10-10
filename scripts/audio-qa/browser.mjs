@@ -3,7 +3,7 @@ export async function captureScore(Engine,mode='normal',signal,recordMime){
  // Optional local creator proof, using the same final output and score. API
  // exposure alone is not a recording result; the caller reopens these bytes.
  if(recordMime!==undefined && (typeof MediaRecorder==='undefined'||(recordMime&&!MediaRecorder.isTypeSupported(recordMime))))throw Error('Recording format not supported')
- const context=new AudioContext({sampleRate:48000}),events=[],blocks=[];let engine,tap,drain,url,firstBlock,sink,recorder,recordError,recordStarted=false,recordStopped=false,resolveStop
+ const context=new AudioContext({sampleRate:48000}),events=[],blocks=[];let engine,tap,drain,url,firstBlock,sink,recorder,recordError,recordStarted=false,recordStopped=false,resolveStop,primaryFailure
  const chunks=[]
  const stopRecording=async()=>{
   if(!recorder||!recordStarted||recordStopped)return
@@ -63,8 +63,8 @@ export async function captureScore(Engine,mode='normal',signal,recordMime){
    recording={bytes:await blob.arrayBuffer(),mimeType:blob.type,size:blob.size,chunks:chunks.length,recordStartOffsetSeconds,finalizedBeforeContextClose:context.state==='running'}
   }
   return {report:{task:'audio-realtime',mode,result:analysis.result==='INCONCLUSIVE'?'INCONCLUSIVE':detected?'PASS':'FAIL',mutationExpected:mode!=='normal',analysis,events,sampleRate:context.sampleRate,firstBlockWaitWallMs,scoreWallMs:performance.now()-wall,contextState:context.state,baseLatency:context.baseLatency,outputLatency:context.outputLatency,scope:'Isolated QA bench using production engine; not the running Play UI or physical output'},wav:wav([pcm],context.sampleRate),recording}
- }finally{
-  try{await stopRecording()}finally{
+ }catch(error){primaryFailure=error;throw error}finally{
+  try{try{await stopRecording()}finally{
    try{
     if(recorder){recorder.ondataavailable=null;recorder.onerror=null;recorder.onstop=null}
     if(sink){try{engine?.output.disconnect(sink)}finally{sink.stream.getTracks().forEach(track=>track.stop());sink.disconnect()}}
@@ -77,6 +77,10 @@ export async function captureScore(Engine,mode='normal',signal,recordMime){
     try{await engine?.stop()}
     finally{try{if(context.state!=='closed')await context.close()}finally{if(url)URL.revokeObjectURL(url)}}
    }
+  }}catch(cleanupError){
+   // Keep the first failure, but expose incomplete cleanup to the caller.
+   if(primaryFailure)primaryFailure.cleanupFailure=String(cleanupError)
+   else throw cleanupError
   }
  }
 }

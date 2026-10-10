@@ -159,13 +159,20 @@ async function testRealtimeCapture() {
         try { await window.__CaptureScore(window.__ElemEngine.ElementarySynthEngine, 'normal', undefined, mime); controls.push({name: 'constructor', detected: false}) }
         catch (error) { controls.push({name: 'constructor', detected: error.message === 'Injected encoder constructor failure'}) }
         finally { window.MediaRecorder = Native }
-        const controller = new AbortController(); let timer, started = false
-        window.MediaRecorder = class extends Native {
-          start(...args) { super.start(...args); started = true; timer = setTimeout(() => controller.abort(), 1200) }
+        for (const failCleanup of [false, true]) {
+          const controller = new AbortController(); let timer, started = false
+          const nativeSink = AudioContext.prototype.createMediaStreamDestination
+          if (failCleanup) AudioContext.prototype.createMediaStreamDestination = function () {
+            const sink = nativeSink.call(this); sink.disconnect = () => { throw Error('Injected sink cleanup failure') }; return sink
+          }
+          window.MediaRecorder = class extends Native {
+            start(...args) { super.start(...args); started = true; timer = setTimeout(() => controller.abort(), 1200) }
+          }
+          try { await window.__CaptureScore(window.__ElemEngine.ElementarySynthEngine, 'normal', controller.signal, mime); controls.push({name: 'abort', detected: false}) }
+          catch (error) { controls.push({name: failCleanup ? 'first-fault-retained-on-cleanup-failure' : 'abort-after-recorder-start',
+            detected: started && error.name === 'AbortError' && (failCleanup ? error.cleanupFailure?.includes('Injected sink cleanup failure') : !error.cleanupFailure)}) }
+          finally { clearTimeout(timer); window.MediaRecorder = Native; AudioContext.prototype.createMediaStreamDestination = nativeSink }
         }
-        try { await window.__CaptureScore(window.__ElemEngine.ElementarySynthEngine, 'normal', controller.signal, mime); controls.push({name: 'abort', detected: false}) }
-        catch (error) { controls.push({name: 'abort-after-recorder-start', detected: started && error.name === 'AbortError'}) }
-        finally { clearTimeout(timer); window.MediaRecorder = Native }
         return {controls, intervals: window.__captureResources.intervals.size, blobs: window.__captureResources.blobs.size,
           contextStates: window.__captureResources.contexts.map(c => c.state), trackStates: window.__captureResources.tracks.map(t => t.readyState)}
       }, formats[0]), 'creator fault controls'); save()
@@ -252,7 +259,7 @@ async function testRealtimeCapture() {
     console.log(report.creatorOnly ? 'PASS: encoded final-gain takes, fresh decode, silent/truncated controls and cleanup' : report.loadOnly ? 'PASS: Garden renderer, audio oracles at 0/4/10ms contention, host frame metrics and cleanup' : 'PASS: actual real-time PCM, silence/stuck-note mutations, downloaded WAV and repeated capture cleanup')
   } catch (error) {
     report.status = 'FAIL'
-    report.error = {message: String(error), stack: error.stack, pageErrors}
+    report.error = {message: String(error), stack: error.stack, cleanupFailure: error.cleanupFailure ?? null, pageErrors}
     const pending = report.cases.at(-1)
     if (pending?.reopenedStatus === 'PENDING') pending.reopenedStatus = 'FAILED'
     save() // The first failure survives a hanging screenshot or cleanup.
