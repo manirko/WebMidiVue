@@ -465,3 +465,31 @@ PASS is not that outcome; views/likes are not orders or contribution profit.
 Exact reference-video transcription/matching and the existing Waveform-route
 check remain separate unfinished tasks. Final pinned results belong to the
 existing context ledger; do not replace historical QA with this scoped proof.
+
+Pinned creator proof `c702b17036176bd662f5eac562cd72158557486a`: Chrome154 and
+PlaywrightWebKit26.5 each22check groups PASS_SCOPED. Native WAV/video bytes,
+separate fresh/browser/ffmpeg decode and exact download/controlled Share checked.
+`--creator-prototype-decode-fault` intentionally exits1 after saving WAV/first
+fault; byte/SHA readback is the negative control. It does not close a product
+decoder incident. Legacy3realtime PCM cases PASS separately; no full gate.
+
+The first WebKit fixture failure is retained: an expando on the native
+mediaDevices wrapper disappeared after audio capture. The existing tester now
+pins a controlled navigator.mediaDevices object and asserts denial count/text;
+it cannot silently call a real camera in this lane. Finalization errors release
+MIDI in finally while preserving the primary error. More than2000 performance
+events preserves the recorded file but visibly disables incomplete replay.
+
+WAV is mono float32 from the first final-gain channel; full stereo/effect
+equivalence and actual editor compatibility remain untested. Three takes and
+30seconds bound count/duration, not measured native video heap/file size. Native
+BFCache, permission sheets, camera+USB, synchronization, simultaneous speech and
+music, phone/editor/final clip, off/on CPU/heap and novice accessibility remain
+separate gates.61,302byte creator JS/gzip20,493 and single navigation observations
+Chrome569ms/WebKit620ms are not a benchmark or speed-up claim.
+
+The new built-in Goal is ACTIVE after Andrey cleared the previous Goal. Software
+proof does not complete it: compare an actual finished-video task with usual
+tools and test the at-least2x-time hypothesis without extra help or lost quality,
+then voluntary reuse/viewer clarity. Current context T14 has the local page,
+source/scopes,53learning records and unchanged influencer/support frame limits.
