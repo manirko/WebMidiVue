@@ -145,7 +145,7 @@ with (a.output/'tests.jsonl').open('x') as journal:
   lane_env = dict(os.environ, BIOTRON_QA_OUTPUT=str(a.output), BIOTRON_QA_BROWSER=browser)
   if script == 'test:auditions:browser': lane_env['AUDITION_BROWSER_OUTPUT'] = str(a.output / name.replace(':', '-'))
   if script == 'test:quality:browser': lane_env['QUALITY_BROWSER_OUTPUT'] = str(a.output / name.replace(':', '-'))
-  if script == 'test:sound:browser': lane_env['BIOTRON_TEST_EVIDENCE_DIR'] = str(a.output / name.replace(':', '-'))
+  if script in ('test:sound:browser', 'test:pwa:browser'): lane_env['BIOTRON_TEST_EVIDENCE_DIR'] = str(a.output / name.replace(':', '-'))
   cleanup_confirmed = None
   cleanup_reason = None
   process = subprocess.Popen(command,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,start_new_session=True,env=lane_env)
@@ -161,7 +161,7 @@ with (a.output/'tests.jsonl').open('x') as journal:
    output += '\n'+type(error).__name__+'\n'
   filename = name.replace(':','-')+'.log'
   (a.output/filename).write_text(output)
-  result = 'INTERRUPTED' if interrupted else 'TIMEOUT' if timed_out else 'INCONCLUSIVE' if name == 'test:ui-performance' and process.returncode == 2 else 'PASS' if process.returncode == 0 else 'FAIL'
+  result = 'INTERRUPTED' if interrupted else 'TIMEOUT' if timed_out else 'INCONCLUSIVE' if script == 'test:ui-performance' and process.returncode == 2 else 'PASS' if process.returncode == 0 else 'FAIL'
   record = dict(at=at,run_id=run_id,head=head,test=name,browser=browser,result=result,exit_code=process.returncode,command=command,cleanup_confirmed=cleanup_confirmed,cleanup_reason=cleanup_reason,timeout=lane_timeout,duration_seconds=round(time.monotonic()-started,3),evidence=filename,sha256=hashlib.sha256((a.output/filename).read_bytes()).hexdigest())
   journal.write(json.dumps(record)+'\n'); journal.flush()
   print(name, record['result'], flush=True); failed |= interrupted or timed_out or process.returncode != 0

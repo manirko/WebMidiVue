@@ -136,12 +136,19 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  for arguments in [['--only',''],['--only',','],['--only','test:unknown'],['--only','test:sound,test:sound'],['--soak-seconds','600'],['--browser','--soak-seconds','-1'],['--browser','--soak-seconds','28801'],['--timeout','nan'],['--timeout','inf'],['--browsers','firefox'],['--browser','--browsers','firefox,firefox'],['--browser','--browsers','../unowned'],['--browser','--browsers','safari']]:
   invalid = subprocess.run([sys.executable,str(runner),'--output',str(output),*arguments],env=environment,capture_output=True,text=True,timeout=5)
   assert invalid.returncode==2 and 'error:' in invalid.stderr, arguments
- npm.write_text('#!/bin/sh\ncase "$2" in test:ui-performance) echo fixture-inconclusive; exit 2;; *) echo fixture-pass;; esac\n')
- inconclusive = subprocess.run([sys.executable,str(runner),'--output',str(output),'--browser'],env=environment,capture_output=True,text=True,timeout=15)
+ npm.write_text('#!/bin/sh\ncase "$2" in test:ui-performance) echo fixture-inconclusive; exit 2;; test:pwa:browser) echo "capture-dir=$BIOTRON_TEST_EVIDENCE_DIR"; exit 2;; *) echo fixture-pass;; esac\n')
+ inconclusive = subprocess.run([sys.executable,str(runner),'--output',str(output),'--browser','--browsers','firefox,webkit'],env=environment,capture_output=True,text=True,timeout=15)
  assert inconclusive.returncode == 1, inconclusive.stdout+inconclusive.stderr
  latest = max(output.iterdir(),key=lambda p:p.stat().st_mtime_ns)
  rows = [json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
- assert next(row for row in rows if row['test']=='test:ui-performance')['result']=='INCONCLUSIVE'
+ for suffix in ['', '@firefox', '@webkit']:
+  row=next(row for row in rows if row['test']=='test:ui-performance'+suffix)
+  assert row['result']=='INCONCLUSIVE' and row['exit_code']==2,json.dumps(row)
+  pwa=next(row for row in rows if row['test']=='test:pwa:browser'+suffix)
+  assert pwa['result']=='FAIL' and pwa['exit_code']==2,json.dumps(pwa)
+  expected=latest/pwa['test'].replace(':','-')
+  assert (latest/pwa['evidence']).read_text().strip()=='capture-dir='+str(expected),json.dumps(pwa)
+ print('Matrix INCONCLUSIVE status and distinct PWA capture directories verified; other exit2 remains FAIL')
  assert not json.loads((latest/'summary.json').read_text())['software_checks_passed']
  interrupt_ready=root/'runner-interrupt-ready'
  environment['QA_INTERRUPT_READY']=str(interrupt_ready)

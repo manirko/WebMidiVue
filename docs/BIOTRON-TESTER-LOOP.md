@@ -122,6 +122,9 @@ samples are observations, not calibrated INP, physical latency or hearing tests.
 A missing driver or invalid browser cannot be silently called a product failure.
 The preserved headless first-click stall and actual-driver uncertainties remain
 open in the existing project ledger; a headed PASS does not erase them.
+Qualified matrix audio lanes retain INCONCLUSIVE for exit2, matching the default
+lane. Exit2 in another script stays FAIL and no incomplete measurement becomes
+PASS. Sound and PWA get a separate first-fault directory per browser lane.
 
 ## Faults that must remain regressions
 
