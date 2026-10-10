@@ -5,7 +5,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const {devices} = require('playwright-core')
-const {browserConfig, launchBrowser, contextOptions, qaOrigin, verifyOnlineIdentity, createStaticServer} = require('./browser-test-harness')
+const {browserConfig, browserCall, launchBrowser, contextOptions, qaOrigin, verifyOnlineIdentity, createStaticServer} = require('./browser-test-harness')
 
 const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
 
@@ -662,6 +662,7 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await denied.getByRole('button', {name: 'Find MIDI device'}).click()
   await denied.getByText(/Allow device access, then try again/i).waitFor()
   await denied.getByRole('button', {name: 'Stop & release'}).click()
+  await denied.locator('.sound-lab[data-audio-state="closed"][data-tab-lease="free"]').waitFor()
   await denied.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
   await denied.getByRole('button', {name: 'Start listening'}).click()
   await denied.getByText(/Allow device access, then try again/i).waitFor()
@@ -1535,12 +1536,21 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
       let number = 0
       for (const context of browser.contexts()) for (const tab of context.pages()) {
         const prefix = path.join(evidenceDirectory, `sound-fault-${Date.now()}-${++number}`)
+        const fault = {error: error.stack, beforeCleanup: true, url: tab.url(), browser: browser.version()}
+        fs.writeFileSync(`${prefix}.json`, JSON.stringify(fault, null, 2))
         try {
-          fs.writeFileSync(`${prefix}.json`, JSON.stringify({error: error.stack, beforeCleanup: true,
-            url: tab.url(), browser: browser.version(), fixture: await tab.evaluate(() => ({
+          fault.fixture = await browserCall(browser, () => tab.evaluate(() => ({
               sent: window.__soundMidiSent, values: window.__soundSettingsSnapshot?.(), replyMode: window.__soundSettingsReplyMode,
+              permissionRequests: window.__permissionRequests ?? null, permissionNowAllowed: window.__permissionNowAllowed ?? null,
+              ui: Array.from(document.querySelectorAll('.sound-lab'), element => ({...element.dataset})),
+              buttons: Array.from(document.querySelectorAll('button')).filter(element => /Start|Stop|keyboard|Find MIDI/.test(element.textContent))
+                .slice(0, 32).map(element => ({text: element.textContent.trim(), disabled: element.disabled})),
+              visibility: document.visibilityState,
               fonts: {status: document.fonts.status, faces: Array.from(document.fonts).map(face => ({family: face.family, status: face.status}))}
-            }))}, null, 2))
+            })), 'first-fault state', 1500)
+        } catch (captureError) { fault.captureError = captureError.message }
+        fs.writeFileSync(`${prefix}.json`, JSON.stringify(fault, null, 2))
+        try {
           fs.writeFileSync(`${prefix}.txt`, `${tab.url()}\n${await tab.locator('body').innerText({timeout: 1500})}`)
           await tab.screenshot({path: `${prefix}.png`, fullPage: true, timeout: 2000})
         } catch (captureError) {

@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const http = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
+const vm = require('node:vm')
 const {EventEmitter} = require('node:events')
 const {chromium} = require('playwright-core')
 const {chromePath, browserConfig, browserCall, qaOrigin, verifyOnlineIdentity, createStaticServer} = require('./browser-test-harness')
@@ -71,6 +72,54 @@ function readHttp(url, options = {}) {
 }
 
 ;(async () => {
+
+  const soundSource = fs.readFileSync(path.join(__dirname, 'test-sound-browser.js'), 'utf8')
+  const releaseBegin = soundSource.indexOf("  await denied.getByRole('button', {name: 'Stop & release'}).click()")
+  const releaseEnd = soundSource.indexOf('  const permissionHelp =', releaseBegin)
+  assert(releaseBegin >= 0 && releaseEnd > releaseBegin)
+  for (const failedRelease of [false, true]) {
+    let released = false, navigations = 0, requests = 0
+    const denied = {
+      getByRole: (kind, options) => ({click: async () => {if (options.name === 'Stop & release') released = false; else requests++}}),
+      goto: async () => {assert(released, 'Permission fixture moved before release completed'); navigations++},
+      locator: () => ({waitFor: async () => {if (failedRelease) throw Error('Release remains pending'); released = true}}),
+      getByText: () => ({waitFor: async () => assert.equal(requests, 1)}),
+    }
+    const attempt = vm.runInNewContext('(async()=>{' + soundSource.slice(releaseBegin, releaseEnd) + '})()', {denied, origin: 'https://fixture.invalid'})
+    if (failedRelease) {await assert.rejects(attempt, /Release remains pending/); assert.equal(navigations, 0); assert.equal(requests, 0)}
+    else await attempt
+  }
+  console.log('PASS permission fixture verifies closed audio/free ownership; failed release prevents the next step')
+
+  const captureBegin = soundSource.lastIndexOf('    const evidenceDirectory = process.env.BIOTRON_TEST_EVIDENCE_DIR')
+  const captureEnd = soundSource.indexOf('\n    throw error', captureBegin)
+  assert(captureBegin >= 0 && captureEnd > captureBegin)
+  const captureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'biotron-fault-capture-control-'))
+  try {
+    for (const mode of ['reject', 'success', 'pending']) {
+      const directory = path.join(captureRoot, mode); fs.mkdirSync(directory)
+      let screenshots = 0
+      const browser = new EventEmitter(); browser.isConnected = () => true; browser.version = () => 'fake-control'
+      const tab = {url: () => 'https://fixture.invalid/#/biotron/play',
+        evaluate: fn => mode === 'reject' ? Promise.reject(Error('DOM snapshot refused')) : mode === 'pending' ? new Promise(() => {}) : Promise.resolve(fn()),
+        locator: () => ({innerText: async () => 'Fixture body'}), screenshot: async () => {screenshots++}}
+      browser.contexts = () => [{pages: () => [tab]}]
+      const window = {__permissionRequests: 0, __permissionNowAllowed: false}
+      const document = {fonts: {status: 'loaded', [Symbol.iterator]: function*() {}},
+        querySelectorAll: selector => selector === '.sound-lab' ? [{dataset: {audioState: 'closed'}}] : [{textContent: 'Start listening', disabled: false}]}
+      const error = Error('Original permission fault sentinel'), started = Date.now()
+      await vm.runInNewContext('(async()=>{' + soundSource.slice(captureBegin, captureEnd) + '})()',
+        {fs, path, error, browser, browserCall, process: {env: {BIOTRON_TEST_EVIDENCE_DIR: directory}}, window, document, console})
+      const jsonFiles = fs.readdirSync(directory).filter(name => name.endsWith('.json')); assert.equal(jsonFiles.length, 1)
+      const report = JSON.parse(fs.readFileSync(path.join(directory, jsonFiles[0])))
+      assert.match(report.error, /Original permission fault sentinel/); assert.equal(report.beforeCleanup, true)
+      if (mode === 'success') {assert.equal(report.fixture.permissionRequests, 0); assert.equal(report.fixture.permissionNowAllowed, false); assert.equal(report.fixture.ui[0].audioState, 'closed')}
+      else assert.match(report.captureError, /DOM snapshot refused|timed out/)
+      assert.equal(screenshots, 1); assert.equal(browser.listenerCount('disconnected'), 0)
+      assert(Date.now() - started < 2500, 'First-fault state collection escaped its bound')
+    }
+  } finally {fs.rmSync(captureRoot, {recursive: true, force: true})}
+  console.log('PASS first fault survives unavailable/pending DOM; native helper guard bounds capture, zero/false and UI state are retained')
   const fake = new EventEmitter()
   fake.isConnected = () => true
   assert.equal(await browserCall(fake, () => 42, 'resolved'), 42)
