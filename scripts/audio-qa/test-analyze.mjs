@@ -24,8 +24,10 @@ const fixtureMusic=fixtureTone(440*2**((60-69)/12)),fixtureMic=fixtureTone(310)
 const fixtureBaseline={synth:creatorFixtureMetrics(fixtureMusic,rate),micOnly:creatorFixtureMetrics(fixtureMic,rate)}
 assert(creatorFixtureHasBoth(creatorFixtureMetrics(fixtureMusic.map((x,i)=>x+fixtureMic[i]),rate),fixtureBaseline))
 for(const samples of [fixtureMusic,fixtureMic,fixtureMic.map(x=>2*x),new Float32Array(rate)])assert(!creatorFixtureHasBoth(creatorFixtureMetrics(samples,rate),fixtureBaseline))
+const fixtureSequential=new Float32Array(rate*2);fixtureSequential.set(fixtureMusic);fixtureSequential.set(fixtureMic,rate)
+assert(!creatorFixtureHasBoth(creatorFixtureMetrics(fixtureSequential,rate),fixtureBaseline), 'Both sources must occur in the same window')
 assert.throws(()=>creatorFixtureMetrics(Float32Array.of(NaN),rate),/Non-finite/)
-console.log('PASS: controlled music/mic mixture; music-only, mic-only, doubled mic-only and silence rejected')
+console.log('PASS: controlled music/mic mixture; music-only, mic-only, doubled mic-only, silence and non-overlapping sources rejected')
 
 // Reuse the existing capture UI and production engine. This flag replaces the
 // manual three-button check; it does not introduce another audio renderer.
@@ -205,7 +207,8 @@ async function testCreatorPrototype() {
           assert(!bothPresent(videoAudio.synth), 'Missing microphone control must be rejected')
           assert(!bothPresent(videoAudio['mic-only']), 'Missing music control must be rejected')
           assert(!bothPresent(creatorFixtureMetrics(samples.map(x => 0), 48000)), 'Silence control must be rejected')
-          assert(!bothPresent({...videoAudio['mic-only'], music: videoAudio['mic-only'].music * 2, mic310: videoAudio['mic-only'].mic310 * 2}), 'Louder microphone without music must be rejected')
+          assert(!bothPresent({...videoAudio['mic-only'], windows: videoAudio['mic-only'].windows.map(({music, mic310}) => ({music: music * 2, mic310: mic310 * 2}))}), 'Louder microphone without music must be rejected')
+          assert(!bothPresent({...metrics, windows: [...videoAudio.synth.windows, ...videoAudio['mic-only'].windows]}), 'Non-overlapping sources must be rejected')
           pass('simultaneous music/microphone fixture retained; missing-source, loud-mic-only and silence controls rejected')
         }
         report.checks.push({name: 'native encoded video: ' + label, mime: observed.mime, bytes: observed.bytes.length, sha256: hash(Buffer.from(observed.bytes)), rms, probe})
