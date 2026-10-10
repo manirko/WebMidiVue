@@ -53,6 +53,17 @@ function fixture() {
   return {target, context, session, calls, events}
 }
 
+test('keyboard Start waits for release; keyboard Stop remains usable during startup', () => {
+  const control = fs.readFileSync('src/components/SoundLab/KeyboardControls.vue', 'utf8')
+  const disabled = control.match(/<button[^>]*:disabled="([^"]+)"/)[1]
+  for (const [patch, expected] of [[{starting: true}, true],
+    [{starting: true, keyboardOn: true}, false], [{}, false],
+    [{releaseBlocked: true}, true], [{capabilities: {audio: false}}, true]]) {
+    const player = {starting: false, keyboardOn: false, releaseBlocked: false, capabilities: {audio: true}, ...patch}
+    assert.equal(vm.runInNewContext(disabled, {player}), expected, JSON.stringify(patch))
+  }
+})
+
 test('plant status reads are limited to foreground Biotron MIDI play, never keyboard/examples/settings', () => {
   for (const patch of [{}, {controlsVisible: false}, {keyboardOn: true}, {examplePlaying: true},
     {revealMode: false}, {revealProfile: {id: 'touchme'}}, {revealStage: 'settling'}, {audioState: 'suspended'}]) {
