@@ -29,10 +29,33 @@ assert(!creatorFixtureHasBoth(creatorFixtureMetrics(fixtureSequential,rate),fixt
 assert.throws(()=>creatorFixtureMetrics(Float32Array.of(NaN),rate),/Non-finite/)
 console.log('PASS: controlled music/mic mixture; music-only, mic-only, doubled mic-only, silence and non-overlapping sources rejected')
 
+function processCpuDelta(before, after) {
+  const index = rows => new Map(rows.map(({id, type, cpuTime}) => {
+    assert(Number.isInteger(id) && typeof type === 'string' && Number.isFinite(cpuTime) && cpuTime >= 0, 'Invalid process CPU sample')
+    return [id + ':' + type, cpuTime]
+  }))
+  const left = index(before), right = index(after)
+  assert(left.size === before.length && right.size === after.length, 'Duplicate process identities')
+  assert.deepEqual([...left.keys()].sort(), [...right.keys()].sort(), 'Process identities changed during measurement')
+  assert(left.size, 'No processes were measured')
+  let seconds = 0
+  for (const [id, start] of left) { assert(right.get(id) >= start, 'CPU counter moved backwards'); seconds += right.get(id) - start }
+  return seconds
+}
+const cpuSample = cpuTime => [{id: 1, type: 'renderer', cpuTime}]
+assert.equal(processCpuDelta(cpuSample(2), cpuSample(2)), 0)
+assert.equal(processCpuDelta(cpuSample(2), cpuSample(2.25)), .25)
+assert.throws(() => processCpuDelta(cpuSample(2), []), /identities changed/)
+assert.throws(() => processCpuDelta(cpuSample(2), cpuSample(1)), /backwards/)
+assert.throws(() => processCpuDelta(cpuSample(2), cpuSample(NaN)), /Invalid/)
+assert.throws(() => processCpuDelta([...cpuSample(2), ...cpuSample(2)], cpuSample(3)), /Duplicate/)
+assert.throws(() => processCpuDelta([], []), /No processes/)
+console.log('PASS: measured CPU delta, valid zero; changed/duplicate processes, backwards and non-finite samples rejected')
+
 // Reuse the existing capture UI and production engine. This flag replaces the
 // manual three-button check; it does not introduce another audio renderer.
 if (process.argv.includes('--browser') || process.argv.includes('--creator-recording')) await testRealtimeCapture()
-if (process.argv.includes('--creator-prototype')) await testCreatorPrototype()
+if (process.argv.includes('--creator-prototype') || process.argv.includes('--creator-benchmark')) await testCreatorPrototype()
 
 async function testCreatorPrototype() {
   const fs = await import('node:fs'), path = await import('node:path'), os = await import('node:os'), crypto = await import('node:crypto')
@@ -99,7 +122,8 @@ async function testCreatorPrototype() {
         throw new DOMException('Denied', 'NotAllowedError')
       }}, configurable: true})
     })
-    await context.tracing.start({screenshots: true, snapshots: true})
+    const benchmark = process.argv.includes('--creator-benchmark')
+    await context.tracing.start({screenshots: !benchmark, snapshots: !benchmark})
     page = await context.newPage(); page.on('pageerror', error => errors.push(String(error)))
     const origin = `http://127.0.0.1:${server.address().port}`, navStarted = Date.now()
     await page.goto(origin + '/creator.html', {waitUntil: 'networkidle'})
@@ -108,6 +132,13 @@ async function testCreatorPrototype() {
     report.prototypeBundleBytes = fs.statSync(path.join(bench, 'creator.js')).size
     assert(await page.locator('#connect').isDisabled()); assert.match(await page.locator('#connection').innerText(), /MIDI-capable/)
     assert.equal(await page.evaluate(() => __creatorControls.camera), 0); pass('no-device page, truthful MIDI fallback, no permission on load')
+    if (benchmark) {
+      await benchmarkCreator({browser, context, page, report, save, output, fs, hash})
+      await browserCall(browser, () => page.evaluate(() => __CreatorPrototype.close()), 'creator close')
+      assert.equal(await page.evaluate(() => __CreatorPrototype.engine.context.state), 'closed')
+      assert.equal(await page.evaluate(() => __CreatorPrototype.engine.core._timer), null)
+      assert.deepEqual(errors, []); report.status = 'MEASURED_SCOPED'; save(); return
+    }
     await page.selectOption('#sound', 'tone-glass'); await page.selectOption('#register', '-12'); await page.locator('#volume').fill('61')
     await page.locator('#copy').click()
     const copied = await page.evaluate(() => __creatorControls.copied.at(-1))
@@ -354,6 +385,84 @@ async function testCreatorPrototype() {
     if (server?.listening) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)) }
     save()
   }
+}
+
+async function benchmarkCreator({browser, context, page, report, save, output, fs, hash}) {
+  const chromium = browser.browserType().name() === 'chromium'
+  const cdp = chromium ? await context.newCDPSession(page) : null
+  const system = chromium ? await browser.newBrowserCDPSession() : null
+  if (cdp) await cdp.send('Performance.enable')
+  const snapshot = async () => {
+    const started = performance.now()
+    const metrics = cdp ? Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(({name, value}) => [name, value])) : null
+    const heap = cdp ? await cdp.send('Runtime.getHeapUsage') : null
+    const processes = system ? (await system.send('SystemInfo.getProcessInfo')).processInfo : null
+    return {started, ended: performance.now(), metrics, heap, processes}
+  }
+  const phrase = async () => { await page.locator('#example').click(); await page.waitForFunction(() => document.querySelector('#example').textContent === 'Play example') }
+  const begin = async () => { await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture?.kind === 'audio') }
+  const finish = async () => { await page.locator('#stop').click(); await page.waitForFunction(() => !__CreatorPrototype.capture && __CreatorPrototype.takes.length === 1) }
+  const remove = async () => { await page.locator('#takes button', {hasText: 'Remove take'}).click(); assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 0) }
+  await page.selectOption('#sound', 'tone-reference'); await phrase()
+  await begin(); await phrase(); await finish(); await remove() // Warm engine and recording worklet before comparing.
+  report.benchmark = {scope: 'Own Mac isolated page; same Round score/register0/volume70/standard8 voices. WAV recording only, no camera/MIDI, trace has no continuous images/DOM. Other machine load uncontrolled.',
+    cpuScope: 'CDP own browser process counters across all threads and renderer main-thread duration; not machine CPU percent. Matching process identities required.',
+    memoryScope: 'Instant isolate JS/embedder/ArrayBuffer storage and post-removal forced-GC snapshots, not native total memory or leak certification.',
+    unsupported: chromium ? [] : ['CDP process CPU, main-thread duration and isolate heap NOT SUPPORTED in this engine'],
+    order: [false, true, true, false, false, true], warmup: ['off', 'on'], rows: []}; save()
+  await page.evaluate(() => {
+    const engine = __CreatorPrototype.engine
+    for (const [method, type] of [['noteOn', 'on'], ['noteOff', 'off']]) {
+      const original = engine[method].bind(engine)
+      engine[method] = (...args) => { if (window.__creatorBenchmark) __creatorBenchmark.events.push({type, args, at: engine.context.currentTime}); return original(...args) }
+    }
+  })
+  for (const [index, recording] of report.benchmark.order.entries()) {
+    const row = {index, recording}; report.benchmark.rows.push(row); save()
+    const setup = performance.now(); if (recording) await begin(); row.setupMs = performance.now() - setup
+    if (cdp) await cdp.send('HeapProfiler.collectGarbage')
+    row.before = await snapshot(); save()
+    await page.evaluate(() => {
+      const q = window.__creatorBenchmark = {frames: [], events: [], started: performance.now(), last: null, raf: null}
+      const frame = at => { if (q.last !== null) q.frames.push(at - q.last); q.last = at; q.raf = requestAnimationFrame(frame) }; q.raf = requestAnimationFrame(frame)
+    })
+    await phrase()
+    row.observed = await page.evaluate(() => {
+      const q = __creatorBenchmark; cancelAnimationFrame(q.raf); q.raf = null
+      const capture = __CreatorPrototype.capture
+      return {windowMs: performance.now() - q.started, frames: q.frames, events: q.events, quality: __CreatorPrototype.engine.quality,
+        poolSize: __CreatorPrototype.engine.poolSize, activeVoices: __CreatorPrototype.engine.activeVoiceCount,
+        audioClock: __CreatorPrototype.engine.context.currentTime, sampleRate: __CreatorPrototype.engine.context.sampleRate,
+        captureBlocks: capture?.blocks.length ?? 0, capturePcmBytes: capture?.blocks.reduce((sum, block) => sum + block.pcm.byteLength, 0) ?? 0}
+    })
+    row.after = await snapshot(); save()
+    assert.equal(row.observed.quality, 'standard'); assert.equal(row.observed.poolSize, 8); assert.equal(row.observed.activeVoices, 0)
+    assert.equal(row.observed.events.length, 16); assert(row.observed.frames.length > 30, 'Frame cadence was not measured')
+    const signature = events => events.map(({type, args}) => ({type, args}))
+    assert.deepEqual(signature(row.observed.events), signature(report.benchmark.rows[0].observed.events), 'Score changed between phases')
+    const frames = row.observed.frames.slice().sort((a, b) => a - b)
+    row.frameGaps = {n: frames.length, p50Ms: frames[Math.ceil(frames.length * .5) - 1], p95Ms: frames[Math.ceil(frames.length * .95) - 1], maxMs: frames.at(-1)}
+    row.processCpuSeconds = chromium ? processCpuDelta(row.before.processes, row.after.processes) : null
+    row.mainThreadTaskSeconds = chromium ? row.after.metrics.TaskDuration - row.before.metrics.TaskDuration : null
+    assert(!chromium || Number.isFinite(row.mainThreadTaskSeconds) && row.mainThreadTaskSeconds >= 0)
+    const stopped = performance.now()
+    if (recording) {
+      await finish(); row.finalizationMs = performance.now() - stopped
+      const file = await page.evaluate(async () => ({bytes: Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer())), seconds: __CreatorPrototype.takes[0].seconds}))
+      const name = `benchmark-${index}.wav`, bytes = Buffer.from(file.bytes); fs.writeFileSync(output + '/' + name, bytes)
+      row.file = {name, bytes: bytes.length, seconds: file.seconds, sha256: hash(bytes)}; save() // Persist actual bytes before decoder/measurement asserts.
+      row.decoded = await page.evaluate(async () => {
+        const context = new AudioContext()
+        try { const audio = await context.decodeAudioData(await __CreatorPrototype.takes[0].file.arrayBuffer()), pcm = audio.getChannelData(0); let peak = 0, sum = 0; for (const value of pcm) { if (!Number.isFinite(value)) throw Error('Non-finite benchmark PCM'); peak = Math.max(peak, Math.abs(value)); sum += value * value }; return {seconds: audio.duration, rms: Math.sqrt(sum / pcm.length), peak} }
+        finally { await context.close() }
+      })
+      assert(row.decoded.rms > .001 && row.decoded.peak < .99); await remove()
+    } else { row.finalizationMs = null; assert.equal(row.observed.captureBlocks, 0); assert.equal(row.observed.capturePcmBytes, 0) }
+    await page.evaluate(() => { window.__creatorBenchmark = null })
+    if (cdp) await cdp.send('HeapProfiler.collectGarbage')
+    row.afterRemoval = await snapshot(); save()
+  }
+  await cdp?.detach(); await system?.detach()
 }
 
 async function testRealtimeCapture() {
