@@ -140,12 +140,12 @@ with (a.output/'tests.jsonl').open('x') as journal:
   lane_timeout = a.timeout
   if name == 'test:sound:soak':
    command = ['npm','run','test:sound:browser','--',f'--soak-seconds={a.soak_seconds}',f'--soak-report={a.output / "soak.json"}']
-   lane_timeout = max(a.timeout, a.soak_seconds + 180)
+   lane_timeout = a.soak_seconds + max(a.timeout, 180)
   started = time.monotonic()
   lane_env = dict(os.environ, BIOTRON_QA_OUTPUT=str(a.output), BIOTRON_QA_BROWSER=browser)
   if script == 'test:auditions:browser': lane_env['AUDITION_BROWSER_OUTPUT'] = str(a.output / name.replace(':', '-'))
   if script == 'test:quality:browser': lane_env['QUALITY_BROWSER_OUTPUT'] = str(a.output / name.replace(':', '-'))
-  if script in ('test:sound:browser', 'test:pwa:browser'): lane_env['BIOTRON_TEST_EVIDENCE_DIR'] = str(a.output / name.replace(':', '-'))
+  if script in ('test:sound:browser', 'test:pwa:browser', 'test:sound:soak'): lane_env['BIOTRON_TEST_EVIDENCE_DIR'] = str(a.output / name.replace(':', '-'))
   cleanup_confirmed = None
   cleanup_reason = None
   process = subprocess.Popen(command,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,start_new_session=True,env=lane_env)

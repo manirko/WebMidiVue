@@ -108,6 +108,17 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  assert next(row for row in rows if row['test']=='test:ui-performance')['result']=='PASS'
  assert next(row for row in rows if row['test']=='test:lint')['result']=='PASS'
  assert next(row for row in rows if row['test']=='test:browser-harness')['result']=='PASS'
+ # Adding a requested soak must retain the normal full-suite deadline, because
+ # this command still runs every Settings/lifecycle assertion around capture.
+ npm.write_text('#!/bin/sh\necho "capture-dir=$BIOTRON_TEST_EVIDENCE_DIR"\n')
+ budget=subprocess.run([sys.executable,str(runner),'--output',str(output),'--browser','--only','test:sound:soak','--soak-seconds','600','--timeout','600'],env=environment,capture_output=True,text=True,timeout=15)
+ assert budget.returncode==0,budget.stdout+budget.stderr
+ latest=max(output.iterdir(),key=lambda p:p.stat().st_mtime_ns)
+ rows=[json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
+ row=next(row for row in rows if row['test']=='test:sound:soak')
+ assert row['timeout']==1200,json.dumps(row)
+ assert (latest/row['evidence']).read_text().strip()=='capture-dir='+str(latest/'test-sound-soak'),json.dumps(row)
+
  # Matrix lanes must propagate the requested browser and keep failures separate.
  npm.write_text('#!/bin/sh\ncase "$BIOTRON_QA_BROWSER" in firefox) echo firefox-fault; exit 9;; *) echo fixture-pass;; esac\n')
  matrix = subprocess.run([sys.executable,str(runner),'--output',str(output),'--browser','--browsers','firefox,webkit'],env=environment,capture_output=True,text=True,timeout=15)

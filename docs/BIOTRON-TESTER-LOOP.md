@@ -124,7 +124,9 @@ The preserved headless first-click stall and actual-driver uncertainties remain
 open in the existing project ledger; a headed PASS does not erase them.
 Qualified matrix audio lanes retain INCONCLUSIVE for exit2, matching the default
 lane. Exit2 in another script stays FAIL and no incomplete measurement becomes
-PASS. Sound and PWA get a separate first-fault directory per browser lane.
+PASS. Sound, PWA and the timed soak get separate first-fault directories. The soak
+adds its duration to the normal full-suite timeout (at least180s), retaining the
+Settings/lifecycle assertions around capture; this does not relax audio oracles.
 
 ## Faults that must remain regressions
 
