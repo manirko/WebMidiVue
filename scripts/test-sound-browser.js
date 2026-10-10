@@ -410,7 +410,8 @@ async function verifyGardenStates(page, origin) {
   await visualHasNoText()
   assert.notEqual(await visual.evaluate(element => getComputedStyle(element, '::before').animationName), 'none')
   const evidence = process.env.BIOTRON_TEST_EVIDENCE_DIR
-  if (evidence) await page.screenshot({path: path.join(evidence, 'garden-connecting.png'), timeout: 2000})
+  // Successful evidence uses the normal 5-second view deadline; first-fault capture stays at 2 seconds.
+  if (evidence) await page.screenshot({path: path.join(evidence, 'garden-connecting.png')})
   await page.evaluate(() => window.__finishSoundOpen())
   await page.locator('.sound-lab[data-reveal-stage="settling"]').waitFor()
   await state('connecting').waitFor()
@@ -433,7 +434,7 @@ async function verifyGardenStates(page, origin) {
   await page.locator('.sound-lab__connect-notice').getByText('Connection lost', {exact: true}).waitFor()
   await page.waitForFunction(() => getComputedStyle(document.querySelector('.garden-visual iframe')).opacity === '0.4')
   assert.equal(await page.locator('.sound-lab').getAttribute('data-active-voices'), '0')
-  if (evidence) await page.screenshot({path: path.join(evidence, 'garden-disconnected.png'), timeout: 2000})
+  if (evidence) await page.screenshot({path: path.join(evidence, 'garden-disconnected.png')})
   await page.locator('.sound-palette > summary').click()
   await page.getByRole('button', {name: 'Play with keyboard', exact: true}).click()
   await state('ready').waitFor()
@@ -465,7 +466,7 @@ async function verifyGardenStates(page, origin) {
     await visualHasNoText()
     await page.getByRole('button', {name: 'Open visual fullscreen', exact: true}).click()
     await visualHasNoText()
-    if (evidence) await page.screenshot({path: path.join(evidence, `garden-clean-${size.width}.png`), timeout: 2000})
+    if (evidence) await page.screenshot({path: path.join(evidence, `garden-clean-${size.width}.png`)})
     await page.getByRole('button', {name: 'Exit fullscreen', exact: true}).click()
   }
   await page.evaluate(() => window.__finishSoundOpen())
@@ -504,7 +505,7 @@ async function verifyPlantSignal(page, origin) {
   assert((await page.locator('.sound-lab__reveal-copy').innerText()).includes('Check both contacts on the plant'))
   await page.setViewportSize({width: 320, height: 568})
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Plant signal notice overflows 320px')
-  if (evidence) await page.screenshot({path: path.join(evidence, 'plant-signal-waiting.png'), timeout: 2000})
+  if (evidence) await page.screenshot({path: path.join(evidence, 'plant-signal-waiting.png')})
   await page.evaluate(() => { window.__emitSoundMidi([0x91, 72, 80]); window.__emitSoundMidi([0x81, 72, 0]) })
   await page.getByRole('heading', {name: 'Waiting for plant signal', exact: true}).waitFor()
   await save('Firmware Sleep shows contact advice; light notes do not hide it; 320px fits')
@@ -517,7 +518,7 @@ async function verifyPlantSignal(page, origin) {
   assert.equal(await page.locator('.sound-lab').getAttribute('data-audio-state'), 'running')
   assert.equal(await page.evaluate(() => window.__soundMidiSent.filter(m => m.length === 6 && m[3] === 125).length), calibrations,
     'Showing automatic stabilization must not request another calibration')
-  if (evidence) await page.screenshot({path: path.join(evidence, 'plant-signal-calibrating.png'), timeout: 2000})
+  if (evidence) await page.screenshot({path: path.join(evidence, 'plant-signal-calibrating.png')})
   await save('Automatic stabilization reuses the initial calibration animation and side copy; no extra command')
   await page.evaluate(() => { window.__soundSensorState = 3 })
   await page.locator('.sound-lab[data-plant-state="3"]').waitFor()
@@ -1537,7 +1538,8 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
         try {
           fs.writeFileSync(`${prefix}.json`, JSON.stringify({error: error.stack, beforeCleanup: true,
             url: tab.url(), browser: browser.version(), fixture: await tab.evaluate(() => ({
-              sent: window.__soundMidiSent, values: window.__soundSettingsSnapshot?.(), replyMode: window.__soundSettingsReplyMode
+              sent: window.__soundMidiSent, values: window.__soundSettingsSnapshot?.(), replyMode: window.__soundSettingsReplyMode,
+              fonts: {status: document.fonts.status, faces: Array.from(document.fonts).map(face => ({family: face.family, status: face.status}))}
             }))}, null, 2))
           fs.writeFileSync(`${prefix}.txt`, `${tab.url()}\n${await tab.locator('body').innerText({timeout: 1500})}`)
           await tab.screenshot({path: `${prefix}.png`, fullPage: true, timeout: 2000})

@@ -156,6 +156,44 @@ function readHttp(url, options = {}) {
     assert.equal(fallback.headers['content-type'], 'text/html; charset=utf-8')
     assert.deepEqual(fallback.body, fixtures[0].body)
     console.log('PASS static tester HTTP/browser bytes, UTF8 CSS and SVG; local fixtures only')
+
+    // A self-generated X glyph; no system font, download or runtime dependency.
+    const font = Buffer.from('AAEAAAAKAIAAAwAgT1MvMkUAREwAAAEoAAAAYGNtYXAAogBFAAABkAAAADxnbHlmVl1WWwAAAdQAAAA0aGVhZGFsQ5wAAACsAAAANmhoZWEE2gIyAAAA5AAAACRobXR4AlgAAAAAAYgAAAAIbG9jYQANACcAAAHMAAAACG1heHAABQAGAAABCAAAACBuYW1lDWPUCAAAAggAAAG2cG9zdAAIADsAAAPAAAAAKAABAAAAAQAAgWEvX18PPPUAAQPoAAAAAAAAAAAAAAAAAAAAAABQAAACCAK8AAAAAwACAAAAAAAAAAEAAAMg/zgAAAJYAAAAoAG4AAEAAAAAAAAAAAAAAAAAAAABAAEAAAADAAQAAQAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAwJYAZAABQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAPz8/PwAAACAAWAMg/zgAAAMgAMgAAAAAAAAAAAAAAAAAAAAgAAACWAAAAAAAAAAAAAIAAAADAAAAFAADAAEAAAAUAAQAKAAAAAYABAABAAIAIABY//8AAAAgAFj////h/6oAAQAAAAAAAAAAAA0ADQAaAAEAUAAAAggCvAADAAAzIREhUAG4/kgCvAAAAQBQAAACCAK8AAMAADMhESFQAbj+SAK8AAAAAAwAlgABAAAAAAABAAoAAAABAAAAAAACAAcACgABAAAAAAADACEAEQABAAAAAAAEABIAMgABAAAAAAAFAAsARAABAAAAAAAGABEATwADAAEECQABABQAYAADAAEECQACAA4AdAADAAEECQADAEIAggADAAEECQAEACQAxAADAAEECQAFABYA6AADAAEECQAGACIA/kJpb3Ryb24gUUFSZWd1bGFyQmlvdHJvbi1RQS1zZWxmLWdlbmVyYXRlZC1maXh0dXJlQmlvdHJvbiBRQSBSZWd1bGFyVmVyc2lvbiAxLjBCaW90cm9uUUEtUmVndWxhcgBCAGkAbwB0AHIAbwBuACAAUQBBAFIAZQBnAHUAbABhAHIAQgBpAG8AdAByAG8AbgAtAFEAQQAtAHMAZQBsAGYALQBnAGUAbgBlAHIAYQB0AGUAZAAtAGYAaQB4AHQAdQByAGUAQgBpAG8AdAByAG8AbgAgAFEAQQAgAFIAZQBnAHUAbABhAHIAVgBlAHIAcwBpAG8AbgAgADEALgAwAEIAaQBvAHQAcgBvAG4AUQBBAC0AUgBlAGcAdQBsAGEAcgAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAMAOw==', 'base64')
+    page.setDefaultTimeout(5000)
+    for (const fixture of [{name: 'old-success', timeout: 2000, expected: 'TIMEOUT'},
+      {name: 'normal-success', expected: 'CAPTURED'},
+      {name: 'first-fault', timeout: 2000, never: true, expected: 'TIMEOUT'}]) {
+      const url = `${localOrigin}/font-control-${fixture.name}.ttf`
+      let pending, finish
+      const served = new Promise(resolve => { finish = resolve })
+      await context.route(url, async route => {
+        pending = route
+        if (fixture.never) return
+        await new Promise(resolve => setTimeout(resolve, 3000))
+        await route.fulfill({status: 200, contentType: 'font/ttf', body: font})
+        finish()
+      })
+      await page.setContent(`<style>@font-face{font-family:Delayed;src:url('${url}');font-display:swap}p{font-family:Delayed}button{font-family:Arial}</style><button onclick="document.body.dataset.state='connecting';window.trusted=event.isTrusted;const p=document.createElement('p');p.textContent='X';document.body.append(p)">Start listening</button>`)
+      await page.getByRole('button', {name: 'Start listening'}).click()
+      await page.waitForFunction(() => document.fonts.status === 'loading')
+      assert.deepEqual(await page.evaluate(() => [document.body.dataset.state, window.trusted]), ['connecting', true])
+      let outcome = 'CAPTURED', captureError = null
+      const began = Date.now()
+      try {
+        await page.screenshot({path: path.join(root, fixture.name + '.png'),
+          ...(fixture.timeout ? {timeout: fixture.timeout} : {})})
+      } catch (error) { outcome = 'TIMEOUT'; captureError = error.message }
+      console.log(JSON.stringify({fontCapture: fixture.name, outcome, elapsedMs: Date.now() - began, captureError}))
+      assert.equal(outcome, fixture.expected)
+      if (outcome === 'TIMEOUT') {
+        assert.match(captureError, /Timeout 2000ms exceeded/)
+        assert(Date.now() - began < 4000, 'First-fault evidence escaped its capture deadline')
+      }
+      if (fixture.never) await pending.abort()
+      else await served
+    }
+    console.log('PASS delayed-font capture uses normal5s success deadline; first-fault capture stays bounded2s; trusted UI reacts before fonts finish')
+
   } catch (error) {
     fault = error
   } finally {
