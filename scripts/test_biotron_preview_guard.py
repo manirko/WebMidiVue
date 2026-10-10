@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -9,8 +11,9 @@ import urllib.parse
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from contextlib import redirect_stdout
 
-from scripts.biotron_preview_guard import CandidateError, cloudflare_project_preflight, verify_candidate, verify_remote
+from scripts.biotron_preview_guard import CandidateError, cloudflare_project_preflight, main, verify_candidate, verify_remote
 
 
 class BiotronPreviewGuardTests(unittest.TestCase):
@@ -146,6 +149,30 @@ database_id = "0d385f91-f646-4f8c-b508-344b4b2f8a6e"
             "result": [{"Project Name": "biotron-settings-beta"}, {"Project Name": "other"}]
         }), stderr="")
         self.assertEqual(cloudflare_project_preflight(self.root / "wrangler")["projects_seen"], 2)
+
+    def test_failed_upload_preserves_diagnostic_before_rejection(self) -> None:
+        args = SimpleNamespace(candidate_dir=self.candidate, build_id=self.build_id,
+                               archive_sha256="0" * 64, branch=None, execute=True,
+                               confirm="exact-confirmation", wrangler=Path(__file__))
+        verified = {"confirmation_token": args.confirm, "dist": str(self.dist),
+                    "deploy_cwd": str(self.root), "release": {}, "project": "biotron-settings-beta",
+                    "branch": "candidate-test", "commit": self.commit}
+        output = io.StringIO()
+        def failed_upload(command, **options):
+            diagnostic = "ERROR: More than one account available\n"
+            if options.get("check"):
+                raise subprocess.CalledProcessError(1, command, output=diagnostic)
+            return SimpleNamespace(returncode=1, stdout=diagnostic)
+        with patch("scripts.biotron_preview_guard.parse_args", return_value=args), \
+             patch("scripts.biotron_preview_guard.verify_candidate", return_value=verified), \
+             patch("scripts.biotron_preview_guard.os.access", return_value=True), \
+             patch("scripts.biotron_preview_guard.cloudflare_project_preflight", return_value={"status": "verified"}), \
+             patch("scripts.biotron_preview_guard.subprocess.run", side_effect=failed_upload), \
+             patch("scripts.biotron_preview_guard.verify_remote") as remote, redirect_stdout(output):
+            with self.assertRaisesRegex(CandidateError, "upload failed.*1"):
+                main()
+        self.assertIn("ERROR: More than one account available", output.getvalue())
+        remote.assert_not_called()
 
     @patch("scripts.biotron_preview_guard.subprocess.run")
     def test_cloudflare_preflight_rejects_malformed_json_and_conflicting_names(self, run) -> None:

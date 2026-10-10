@@ -421,13 +421,14 @@ def main() -> None:
         command = deployment_command(wrangler, verified)
         completed = subprocess.run(
             command,
-            check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             cwd=verified["deploy_cwd"],
         )
         print(completed.stdout, end="")
+        if completed.returncode:
+            raise CandidateError(f"Cloudflare upload failed with exit code {completed.returncode}; see diagnostic above")
         url = unique_preview_url(completed.stdout)
         print(json.dumps(verify_remote(url, verified), indent=2, sort_keys=True))
 
