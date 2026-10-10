@@ -180,7 +180,7 @@ async function cameraStream(signal) {
 async function startVideo(signal) {
   if (takes.length >= 3) throw Error('Three takes kept. Save and remove a take before recording another.')
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') throw Error('Video recording unavailable. Record sound and use your camera app.')
-  const mime = ['video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm'].find(type => MediaRecorder.isTypeSupported(type))
+  const mime = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/webm;codecs=vp8,opus', 'video/mp4', 'video/webm'].find(type => MediaRecorder.isTypeSupported(type))
   if (!mime) throw Error('No supported video format. Record sound and use your camera app.')
   await ready(signal)
   const camera = await cameraStream(signal)
