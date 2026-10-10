@@ -33,7 +33,7 @@ async function testRealtimeCapture() {
   const {createRequire} = await import('node:module')
   const {fileURLToPath} = await import('node:url')
   const require = createRequire(import.meta.url)
-  const {launchBrowser, createStaticServer} = require('../browser-test-harness.js')
+  const {launchBrowser, browserCall, createStaticServer} = require('../browser-test-harness.js')
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
   const parent = process.env.BIOTRON_QA_OUTPUT || os.tmpdir()
   const output = fs.mkdtempSync(path.join(parent, 'audio-realtime-'))
@@ -143,6 +143,10 @@ async function testRealtimeCapture() {
         formats: ['audio/webm;codecs=opus', 'audio/mp4'].filter(mime => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(mime))}))
       report.recordingCapability = capability; save()
       assert(capability.available && capability.formats.length, 'no supported recording format; route remains unsupported')
+      const requested = process.env.BIOTRON_QA_RECORD_MIME
+      const formats = requested === undefined ? capability.formats : capability.formats.filter(mime => mime === requested)
+      report.requestedRecordingFormat = requested ?? null; save()
+      assert(formats.length, 'requested format is not supported; no automatic substitution')
       const unsupported = await page.evaluate(async () => {
         const before = window.__captureResources.contexts.length
         try { await window.__CaptureScore(window.__ElemEngine.ElementarySynthEngine, 'normal', undefined, 'audio/x-unsupported-biotron'); return false }
@@ -166,39 +170,46 @@ async function testRealtimeCapture() {
       assert.equal(report.recordingControls.intervals, 0); assert.equal(report.recordingControls.blobs, 0)
       assert(report.recordingControls.contextStates.every(state => state === 'closed'))
       assert(report.recordingControls.trackStates.every(state => state === 'ended'))
-      for (const mime of capability.formats) for (const mode of ['normal', 'mute']) {
-        const observed = await page.evaluate(async ({mime, mode}) => {
+      for (const mime of formats) for (const mode of ['normal', 'mute']) {
+        const observed = await browserCall(browser, () => page.evaluate(async ({mime, mode}) => {
           const data = await window.__CaptureScore(window.__ElemEngine.ElementarySynthEngine, mode, undefined, mime)
           const base64 = bytes => { const view = new Uint8Array(bytes); let binary = ''; for (let i = 0; i < view.length; i += 8192) binary += String.fromCharCode(...view.subarray(i, i + 8192)); return btoa(binary) }
-          const decode = new AudioContext({sampleRate: 48000})
-          try {
-            const audio = await decode.decodeAudioData(data.recording.bytes.slice(0))
-            let damagedRejected = false
-            try { await decode.decodeAudioData(data.recording.bytes.slice(0, 32)) } catch (_) { damagedRejected = true }
-            const {bytes, ...metadata} = data.recording
-            return {report: data.report, metadata, encoded: base64(bytes), referenceWav: base64(data.wav),
-              decoded: {sampleRate: audio.sampleRate, duration: audio.duration, channels: Array.from({length: audio.numberOfChannels}, (_, c) => base64(audio.getChannelData(c).buffer))}, damagedRejected}
-          } finally { await decode.close() }
-        }, {mime, mode})
+          const {bytes, ...metadata} = data.recording
+          return {report: data.report, metadata, encoded: base64(bytes), referenceWav: base64(data.wav)}
+        }, {mime, mode}), 'creator capture')
         const name = `${mime.startsWith('audio/mp4') ? 'mp4' : 'webm'}-${mode}`
         const encoded = Buffer.from(observed.encoded, 'base64'), reference = Buffer.from(observed.referenceWav, 'base64')
         fs.writeFileSync(path.join(output, `${name}.${mime.startsWith('audio/mp4') ? 'm4a' : 'webm'}`), encoded)
         fs.writeFileSync(path.join(output, `${name}-reference.wav`), reference)
-        const channels = observed.decoded.channels.map(value => { const b = Buffer.from(value, 'base64'); return Float32Array.from({length: b.length / 4}, (_, i) => b.readFloatLE(i * 4)) })
-        const checked = analyze(channels, observed.decoded.sampleRate)
+        // Decoder failure must not discard the very file being diagnosed.
+        const row = {mime, mode, report: observed.report, metadata: observed.metadata, reopenedStatus: 'PENDING',
+          encodedSha256: hash(encoded), referenceSha256: hash(reference)}
+        report.cases.push(row); save()
+        const reopened = await browserCall(browser, () => page.evaluate(async encoded => {
+          const bytes = Uint8Array.from(atob(encoded), char => char.charCodeAt(0)).buffer
+          const base64 = bytes => { const view = new Uint8Array(bytes); let binary = ''; for (let i = 0; i < view.length; i += 8192) binary += String.fromCharCode(...view.subarray(i, i + 8192)); return btoa(binary) }
+          const decode = new AudioContext({sampleRate: 48000})
+          try {
+            const audio = await decode.decodeAudioData(bytes.slice(0))
+            let damagedRejected = false
+            try { await decode.decodeAudioData(bytes.slice(0, 32)) } catch (_) { damagedRejected = true }
+            return {decoded: {sampleRate: audio.sampleRate, duration: audio.duration, channels: Array.from({length: audio.numberOfChannels}, (_, c) => base64(audio.getChannelData(c).buffer))}, damagedRejected}
+          } finally { await decode.close() }
+        }, observed.encoded), 'creator reopen')
+        const channels = reopened.decoded.channels.map(value => { const b = Buffer.from(value, 'base64'); return Float32Array.from({length: b.length / 4}, (_, i) => b.readFloatLE(i * 4)) })
+        const checked = analyze(channels, reopened.decoded.sampleRate)
         const resources = await page.evaluate(() => ({intervals: window.__captureResources.intervals.size, blobs: window.__captureResources.blobs.size,
           contextStates: window.__captureResources.contexts.map(c => c.state), trackStates: window.__captureResources.tracks.map(t => t.readyState),
           midiRequests: window.__captureResources.midiRequests, microphoneRequests: window.__captureResources.microphoneRequests}))
-        const row = {mime, mode, report: observed.report, metadata: observed.metadata, decoded: {...observed.decoded, channels: channels.length},
-          reopenedAnalysis: checked, damagedRejected: observed.damagedRejected, encodedSha256: hash(encoded), referenceSha256: hash(reference), resources}
-        report.cases.push(row); save()
+        Object.assign(row, {decoded: {...reopened.decoded, channels: channels.length}, reopenedStatus: 'DECODED',
+          reopenedAnalysis: checked, damagedRejected: reopened.damagedRejected, resources}); save()
         assert.equal(encoded.length, observed.metadata.size); assert(encoded.length > 32, 'empty recording')
         assert.equal(observed.metadata.finalizedBeforeContextClose, true, 'finalize before closing synth')
         assert.equal(observed.report.result, 'PASS', 'final gain reference capture must pass its fixture')
         assert.equal(checked.result, mode === 'normal' ? 'PASS' : 'FAIL', 'reopened file must detect silent capture')
         if (mode === 'mute') assert(checked.reasons.includes('MISSING_SIGNAL'))
         else assert(Math.abs(checked.metrics[0].signalRms / observed.report.analysis.metrics[0].signalRms - 1) < .25, 'encoded take must retain reference level')
-        assert(observed.damagedRejected, 'truncated file must be rejected')
+        assert(reopened.damagedRejected, 'truncated file must be rejected')
         assert.equal(resources.intervals, 0); assert.equal(resources.blobs, 0)
         assert(resources.contextStates.every(state => state === 'closed'))
         assert(resources.trackStates.every(state => state === 'ended'))

@@ -418,3 +418,8 @@ missing/empty/undecodable/silent normal output is a failure. This proof does not
 implement a Play recorder, certify a phone, test editor import, measure acoustic
 quality, solve FB63 or produce a finished creator video. Save/share/editor and
 live-camera alternatives remain separate tasks in the existing T14 experiment.
+`BIOTRON_QA_RECORD_MIME=audio/mp4` isolates one exposed format without replacing
+another failed lane. Capture bytes and hashes are saved before decoder access;
+capture/reopen calls are bounded by the shared browser guard. An earlier WebKit
+decode failure lost its unsaved encoded file; retain that first incomplete
+evidence and rerun the exact failure after this tester correction.
