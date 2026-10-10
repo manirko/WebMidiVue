@@ -556,3 +556,34 @@ real speech/camera/phone/editor/sync/finished creator task, speed benchmark and
 fullrelease gate NOTRUN. Production84paths/runtime0a/frozenSergey b15 unchanged.
 Current local prototype: http://127.0.0.1:65337/creator.html; save takes before
 reload. Older prototypes retained; do not silently switch a playing page.
+
+## Creator WAV capture cost — 10 October 2026
+
+The existing `test-analyze.mjs --creator-benchmark` compares the same Round
+phrase with WAV capture off/on, after warming both paths. Order off/on/on/off/
+off/on gives three local pairs. Same register0/volume70/standard8 voices and16
+events in each window; own isolated Mac page390×844, no Garden, native MIDI,
+camera or microphone. Trace has no continuous images/DOM. Other machine load
+is uncontrolled; this is a descriptive benchmark, not a calibrated ranking.
+
+Chrome154 on97fffc6: six4.906–4.917s windows, three WAV files independently
+reread/decode/SHA checked. Off CPU1.285–1.489s and on1.392–1.689s overlap;
+this does not establish a stable percentage overhead. Main-thread task time
+off100–116ms/on144–175ms; file finalization56–59ms; rAF gap p9516.7–16.8ms.
+Process CPU counts all own-browser threads; default CDP timeTicks TaskDuration
+is elapsed task time, not separate main-thread CPU or machine CPU percentage.
+Heap/storage snapshots include temporary measurement buffers; no leak verdict.
+
+Final174ed62 bounds fresh WAV decode with the existing browserCall, preserving
+bytes first. Pending/zero guard control, units, syntax and architecture PASS.
+PWWebKit26.5 on174ed62: six phases/three WAV measured, finalization41–49ms,
+rAF p9518ms. CPU/task/heap unsupported and explicitly null; never fill with
+zero or infer installed Safari/iPhone results. Both summaries are
+MEASURED_SCOPED, with48Git input references/testerSHA/6actualWAV verified and
+the same compiled0c creator JS. No new normal25-group/fullgate run or DSP fix.
+
+84production paths and both prototype sources remain byte-identical; only the
+existing tester changed. This closes measurement coverage, not creator time,
+phone audio, GUI editor, full memory/leaks, native GPU rendering or profitability.
+Next is the intended finished clip in familiar tools plus real-device/resource
+checks justified by that task. Frozenb15/Sergey packet and BOOT-owner gates stay.
