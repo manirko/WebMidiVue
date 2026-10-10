@@ -433,23 +433,25 @@ then `node <new-dir>/build.cjs`; serve that directory with the existing static
 server and open `/creator.html`. The production build/source and frozen b15 are
 unchanged. No engine, dependency, framework, cloud account or editor is added.
 
-The one page provides a short shoot/editor brief, final-gain WAV takes,
-Save/native Share with cancellation, named sound/register URL plus repeatable
-performance, and an optional native camera+synth/microphone video take. Only
-explicit Connect requests non-SysEx MIDI inputs whose name contains Biotron;
-no MIDI output, settings, calibration or firmware commands. Camera/microphone
-are requested only by Record video; microphone defaults off. Three 30-second
-takes bound retained buffers; previous takes survive a failed/cancelled start.
-Reload clears them; Save before leaving. No file is uploaded automatically.
+The one page provides final-gain WAV takes, Listen/Save/native Share with
+cancellation, named sound/register URLs and repeatable performance. Film in a
+usual camera app, then add the saved sound in an existing editor. Andrey rejected
+built-in video recording on10October: its UI, camera/microphone requests, stream
+mixing, preview and video-codec branches are removed. Older video proofs below
+are historical, not current capabilities. Only explicit Connect requests
+non-SysEx MIDI inputs whose name contains Biotron; no MIDI output, settings,
+calibration or firmware commands. Three30-second takes bound retained buffers;
+previous takes survive a failed/cancelled start. Reload clears them; save before
+leaving. No file is uploaded automatically.
 
 `node scripts/audio-qa/test-analyze.mjs --creator-prototype` extends this same
-tester. It saves first faults, actual WAV/video bytes and SHA, checks fresh
-decode/native video playback and independent ffmpeg decode, rejects silence,
-tests controlled clipboard/Share/native API failures, late permission replies,
-Stop/held-key replay and lifecycle boundaries. Camera/mic/MIDI providers are
-controlled fixtures; assertions do not certify real hardware/permissions,
-BFCache, phone/editor import, camera sync, human hearing or a completed clip.
-ffprobe/ffmpeg are existing local test dependencies, not product dependencies.
+tester. It saves first faults and actual WAV bytes before fresh decode, checks
+exact download/controlled Share, repeat, silence, three-take/30-second limits,
+pending audio-start cancellation, disconnect/release and lifecycle boundaries.
+Independent final-gain PCM verifies saved fidelity. Camera/microphone requests
+are forbidden and counted; controlled MIDI never accesses real device outputs.
+These assertions do not certify hardware, native permissions/BFCache, phone,
+editor import, human hearing, finished video or creator benefit.
 
 Judge review and preserved before-fix controls found missing held-key panic and
 revoked kept-take URLs on pagehide. The minimal fixes record a performance stop,

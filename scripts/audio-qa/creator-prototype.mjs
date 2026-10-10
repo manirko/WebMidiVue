@@ -23,7 +23,7 @@ const guard = (promise, label, ms = 10000, signal) => new Promise((resolve, reje
   if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, {once: true})
 })
 function update() {
-  for (const id of ['sound', 'register', 'voice', 'record-audio', 'record-video', 'connect']) $(id).disabled = busy || Boolean(capture)
+  for (const id of ['sound', 'register', 'record-audio', 'connect']) $(id).disabled = busy || Boolean(capture)
   $('repeat').disabled = busy || !lastPerformance.length
   $('stop').disabled = !startAbort && (!capture || busy)
   $('stop').textContent = startAbort ? 'Cancel start' : 'Stop recording'
@@ -172,51 +172,8 @@ async function startAudio(signal) {
   engine.output.connect(tap)
   status('Recording sound. Play the example, keyboard or connected Biotron. Maximum 30 seconds.')
 }
-async function cameraStream(signal) {
-  let expired = false
-  const pending = navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment', width: {ideal: 720}, height: {ideal: 1280}}, audio: $('voice').checked})
-  pending.then(stream => { if (expired || signal?.aborted) stream.getTracks().forEach(track => track.stop()) }, () => {})
-  try { return await guard(pending, 'Camera permission', 30000, signal) }
-  catch (error) { expired = true; throw error }
-}
-async function startVideo(signal) {
-  if (takes.length >= 3) throw Error('Three takes kept. Save and remove a take before recording another.')
-  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') throw Error('Video recording unavailable. Record sound and use your camera app.')
-  const mime = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/webm;codecs=vp8,opus', 'video/mp4', 'video/webm'].find(type => MediaRecorder.isTypeSupported(type))
-  if (!mime) throw Error('No supported video format. Record sound and use your camera app.')
-  await ready(signal)
-  const camera = await cameraStream(signal)
-  let sink, mic
-  try {
-    sink = engine.context.createMediaStreamDestination(); engine.output.connect(sink)
-    if (camera.getAudioTracks().length) { mic = engine.context.createMediaStreamSource(camera); mic.connect(sink) }
-    const stream = new MediaStream([...camera.getVideoTracks(), ...sink.stream.getAudioTracks()])
-    const recorder = new MediaRecorder(stream, {mimeType: mime}), chunks = []
-    const session = {kind: 'video', camera, sink, mic, recorder, chunks, events: [], started: engine.context.currentTime, sound: currentSound().id}
-    recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data) }
-    recorder.onerror = event => { session.error = event.error || Error('Video recording failed'); requestFinish() }
-    capture = session; recorder.start()
-    session.limit = setTimeout(requestFinish, 30000)
-    $('preview').srcObject = camera; $('preview').hidden = false; await guard($('preview').play(), 'Camera preview', 10000, signal)
-    status($('voice').checked ? 'Recording video, synth and microphone. Maximum 30 seconds.' : 'Recording video and synth. Microphone off. Maximum 30 seconds.')
-  } catch (error) {
-    try {
-      if (capture?.kind === 'video') await cleanCapture(capture)
-      else { mic?.disconnect(); if (sink) { engine.output.disconnect(sink); sink.stream.getTracks().forEach(track => track.stop()) }; camera.getTracks().forEach(track => track.stop()) }
-    } catch (cleanup) { error.cleanupFailure = String(cleanup) }
-    capture = null; throw error
-  }
-}
 async function cleanCapture(session) {
-  clearTimeout(session.limit)
-  if (session.kind === 'audio') { engine.output.disconnect(session.tap); session.tap.disconnect(); session.drain.disconnect(); session.tap.port.onmessage = null; session.tap.port.close() }
-  else {
-    session.recorder.ondataavailable = null; session.recorder.onerror = null; session.recorder.onstop = null
-    if (session.recorder.state !== 'inactive') session.recorder.stop()
-    session.mic?.disconnect(); engine.output.disconnect(session.sink); session.sink.disconnect()
-    session.camera.getTracks().forEach(track => track.stop()); session.sink.stream.getTracks().forEach(track => track.stop())
-    $('preview').pause(); $('preview').srcObject = null; $('preview').hidden = true
-  }
+  engine.output.disconnect(session.tap); session.tap.disconnect(); session.drain.disconnect(); session.tap.port.onmessage = null; session.tap.port.close()
 }
 async function finish() {
   const session = capture
@@ -225,29 +182,20 @@ async function finish() {
   try {
     // A recorded performance needs a final stop even if a key/contact remains held.
     if (engine.activeVoiceCount) send({type: 'panic'})
-    if (session.kind === 'audio') {
-      // Auto-limit may already have acknowledged completion.
-      await guard(new Promise(resolve => { session.resolve = resolve; if (session.done) resolve(); else session.tap.port.postMessage('stop') }), 'Sound finalization', 5000)
-      let expected = session.blocks[0]?.frame, samples = 0
-      for (const block of session.blocks) { if (block.frame !== expected) throw Error('Sound capture has a gap. Existing takes are kept.'); expected += block.pcm.length; samples += block.pcm.length }
-      if (!samples) throw Error('No audio blocks received. Try again; existing takes are kept.')
-      const pcm = new Float32Array(samples); let at = 0
-      for (const block of session.blocks) { pcm.set(block.pcm, at); at += block.pcm.length }
-      if (pcm.some(value => !Number.isFinite(value))) throw Error('Invalid audio samples. Existing takes are kept.')
-      session.silent = pcm.every(value => Math.abs(value) < .0005)
-      file = new File([wav([pcm], session.sampleRate)], 'biotron-take-' + (takeNumber + 1) + '.wav', {type: 'audio/wav'})
-      seconds = samples / session.sampleRate
-    } else {
-      await guard(new Promise(resolve => { session.recorder.onstop = resolve; if (session.recorder.state === 'inactive') resolve(); else session.recorder.stop() }), 'Video finalization', 5000)
-      if (session.error) throw session.error
-      const mime = session.recorder.mimeType
-      file = new File(session.chunks, 'biotron-take-' + (takeNumber + 1) + (mime.includes('mp4') ? '.mp4' : '.webm'), {type: mime})
-      if (!file.size) throw Error('Video file is empty. Existing takes are kept.')
-      seconds = engine.context.currentTime - session.started
-    }
+    // Auto-limit may already have acknowledged completion.
+    await guard(new Promise(resolve => { session.resolve = resolve; if (session.done) resolve(); else session.tap.port.postMessage('stop') }), 'Sound finalization', 5000)
+    let expected = session.blocks[0]?.frame, samples = 0
+    for (const block of session.blocks) { if (block.frame !== expected) throw Error('Sound capture has a gap. Existing takes are kept.'); expected += block.pcm.length; samples += block.pcm.length }
+    if (!samples) throw Error('No audio blocks received. Try again; existing takes are kept.')
+    const pcm = new Float32Array(samples); let at = 0
+    for (const block of session.blocks) { pcm.set(block.pcm, at); at += block.pcm.length }
+    if (pcm.some(value => !Number.isFinite(value))) throw Error('Invalid audio samples. Existing takes are kept.')
+    session.silent = pcm.every(value => Math.abs(value) < .0005)
+    file = new File([wav([pcm], session.sampleRate)], 'biotron-take-' + (takeNumber + 1) + '.wav', {type: 'audio/wav'})
+    seconds = samples / session.sampleRate
     addTake(file, session, seconds)
     lastPerformance = session.eventsOverflow ? [] : session.events
-    const message = session.silent ? 'Take kept, but no music was detected. Check volume and input before another take.' : 'Take kept. Listen or watch before saving. Nothing has been uploaded.'
+    const message = session.silent ? 'Take kept, but no music was detected. Check volume and input before another take.' : 'Take kept. Listen before saving. Nothing has been uploaded.'
     status(message + (session.eventsOverflow ? ' Repeat unavailable: too many note changes. The recorded file is kept.' : ''))
   } catch (error) { primary = error; throw error }
   finally { capture = null; try { await cleanCapture(session) } catch (error) { if (primary) primary.cleanupFailure = String(error); else throw error } }
@@ -257,10 +205,10 @@ function addTake(file, session, seconds) {
   takes.push(take); takeNumber++
   const section = document.createElement('article'); section.className = 'take'
   const title = document.createElement('h3'); title.textContent = 'Take ' + takeNumber + ' · ' + seconds.toFixed(1) + ' seconds'
-  const media = document.createElement(session.kind === 'audio' ? 'audio' : 'video'); media.controls = true; media.src = url; media.playsInline = true
+  const media = document.createElement('audio'); media.controls = true; media.src = url
   media.onplay = stopNotes
   const row = document.createElement('div'); row.className = 'row'
-  const save = document.createElement('a'); save.className = 'save'; save.href = url; save.download = file.name; save.textContent = 'Save ' + (session.kind === 'audio' ? 'sound' : 'video')
+  const save = document.createElement('a'); save.className = 'save'; save.href = url; save.download = file.name; save.textContent = 'Save sound'
   const share = document.createElement('button'); share.textContent = 'Share file'
   let shareable = false
   try { shareable = Boolean(navigator.share && navigator.canShare?.({files: [file]})) } catch { /* Save remains available. */ }
@@ -276,9 +224,8 @@ function addTake(file, session, seconds) {
   remove.onclick = () => { media.pause(); media.removeAttribute('src'); media.load(); URL.revokeObjectURL(url); takes = takes.filter(item => item !== take); section.remove() }
   row.append(save, share, remove); section.append(title, media, row, message); $('takes').append(section)
 }
-function start(action) { return run(async () => { startAbort = new AbortController(); update(); try { await action(startAbort.signal) } finally { startAbort = null } }) }
-$('record-audio').onclick = () => start(startAudio)
-$('record-video').onclick = () => start(startVideo)
+function start() { return run(async () => { startAbort = new AbortController(); update(); try { await startAudio(startAbort.signal) } finally { startAbort = null } }) }
+$('record-audio').onclick = start
 $('stop').onclick = () => startAbort ? startAbort.abort() : run(finish)
 document.addEventListener('visibilitychange', () => { if (document.hidden) { startAbort?.abort(); stopNotes(); if (capture) requestFinish() } })
 window.addEventListener('pagehide', () => { startAbort?.abort(); stopNotes(); const session = capture; capture = null; if (session) void cleanCapture(session); void releaseMidi(); void engine?.stop() })

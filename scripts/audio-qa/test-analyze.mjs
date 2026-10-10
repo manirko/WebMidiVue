@@ -89,7 +89,7 @@ async function testCreatorPrototype() {
   const require = createRequire(import.meta.url), {launchBrowser, browserCall, createStaticServer} = require('../browser-test-harness.js')
   const root = path.resolve(''), output = fs.mkdtempSync(path.join(process.env.BIOTRON_QA_OUTPUT || os.tmpdir(), 'creator-ui-')), bench = path.join(output, 'bench')
   const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex')
-  const report = {status: 'RUNNING', commit: execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim(), inputs: {}, checks: [], scope: 'Actual production engine and local files; controlled clipboard/share/camera providers, no native devices, editor or creator acceptance'}
+  const report = {status: 'RUNNING', commit: execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim(), inputs: {}, checks: [], scope: 'Actual production engine and local files; controlled clipboard/share/MIDI providers; camera and microphone forbidden, no native devices, editor or creator acceptance'}
   const save = () => fs.writeFileSync(path.join(output, 'summary.json'), JSON.stringify(report, null, 2))
   const pass = name => { report.checks.push(name); save() }
   console.log('Creator prototype evidence:', output); save()
@@ -105,7 +105,7 @@ async function testCreatorPrototype() {
     browser = await launchBrowser({ignoreDefaultArgs: ['--mute-audio']}); report.browser = browser.version()
     context = await browser.newContext({viewport: {width: 390, height: 844}, hasTouch: true})
     await context.addInitScript(() => {
-      window.__creatorControls = {clipboard: 'success', share: 'cancel', copied: [], shared: [], midi: 0, camera: 0, cameraMode: 'deny', fixtureTracks: [], fixtureContexts: [], fixtureTimers: new Set()}
+      window.__creatorControls = {clipboard: 'success', share: 'cancel', copied: [], shared: [], midi: 0, camera: 0}
       Object.defineProperty(navigator, 'requestMIDIAccess', {value: undefined, configurable: true})
       Object.defineProperty(navigator, 'clipboard', {value: {writeText: text => {
         const controls = window.__creatorControls; controls.clipboardRequests = (controls.clipboardRequests || 0) + 1
@@ -120,32 +120,10 @@ async function testCreatorPrototype() {
         if (controls.share === 'reject') throw new DOMException('Blocked', 'NotAllowedError')
         controls.shared.push(Array.from(new Uint8Array(await files[0].arrayBuffer())))
       }, configurable: true})
-      const createCamera = options => {
-        const controls = window.__creatorControls, canvas = document.createElement('canvas'); canvas.width = 240; canvas.height = 320
-        const drawing = canvas.getContext('2d'); let frame = 0
-        const timer = setInterval(() => { drawing.fillStyle = ++frame % 2 ? '#24553e' : '#edf3eb'; drawing.fillRect(0, 0, 240, 320) }, 40)
-        controls.fixtureTimers.add(timer)
-        const stream = canvas.captureStream(25)
-        let context
-        if (options.audio) {
-          context = new AudioContext(); controls.fixtureContexts.push(context)
-          const oscillator = context.createOscillator(), gain = context.createGain(), sink = context.createMediaStreamDestination()
-          oscillator.frequency.value = 310; gain.gain.value = .03; oscillator.connect(gain); gain.connect(sink); oscillator.start(); void context.resume()
-          for (const track of sink.stream.getAudioTracks()) stream.addTrack(track)
-        }
-        for (const track of stream.getTracks()) {
-          controls.fixtureTracks.push(track); const stop = track.stop.bind(track)
-          track.stop = () => { stop(); clearInterval(timer); controls.fixtureTimers.delete(timer); if (context && context.state !== 'closed') void context.close() }
-        }
-        return stream
-      }
-      // Pin the whole controlled provider. WebKit dropped the native wrapper's
-      // expando after audio capture; a fixture must never fall through to hardware.
-      Object.defineProperty(navigator, 'mediaDevices', {value: {getUserMedia: async options => {
-        const controls = window.__creatorControls; controls.camera++
-        if (controls.cameraMode === 'pending') return new Promise(resolve => { controls.resolveCamera = () => resolve(createCamera(options)) })
-        if (controls.cameraMode === 'success') return createCamera(options)
-        throw new DOMException('Denied', 'NotAllowedError')
+      // Forbid camera/microphone access, including accidental future callers.
+      Object.defineProperty(navigator, 'mediaDevices', {value: {getUserMedia: async () => {
+        __creatorControls.camera++
+        throw Error('Camera and microphone must not be requested')
       }}, configurable: true})
     })
     const benchmark = process.argv.includes('--creator-benchmark')
@@ -157,6 +135,11 @@ async function testCreatorPrototype() {
     await page.waitForFunction(() => window.__CreatorPrototype)
     report.observedNavigationMs = Date.now() - navStarted
     report.prototypeBundleBytes = fs.statSync(path.join(bench, 'creator.js')).size
+    report.audioOnly = await page.evaluate(() => ({videoControls: document.querySelectorAll('#record-video, #voice, #preview, video').length, mediaRequests: __creatorControls.camera}))
+    save() // Keep the rejected camera UI as a before-change failure.
+    assert.equal(report.audioOnly.videoControls, 0, 'Creator recording must only record sound; use an external camera app')
+    assert.equal(report.audioOnly.mediaRequests, 0)
+    pass('audio-only creator page: no video, microphone or camera controls')
     assert(await page.locator('#connect').isDisabled()); assert.match(await page.locator('#connection').innerText(), /MIDI-capable/)
     assert.equal(await page.evaluate(() => __creatorControls.camera), 0); pass('no-device page, truthful MIDI fallback, no permission on load')
     if (benchmark || fidelity) {
@@ -220,10 +203,6 @@ async function testCreatorPrototype() {
     await page.waitForFunction(() => window.__creatorControls.shared.length === 1)
     assert.equal(hash(Buffer.from(await page.evaluate(() => __creatorControls.shared[0]))), sha); assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 1)
     pass('exact download/readback, Share cancel/reject/success keep the same file; no receiving-app success claim')
-    await page.locator('#record-video').click(); await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
-    assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 1); assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false)
-    assert.equal(await page.evaluate(() => __creatorControls.camera), 1); assert.equal(await page.locator('#status').innerText(), 'Denied')
-    pass('camera denial retains the completed audio take')
     await page.evaluate(() => { __creatorControls.share = 'cancel'; Object.defineProperty(navigator, 'canShare', {value: () => false, configurable: true}) })
     await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
     assert.equal(await page.locator('#repeat').isDisabled(), false)
@@ -240,83 +219,6 @@ async function testCreatorPrototype() {
     await page.locator('#record-audio').click(); assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 3); assert.match(await page.locator('#status').innerText(), /Three takes/)
     await page.locator('#takes button', {hasText: 'Remove take'}).last().click(); assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 2)
     pass('silence warning, bounded three-take memory, explicit removal; prior bytes retained')
-    await page.evaluate(() => { __creatorControls.cameraMode = 'pending' })
-    await page.locator('#record-video').click(); await page.waitForFunction(() => Boolean(__creatorControls.resolveCamera))
-    await page.locator('#stop').click(); await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
-    assert.match(await page.locator('#status').innerText(), /cancelled/)
-    if (await page.evaluate(() => typeof document.createElement('canvas').captureStream === 'function')) {
-      await page.evaluate(() => __creatorControls.resolveCamera())
-      await page.waitForFunction(() => __creatorControls.fixtureTracks.every(track => track.readyState === 'ended') && __creatorControls.fixtureTimers.size === 0)
-      pass('cancel permission while pending, late camera stream released, previous takes kept')
-      await page.evaluate(() => { __creatorControls.cameraMode = 'success' })
-      await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
-      const mp4Expected = await page.evaluate(() => MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2'))
-      const videoAudio = {}
-      for (const [label, voice, volume] of [['synth', false, '70'], ['mic-only', true, '0'], ['synth-and-mic', true, '70']]) {
-        if (label !== 'synth') await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
-        await page.locator('#voice').setChecked(voice)
-        await page.locator('#volume').fill(volume); await page.locator('#volume').dispatchEvent('input')
-        await page.locator('#record-video').click(); await page.waitForFunction(() => __CreatorPrototype.capture?.kind === 'video' && !document.querySelector('#stop').disabled)
-        if (volume !== '0') await page.locator('#example').click()
-        await page.waitForTimeout(3400); await page.locator('#stop').click(); await page.waitForFunction(() => !__CreatorPrototype.capture)
-        const observed = await page.evaluate(async () => {
-          const take = __CreatorPrototype.takes.at(-1), bytes = await take.file.arrayBuffer()
-          return {bytes: Array.from(new Uint8Array(bytes)), mime: take.file.type, seconds: take.seconds, trackStates: __creatorControls.fixtureTracks.map(track => track.readyState), timers: __creatorControls.fixtureTimers.size}
-        })
-        const extension = observed.mime.includes('mp4') ? 'mp4' : 'webm', filename = path.join(output, `video-${label}.${extension}`)
-        fs.writeFileSync(filename, Buffer.from(observed.bytes))
-        assert(observed.bytes.length > 1000); assert(observed.trackStates.every(state => state === 'ended')); assert.equal(observed.timers, 0)
-        const probe = JSON.parse(execFileSync('/opt/homebrew/bin/ffprobe', ['-v', 'quiet', '-show_streams', '-show_format', '-of', 'json', filename], {encoding: 'utf8', timeout: 10000}))
-        report.videoFormats ||= {}; report.videoFormats[label] = {mime: observed.mime, bytes: observed.bytes.length, sha256: hash(Buffer.from(observed.bytes)), probe}; save()
-        assert(probe.streams.some(stream => stream.codec_type === 'video' && stream.width === 240 && stream.height === 320)); assert(probe.streams.some(stream => stream.codec_type === 'audio'))
-        if (mp4Expected) {
-          assert.equal(probe.streams.find(stream => stream.codec_type === 'video').codec_name, 'h264', 'Use explicit H.264 when the browser can encode it; bare MP4 may select VP9')
-          assert.equal(probe.streams.find(stream => stream.codec_type === 'audio').codec_name, 'aac', 'Use explicit AAC when the browser can encode it')
-        }
-        const pcm = execFileSync('/opt/homebrew/bin/ffmpeg', ['-v', 'error', '-i', filename, '-vn', '-ac', '1', '-ar', '48000', '-f', 'f32le', '-'], {timeout: 10000, maxBuffer: 3000000})
-        const samples = Float32Array.from({length: pcm.length / 4}, (_, i) => pcm.readFloatLE(i * 4))
-        const metrics = creatorFixtureMetrics(samples, 48000), {rms, peak} = metrics
-        assert(rms > .001); assert(peak < .999)
-        videoAudio[label] = metrics; report.videoAudio = videoAudio; save()
-        if (label === 'synth-and-mic') {
-          const baseline = {synth: videoAudio.synth, micOnly: videoAudio['mic-only']}
-          const bothPresent = metrics => creatorFixtureHasBoth(metrics, baseline)
-          assert(bothPresent(videoAudio[label]), 'Final file must retain music and the known microphone signal together')
-          assert(!bothPresent(videoAudio.synth), 'Missing microphone control must be rejected')
-          assert(!bothPresent(videoAudio['mic-only']), 'Missing music control must be rejected')
-          assert(!bothPresent(creatorFixtureMetrics(samples.map(x => 0), 48000)), 'Silence control must be rejected')
-          assert(!bothPresent({...videoAudio['mic-only'], windows: videoAudio['mic-only'].windows.map(({music, mic310}) => ({music: music * 2, mic310: mic310 * 2}))}), 'Louder microphone without music must be rejected')
-          assert(!bothPresent({...metrics, windows: [...videoAudio.synth.windows, ...videoAudio['mic-only'].windows]}), 'Non-overlapping sources must be rejected')
-          pass('simultaneous music/microphone fixture retained; missing-source, loud-mic-only and silence controls rejected')
-        }
-        report.checks.push({name: 'native encoded video: ' + label, mime: observed.mime, bytes: observed.bytes.length, sha256: hash(Buffer.from(observed.bytes)), rms, probe})
-        await page.locator('#takes video').last().evaluate(video => video.play()); await page.waitForTimeout(350)
-        assert(await page.locator('#takes video').last().evaluate(video => video.currentTime > 0 && video.videoWidth === 240)); save()
-      }
-      pass('camera+synth and optional mic → actual video files → ffmpeg decode + browser playback; no physical camera/mic claim')
-      await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
-      await page.evaluate(() => {
-        window.__oldPlay = HTMLMediaElement.prototype.play
-        HTMLMediaElement.prototype.play = function() { return this.id === 'preview' ? new Promise(() => {}) : window.__oldPlay.call(this) }
-      })
-      await page.locator('#record-video').click(); await page.waitForFunction(() => __CreatorPrototype.capture?.kind === 'video')
-      await page.locator('#stop').click(); await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
-      assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false)
-      await page.waitForFunction(() => __creatorControls.fixtureTracks.every(track => track.readyState === 'ended'))
-      await page.evaluate(() => { HTMLMediaElement.prototype.play = window.__oldPlay })
-      pass('cancel interrupts a pending camera preview and closes video/mic tracks')
-      await page.evaluate(() => {
-        window.__NativeRecorder = MediaRecorder
-        window.MediaRecorder = class extends window.__NativeRecorder { constructor() { throw Error('Injected recorder constructor failure') } }
-      })
-      await page.locator('#record-video').click(); await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
-      assert.match(await page.locator('#status').innerText(), /constructor failure/)
-      await page.waitForFunction(() => __creatorControls.fixtureTracks.every(track => track.readyState === 'ended'))
-      await page.evaluate(() => { window.MediaRecorder = window.__NativeRecorder })
-      pass('recorder constructor failure closes allocated streams and retains prior files')
-    } else {
-      report.checks.push({name: 'synthetic canvas camera fixture', status: 'NOT_SUPPORTED', scope: 'No verdict on actual camera support'})
-    }
     // Held-key blur must be represented in replay, not just the original audio.
     while (await page.evaluate(() => __CreatorPrototype.takes.length > 1)) await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
     await page.locator('#volume').fill('70'); await page.locator('#volume').dispatchEvent('input')
@@ -342,16 +244,15 @@ async function testCreatorPrototype() {
     await page.evaluate(() => __creatorControls.input.onmidimessage({data: [0x81, 64, 0]})); await page.waitForTimeout(500)
     await page.locator('#stop').click(); await page.waitForFunction(() => __CreatorPrototype.takes.length === 1)
     assert.deepEqual(await page.evaluate(() => __CreatorPrototype.takes[0].events.filter(event => event.type === 'on').map(({note, channel, velocity}) => ({note, channel, velocity}))), [{note: 64, channel: 1, velocity: 97}])
-    await page.evaluate(() => { __creatorControls.cameraMode = 'pending' })
-    await page.locator('#record-video').click(); await page.waitForFunction(() => typeof __creatorControls.resolveCamera === 'function')
+    await page.evaluate(() => { __CreatorPrototype.engine.resume = () => new Promise(() => {}) })
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => document.querySelector('#stop').textContent === 'Cancel start')
     await page.evaluate(() => { __creatorControls.input.state = 'disconnected'; __creatorControls.access.onstatechange({port: __creatorControls.input}) })
     await page.waitForFunction(() => __creatorControls.closed && !document.querySelector('#record-audio').disabled)
     assert.equal(await page.evaluate(() => __creatorControls.input.onmidimessage), null)
-    if (await page.evaluate(() => typeof document.createElement('canvas').captureStream === 'function')) {
-      await page.evaluate(() => __creatorControls.resolveCamera()); await page.waitForFunction(() => __creatorControls.fixtureTracks.every(track => track.readyState === 'ended'))
-    }
+    assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false)
+    assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 1)
     assert.equal(await page.evaluate(() => __creatorControls.midi), 1)
-    pass('controlled Biotron input preserves channel/note/velocity, no outputs/SysEx; busy permission disconnect detaches and releases')
+    pass('controlled Biotron input preserves channel/note/velocity, no outputs/SysEx; busy sound-start disconnect detaches and releases, retaining the old take')
     await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
     await page.evaluate(() => { __CreatorPrototype.capture.tap.port.postMessage = () => {} })
     await page.locator('#stop').click(); await page.waitForFunction(() => !document.querySelector('#record-audio').disabled, null, {timeout: 8000})
@@ -400,6 +301,9 @@ async function testCreatorPrototype() {
       await page.screenshot({path: path.join(output, `ui-${width}.png`), timeout: 3000})
     }
     pass('320/390/1440 layout, expanded explanations, native labels and viewport screenshots')
+    assert.equal(await page.evaluate(() => __creatorControls.camera), 0)
+    assert.equal(await page.locator('video, #record-video, #voice, #preview').count(), 0)
+    pass('all sound/take/lifecycle actions keep camera and microphone requests at zero')
     await verifyCreatorFidelity({browser, page, report, save, pass, output, fs, hash, browserCall})
     await browserCall(browser, () => page.evaluate(() => __CreatorPrototype.close()), 'creator close')
     assert.equal(await page.evaluate(() => __CreatorPrototype.engine.context.state), 'closed'); assert.equal(await page.evaluate(() => __CreatorPrototype.engine.core._timer), null)
