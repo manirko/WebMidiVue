@@ -399,3 +399,22 @@ the unchanged realGarden20s handshake in actual compiledWebKit/Chrome, then
 exact online/phone checks. No new renderer, mode, dependency orweaker gate.
 Library contract: https://threejs.org/docs/pages/WebGPURenderer.html and pinned
 https://github.com/mrdoob/three.js/blob/r184/src/renderers/webgpu/WebGPURenderer.js .
+
+## Creator recording feasibility — 10 October
+
+`node scripts/audio-qa/test-analyze.mjs --creator-recording` extends the existing
+isolated final-gain bench. `BIOTRON_QA_BROWSER` selects the real installed brand
+or explicitly named Playwright engine; no silent browser substitution. The
+native recorder receives the same production synth output as the reference PCM.
+For supported Opus/WebM and MP4, save actual bytes, reopen them in a fresh audio
+context and independently analyze the decoded channels. Normal versus muted
+output, truncated-file rejection, unsupported format, constructor failure and
+mid-take cancellation exercise the recording oracle and resource cleanup.
+
+Finalize the take before closing the synth context. Retained renderer timers,
+worklet URLs, contexts or stream tracks fail the test. No microphone, camera,
+MIDI, upload or public sharing is requested. Format exposure is not success:
+missing/empty/undecodable/silent normal output is a failure. This proof does not
+implement a Play recorder, certify a phone, test editor import, measure acoustic
+quality, solve FB63 or produce a finished creator video. Save/share/editor and
+live-camera alternatives remain separate tasks in the existing T14 experiment.

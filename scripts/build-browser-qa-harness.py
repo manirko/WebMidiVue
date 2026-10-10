@@ -18,7 +18,7 @@ cases=between(preset,'const cases = await page.evaluate(async ({dbName}) => {','
 imports='\n'.join([f'import {{ElementarySynthEngine}} from {json.dumps(str(root/"src/audio/elementary/engine.mjs"))}',f'import {{SOUNDS}} from {json.dumps(str(root/"src/audio/elementary/timbres.mjs"))}',f'import {{BIOTRON_CALIBRATION}} from {json.dumps(str(root/"src/audio/biotronCalibration.mjs"))}',f'import {{Db, withPresetFeedback}} from {json.dumps(str(root/"src/assets/js/PresetsIDB.js"))}'])
 imports+='\nimport {captureScore} from '+json.dumps(str(root/'scripts/audio-qa/browser.mjs'))+';'
 imports+='\nimport {runLoad} from '+json.dumps(str(root/'scripts/audio-qa/load.mjs'))+';'
-entry=imports+'''\nwindow.__ElemEngine={ElementarySynthEngine,SOUNDS,BIOTRON_CALIBRATION};window.__Presets={Db,withPresetFeedback};
+entry=imports+'''\nwindow.__CaptureScore=captureScore;window.__ElemEngine={ElementarySynthEngine,SOUNDS,BIOTRON_CALIBRATION};window.__Presets={Db,withPresetFeedback};
 const assert=(value,message)=>{if(!value)throw new Error(message)};assert.strictEqual=(a,b,message)=>assert(a===b,message);
 async function sound(){const metrics=await (async()=>{\n'''+metric+'\n})();\n'+checks+'''\nreturn metrics}
 async function seed(){\n'''+seed+'\n}\nasync function cases({dbName}){\n'+cases+'''\n}
