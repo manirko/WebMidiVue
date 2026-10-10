@@ -81,6 +81,35 @@ assert(Math.max(...pressureContext.bulgeVecs.map(v=>Math.abs(v.w)))<1e-8,'shell 
 assert([...pressureContext.P,...pressureContext.V,...pressureContext.bulgeA,...pressureContext.bulgeAge].every(Number.isFinite));
 console.log(`PASS: real contact/envelope pressure gentle=${gentlePressure.toFixed(4)}, playing=${playingPressure.toFixed(4)}, strong=${strongPressure.toFixed(4)}; bounded and relaxed to rest`);
 
+// Use the real mobile/desktop cell counts and sparse notes, not only the tiny
+// ten-notes-per-second fixture. GPU stubs prove numeric safety, not visual feel.
+for(const count of [24,40]) for(const hz of [0,1,2,4,10]) {
+ let clock=0,random=123456789,receiveCadence;
+ const math=Object.create(Math);math.random=()=>{random=(Math.imul(random,1664525)+1013904223)>>>0;return random/4294967296};
+ const cadence={...pressureContext,Math:math,N_BLOBS:count,prm:vm.runInNewContext('('+parameters+')'),
+  P:new Float32Array(count*3),Pp:new Float32Array(count*3),V:new Float32Array(count*3),R:new Float32Array(count),
+  tint:new Float32Array(count),touch:new Uint8Array(count),wallPrev:new Uint8Array(count),
+  rushCd:new Float32Array(count),rushPow:new Float32Array(count),bulgeA:new Float32Array(8),bulgeAge:new Float32Array(8),
+  motionPaused:false,activityUntil:0,performance:{now:()=>clock},applyColors(){},setPitchColour(){},renderFrame(){},
+  addEventListener(type,handler){receiveCadence=handler}};
+ for(const name of ['seed','spawnBulge','updateBulges','step']) {
+  const begin=scene.indexOf('function '+name+'('),finish=scene.indexOf('\n}',begin)+2;
+  vm.runInNewContext(scene.slice(begin,finish),cadence);
+ }
+ vm.runInNewContext(scene.slice(start,end),cadence);cadence.seed();
+ for(let frame=0;frame<1200;frame++) {
+  clock=frame*1000/60;
+  if(frame<600 && hz && frame%(60/hz)===0) {
+   receiveCadence({source:cadence.parent,origin:cadence.location.origin,data:{type:'biotron-preview',noteOn:true,pitch:60}});
+   assert(Array.from({length:count},(_,i)=>cadence.V[i*3+1]).every(v=>v<=.650001),'real-count MIDI lift escaped cap');
+  }
+  cadence.step(cadence.prm.simSpeed/60);cadence.updateBulges(cadence.prm.simSpeed/60);
+  assert([...cadence.P,...cadence.V,...cadence.bulgeA,...cadence.bulgeAge].every(Number.isFinite),'non-finite real-count/cadence physics');
+  assert(Array.from({length:count},(_,i)=>Math.hypot(...cadence.P.slice(i*3,i*3+3))+cadence.R[i]).every(r=>r<=1.30001),'cell escaped shell');
+ }
+}
+console.log('PASS: actual24/40 cell counts at0/1/2/4/10Hz remain finite, lift-capped and inside shell over20seconds including10seconds idle; visual acceptance separate');
+
 // Run the actual draw function: connecting must rotate before any notes arrive,
 // without running the music physics. Inactive/reduced-motion views must stop.
 const drawStart=scene.indexOf('function renderFrame() {');
