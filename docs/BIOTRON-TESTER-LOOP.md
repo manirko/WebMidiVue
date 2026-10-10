@@ -529,3 +529,30 @@ recording → transfer/import/export → finished clip reopened outside editor;
 compare total help/time/retries and quality with usual tools, then voluntary
 reuse and viewer clarity. Optional editor-name question is pending. No benefit,
 virality or profit is established by codec or PCM PASS.
+
+## Creator sound-link pending state — 10 October
+
+The live existing Waveform comparison exposed misleading copied feedback on
+pending/rejected Clipboard. Separate actualChrome27parameter URL roundtrip
+proof belongs to context T14/R04/R06; it does not transfer a recorded soundtrack
+or certify Biotron/native/browser/editor acceptance. Waveform was not patched.
+
+Our creator prototype had its own narrower stale feedback: after success, a new
+pending copy kept “copied” and hid manual fallback. Negative summary/working
+regressionSHA were saved before assertions/screens. Testd98 then fix0c8d10d
+adds two lines: visible selectable snapshot URL + truthful pending state,
+copy disabled until settled, finally enabled. Recording remains available.
+Indefinite pending permits manual snapshot copying but waits before another
+button-generated link; no provider cancellation or native permission claim.
+
+Existing --creator-prototype now checks pending→success→reject→success,
+manual URL selection, no duplicate provider request and sound/register/volume61
+restoration in a fresh context. ActualChrome154 and PWWebKit26.5 each25groups
+PASS_SCOPED on0c8d10defb50ac8308b59fd0f8d5f5f534f59d54, retaining capture/
+Cancel/take/file/replay/320–1440layout checks. A wrong selector repeatedChrome;
+that run is preserved separately, not counted as WebKit.8primary fileSHA/WAV
+download equality and72Gitinput references/3testerSHA verified. SystemClipboard,
+real speech/camera/phone/editor/sync/finished creator task, speed benchmark and
+fullrelease gate NOTRUN. Production84paths/runtime0a/frozenSergey b15 unchanged.
+Current local prototype: http://127.0.0.1:65337/creator.html; save takes before
+reload. Older prototypes retained; do not silently switch a playing page.
