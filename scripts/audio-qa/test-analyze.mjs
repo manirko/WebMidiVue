@@ -58,7 +58,12 @@ async function testCreatorPrototype() {
     await context.addInitScript(() => {
       window.__creatorControls = {clipboard: 'success', share: 'cancel', copied: [], shared: [], midi: 0, camera: 0, cameraMode: 'deny', fixtureTracks: [], fixtureContexts: [], fixtureTimers: new Set()}
       Object.defineProperty(navigator, 'requestMIDIAccess', {value: undefined, configurable: true})
-      Object.defineProperty(navigator, 'clipboard', {value: {writeText: text => { if (window.__creatorControls.clipboard === 'reject') return Promise.reject(new DOMException('Denied', 'NotAllowedError')); window.__creatorControls.copied.push(text); return Promise.resolve() }}, configurable: true})
+      Object.defineProperty(navigator, 'clipboard', {value: {writeText: text => {
+        const controls = window.__creatorControls; controls.clipboardRequests = (controls.clipboardRequests || 0) + 1
+        if (controls.clipboard === 'reject') return Promise.reject(new DOMException('Denied', 'NotAllowedError'))
+        if (controls.clipboard === 'pending') return new Promise(resolve => { controls.resolveClipboard = () => { controls.copied.push(text); resolve() } })
+        controls.copied.push(text); return Promise.resolve()
+      }}, configurable: true})
       Object.defineProperty(navigator, 'canShare', {value: () => true, configurable: true})
       Object.defineProperty(navigator, 'share', {value: async ({files}) => {
         const controls = window.__creatorControls
@@ -103,17 +108,31 @@ async function testCreatorPrototype() {
     report.prototypeBundleBytes = fs.statSync(path.join(bench, 'creator.js')).size
     assert(await page.locator('#connect').isDisabled()); assert.match(await page.locator('#connection').innerText(), /MIDI-capable/)
     assert.equal(await page.evaluate(() => __creatorControls.camera), 0); pass('no-device page, truthful MIDI fallback, no permission on load')
-    await page.selectOption('#sound', 'tone-glass'); await page.selectOption('#register', '-12')
+    await page.selectOption('#sound', 'tone-glass'); await page.selectOption('#register', '-12'); await page.locator('#volume').fill('61')
     await page.locator('#copy').click()
     const copied = await page.evaluate(() => __creatorControls.copied.at(-1))
+    await page.evaluate(() => { __creatorControls.clipboard = 'pending' }); await page.locator('#copy').click()
+    report.pendingCopy = await page.evaluate(() => ({status: document.querySelector('#link-status').textContent, fallbackVisible: !document.querySelector('#link-fallback').hidden, fallbackValue: document.querySelector('#link-fallback').value, copyDisabled: document.querySelector('#copy').disabled, recordDisabled: document.querySelector('#record-audio').disabled, writes: __creatorControls.copied.length, requests: __creatorControls.clipboardRequests}))
+    save() // Preserve stale success feedback before assertions or screenshots.
+    assert(!/copied/i.test(report.pendingCopy.status), 'Pending clipboard must clear the old success claim')
+    assert(report.pendingCopy.fallbackVisible && report.pendingCopy.copyDisabled && !report.pendingCopy.recordDisabled)
+    assert.equal(report.pendingCopy.fallbackValue, copied)
+    await page.locator('#link-fallback').focus(); await page.keyboard.press('Meta+A')
+    assert.equal(await page.locator('#link-fallback').evaluate(element => element.value.slice(element.selectionStart, element.selectionEnd)), copied)
+    await page.evaluate(() => document.querySelector('#copy').click())
+    assert.equal(await page.evaluate(() => __creatorControls.clipboardRequests), report.pendingCopy.requests)
+    await page.evaluate(() => __creatorControls.resolveClipboard())
+    await page.waitForFunction(() => !document.querySelector('#copy').disabled)
+    assert(await page.locator('#link-fallback').isHidden()); assert.match(await page.locator('#link-status').innerText(), /copied/)
+    pass('pending clipboard clears stale success, exposes selectable exact URL, prevents overlapping copies and leaves recording available')
     await page.evaluate(() => { __creatorControls.clipboard = 'reject' }); await page.locator('#copy').click()
     assert.equal(await page.locator('#link-fallback').inputValue(), copied); assert(await page.locator('#link-fallback').isVisible())
     await page.evaluate(() => { __creatorControls.clipboard = 'success' }); await page.locator('#copy').click(); assert(await page.locator('#link-fallback').isHidden())
     const fresh = await browser.newContext(), reopened = await fresh.newPage()
     await fresh.addInitScript(() => Object.defineProperty(navigator, 'requestMIDIAccess', {value: undefined}))
-    await reopened.goto(copied, {waitUntil: 'networkidle'}); assert.equal(await reopened.locator('#sound').inputValue(), 'tone-glass'); assert.equal(await reopened.locator('#register').inputValue(), '-12'); await fresh.close()
-    pass('actual selected sound/register URL, clipboard reject fallback, fresh-context restoration')
-    await page.selectOption('#sound', 'tone-reference'); await page.selectOption('#register', '0')
+    await reopened.goto(copied, {waitUntil: 'networkidle'}); assert.equal(await reopened.locator('#sound').inputValue(), 'tone-glass'); assert.equal(await reopened.locator('#register').inputValue(), '-12'); assert.equal(await reopened.locator('#volume').inputValue(), '61'); await fresh.close()
+    pass('actual selected sound/register/volume URL, clipboard reject fallback, fresh-context restoration')
+    await page.selectOption('#sound', 'tone-reference'); await page.selectOption('#register', '0'); await page.locator('#volume').fill('70')
     await page.locator('#record-audio').click(); await page.locator('#stop').waitFor({state: 'visible'})
     await page.waitForFunction(() => __CreatorPrototype.capture?.kind === 'audio')
     await page.locator('#example').click(); await page.waitForTimeout(5200)
