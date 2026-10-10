@@ -58,6 +58,7 @@ async function readQuality(page) {
 
     return {
       cls: window.__layoutShiftScore,
+      layoutShifts: window.__layoutShiftEntries,
       documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       duplicateIds,
       lang: document.documentElement.lang,
@@ -159,9 +160,15 @@ async function auditProfile(browser, origin, profile) {
       window.__copiedText = text
     }}})
     window.__layoutShiftScore = PerformanceObserver.supportedEntryTypes.includes('layout-shift') ? 0 : null
+    window.__layoutShiftEntries = []
     if (window.__layoutShiftScore !== null) new PerformanceObserver(list => {
       for (const entry of list.getEntries()) {
-        if (!entry.hadRecentInput) window.__layoutShiftScore += entry.value
+        if (!entry.hadRecentInput) {
+          window.__layoutShiftScore += entry.value
+          window.__layoutShiftEntries.push({at: entry.startTime, value: entry.value,
+            sources: entry.sources.map(source => ({node: source.node?.outerHTML?.slice(0, 180),
+              before: source.previousRect.toJSON(), after: source.currentRect.toJSON()}))})
+        }
       }
     }).observe({type: 'layout-shift', buffered: true})
 
@@ -195,6 +202,7 @@ async function auditProfile(browser, origin, profile) {
     `${profile.name}: settings must be a section of the shared workspace`)
 
   const result = await readQuality(page)
+  fs.writeFileSync(path.join(artifacts, `${profile.name}-initial-quality.json`), JSON.stringify(result, null, 2))
   assert.deepStrictEqual(pageErrors, [], `${profile.name}: page errors`)
   assertQuality(result, profile.name)
 

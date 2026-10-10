@@ -191,7 +191,7 @@
 </template>
 <script>
 import {markRaw, defineAsyncComponent} from 'vue'
-const GardenVisual = defineAsyncComponent(() => import(/* webpackChunkName: "garden-visual" */ './GardenVisual.vue'))
+import GardenVisual from './GardenVisual.vue'
 const WakeVolume = defineAsyncComponent(() => import(/* webpackChunkName: "garden-visual" */ './WakeVolume.vue'))
 const AudioCompare = defineAsyncComponent(() => import(/* webpackChunkName: "biotron-auditions" */ '@audio-compare'))
 import {noteForKeyboardCode, blocksKeyboardNotes} from '@/audio/core.mjs'

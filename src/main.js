@@ -11,7 +11,10 @@ const betaBuild = process.env.VUE_APP_BIOTRON_PWA_BETA === 'true'
 const ScalaPage = () => import(/* webpackChunkName: "scala" */ '@/components/ExtraPage/ScalaPage.vue')
 const BiotronUpdatePage = () => import(/* webpackChunkName: "biotron" */ '@/components/BiotronPage/BiotronUpdatePage.vue')
 const ScalesPage = () => import(/* webpackChunkName: "scales" */ '@/components/ScalesPage/ScalesPage.vue')
-const BiotronPageUpdated = () => import(/* webpackChunkName: "biotron" */ '@/components/BiotronPage/BiotronPageUpdated.vue')
+// Embedded settings need the player before their first paint, not inserted afterwards.
+const BiotronPageUpdated = () => Promise.all([
+    import(/* webpackChunkName: "biotron" */ '@/components/BiotronPage/BiotronPageUpdated.vue'), betaBuild ? SoundLab() : null
+]).then(([page]) => page)
 const TouchMePage = () => import(/* webpackChunkName: "touchme" */ '@/components/TouchMePage/TouchMePage.vue')
 const TouchMePageStandalone = () => import(/* webpackChunkName: "touchme" */ '@/components/TouchMePage/TouchMePageStandalone.vue')
 const PlaytronPage = () => import(/* webpackChunkName: "playtron" */ '@/components/PlaytronPage/PlaytronPage.vue')
