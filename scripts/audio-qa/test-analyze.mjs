@@ -107,13 +107,19 @@ async function testCreatorPrototype() {
     await page.waitForFunction(() => __CreatorPrototype.capture?.kind === 'audio')
     await page.locator('#example').click(); await page.waitForTimeout(5200)
     await page.locator('#stop').click(); await page.waitForFunction(() => __CreatorPrototype.takes.length === 1 && !__CreatorPrototype.capture)
-    const file = await page.evaluate(async () => {
-      const take = __CreatorPrototype.takes[0], bytes = await take.file.arrayBuffer(), context = new AudioContext()
-      try { const audio = await context.decodeAudioData(bytes.slice(0)); const pcm = audio.getChannelData(0); let peak = 0, sum = 0; for (const value of pcm) { peak = Math.max(peak, Math.abs(value)); sum += value * value }
-        return {bytes: Array.from(new Uint8Array(bytes)), mime: take.file.type, seconds: audio.duration, peak, rms: Math.sqrt(sum / pcm.length), events: take.events} }
-      finally { await context.close() }
-    })
+    const file = await browserCall(browser, () => page.evaluate(async () => {
+      const take = __CreatorPrototype.takes[0]
+      return {bytes: Array.from(new Uint8Array(await take.file.arrayBuffer())), mime: take.file.type, events: take.events}
+    }), 'save creator take')
     fs.writeFileSync(path.join(output, 'take.wav'), Buffer.from(file.bytes)); const sha = hash(Buffer.from(file.bytes)); report.take = {...file, bytes: file.bytes.length, sha256: sha}
+    save() // Actual bytes survive decoder rejection or timeout.
+    Object.assign(file, await browserCall(browser, () => page.evaluate(async inject => {
+      if (inject) throw Error('Injected fresh decoder failure after saved bytes')
+      const bytes = await __CreatorPrototype.takes[0].file.arrayBuffer(), context = new AudioContext()
+      try { const audio = await context.decodeAudioData(bytes); const pcm = audio.getChannelData(0); let peak = 0, sum = 0; for (const value of pcm) { peak = Math.max(peak, Math.abs(value)); sum += value * value }; return {seconds: audio.duration, peak, rms: Math.sqrt(sum / pcm.length)} }
+      finally { await context.close() }
+    }, process.argv.includes('--creator-prototype-decode-fault')), 'fresh creator decode'))
+    Object.assign(report.take, {seconds: file.seconds, peak: file.peak, rms: file.rms}); save()
     assert.equal(file.mime, 'audio/wav'); assert(file.seconds > 5 && file.seconds < 7); assert(file.rms > .001 && file.peak < .999)
     assert.equal(file.events.filter(event => event.type === 'on').length, 8); assert.equal(file.events.filter(event => event.type === 'off').length, 8)
     pass('trusted UI → final-gain WAV → fresh decode; finite audible unclipped PCM and full phrase events')
@@ -215,7 +221,7 @@ async function testCreatorPrototype() {
     await page.evaluate(() => {
       const input = {id: 'fixture-biotron', name: 'Biotron controlled fixture', state: 'connected', async open() { return this }, async close() { __creatorControls.closed = true; return this }}
       const access = {inputs: new Map([[input.id, input]])}; Object.defineProperty(access, 'outputs', {get() { throw Error('MIDI output touched') }})
-      __creatorControls.input = input
+      __creatorControls.input = input; __creatorControls.access = access
       Object.defineProperty(navigator, 'requestMIDIAccess', {value: async options => { __creatorControls.midi++; if (options.sysex !== false) throw Error('SysEx permission'); return access }, configurable: true})
     })
     await page.locator('#example').click(); await page.locator('#example').click()
@@ -225,9 +231,16 @@ async function testCreatorPrototype() {
     await page.evaluate(() => __creatorControls.input.onmidimessage({data: [0x81, 64, 0]})); await page.waitForTimeout(500)
     await page.locator('#stop').click(); await page.waitForFunction(() => __CreatorPrototype.takes.length === 1)
     assert.deepEqual(await page.evaluate(() => __CreatorPrototype.takes[0].events.filter(event => event.type === 'on').map(({note, channel, velocity}) => ({note, channel, velocity}))), [{note: 64, channel: 1, velocity: 97}])
-    await page.locator('#release').click(); await page.waitForFunction(() => __creatorControls.closed)
+    await page.evaluate(() => { __creatorControls.cameraMode = 'pending' })
+    await page.locator('#record-video').click(); await page.waitForFunction(() => typeof __creatorControls.resolveCamera === 'function')
+    await page.evaluate(() => { __creatorControls.input.state = 'disconnected'; __creatorControls.access.onstatechange({port: __creatorControls.input}) })
+    await page.waitForFunction(() => __creatorControls.closed && !document.querySelector('#record-audio').disabled)
+    assert.equal(await page.evaluate(() => __creatorControls.input.onmidimessage), null)
+    if (await page.evaluate(() => typeof document.createElement('canvas').captureStream === 'function')) {
+      await page.evaluate(() => __creatorControls.resolveCamera()); await page.waitForFunction(() => __creatorControls.fixtureTracks.every(track => track.readyState === 'ended'))
+    }
     assert.equal(await page.evaluate(() => __creatorControls.midi), 1)
-    pass('controlled Biotron input preserves channel/note/velocity, no output access or SysEx, explicit release')
+    pass('controlled Biotron input preserves channel/note/velocity, no outputs/SysEx; busy permission disconnect detaches and releases')
     await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
     await page.evaluate(() => { __CreatorPrototype.capture.tap.port.postMessage = () => {} })
     await page.locator('#stop').click(); await page.waitForFunction(() => !document.querySelector('#record-audio').disabled, null, {timeout: 8000})

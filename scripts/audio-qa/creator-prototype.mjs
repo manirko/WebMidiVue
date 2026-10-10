@@ -12,7 +12,7 @@ if (sounds.some(sound => sound.id === settings.get('sound'))) $('sound').value =
 if (['-12', '0', '12'].includes(settings.get('register'))) $('register').value = settings.get('register')
 if (settings.has('volume') && /^\d{1,3}$/.test(settings.get('volume')) && +settings.get('volume') <= 100) $('volume').value = settings.get('volume')
 
-let engine, busy = false, capture, midi, inputs = [], timers = [], pressed = new Map(), lastPerformance = [], takes = [], takeNumber = 0, workletContext, startAbort, finishRequested = false
+let engine, busy = false, capture, midi, inputs = [], timers = [], pressed = new Map(), lastPerformance = [], takes = [], takeNumber = 0, workletContext, startAbort, finishRequested = false, disconnectRequested = false
 const status = text => { $('status').textContent = text }
 const currentSound = () => sounds.find(sound => sound.id === $('sound').value)
 const guard = (promise, label, ms = 10000, signal) => new Promise((resolve, reject) => {
@@ -37,7 +37,11 @@ async function run(action) {
   busy = true; update()
   try { await action() }
   catch (error) { status(error.message || String(error)) }
-  finally { busy = false; update(); if (finishRequested) { finishRequested = false; if (capture) void run(finish) } }
+  finally {
+    busy = false; update()
+    if (disconnectRequested) { disconnectRequested = false; finishRequested = false; void run(async () => { if (capture) await finish(); await releaseMidi(); status('Biotron disconnected. Completed takes are kept.') }) }
+    else if (finishRequested) { finishRequested = false; if (capture) void run(finish) }
+  }
 }
 function requestFinish() { if (busy) finishRequested = true; else void run(finish) }
 async function ready(signal) {
@@ -113,7 +117,12 @@ $('connect').onclick = () => run(async () => {
         if (type) send({...message, type, source: input.id})
       }
     }
-    access.onstatechange = event => { if (inputs.includes(event.port) && event.port.state === 'disconnected') void run(async () => { if (capture) await finish(); await releaseMidi(); status('Biotron disconnected. Your completed take is kept.') }) }
+    access.onstatechange = event => {
+      if (!inputs.includes(event.port) || event.port.state !== 'disconnected') return
+      for (const input of inputs) input.onmidimessage = null
+      startAbort?.abort(); stopNotes(); disconnectRequested = true
+      if (!busy) void run(async () => {})
+    }
     $('connection').textContent = 'Biotron connected. No device settings are changed.'
   } catch (error) { try { await releaseMidi() } catch (cleanup) { error.cleanupFailure = String(cleanup) }; throw error }
 })
