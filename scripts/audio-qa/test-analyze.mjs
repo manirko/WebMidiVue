@@ -29,6 +29,32 @@ assert(!creatorFixtureHasBoth(creatorFixtureMetrics(fixtureSequential,rate),fixt
 assert.throws(()=>creatorFixtureMetrics(Float32Array.of(NaN),rate),/Non-finite/)
 console.log('PASS: controlled music/mic mixture; music-only, mic-only, doubled mic-only, silence and non-overlapping sources rejected')
 
+function pcmFidelity(actual, reference) {
+  assert(reference.length > 0 && reference[0].length > 0, 'Empty PCM reference')
+  assert.equal(actual.length, reference.length, 'PCM channel count changed')
+  let maxAbsoluteError = 0, samples = 0
+  for (let channel = 0; channel < reference.length; channel++) {
+    assert.equal(actual[channel].length, reference[channel].length, 'PCM sample count changed')
+    for (let i = 0; i < reference[channel].length; i++) {
+      const a = actual[channel][i], b = reference[channel][i]
+      assert(Number.isFinite(a) && Number.isFinite(b), 'Non-finite fidelity PCM')
+      maxAbsoluteError = Math.max(maxAbsoluteError, Math.abs(a - b)); samples++
+    }
+  }
+  return {channels: actual.length, samples, maxAbsoluteError}
+}
+const fidelitySample = [Float32Array.of(.1, -.2, .3), Float32Array.of(.4, -.5, .6)]
+assert.equal(pcmFidelity(fidelitySample, fidelitySample).maxAbsoluteError, 0)
+assert(pcmFidelity([fidelitySample[1], fidelitySample[0]], fidelitySample).maxAbsoluteError > 0)
+assert(pcmFidelity([new Float32Array(3), new Float32Array(3)], fidelitySample).maxAbsoluteError > 0)
+const oneChanged = fidelitySample.map(channel => channel.slice()); oneChanged[0][1] += .01
+assert(pcmFidelity(oneChanged, fidelitySample).maxAbsoluteError > 0)
+assert.throws(() => pcmFidelity(fidelitySample.slice(0, 1), fidelitySample), /channel count/)
+assert.throws(() => pcmFidelity([fidelitySample[0].slice(1), fidelitySample[1]], fidelitySample), /sample count/)
+assert.throws(() => pcmFidelity([Float32Array.of(NaN)], [Float32Array.of(0)]), /Non-finite/)
+assert.throws(() => pcmFidelity([], []), /Empty/)
+console.log('PASS: exact PCM fidelity; missing/swapped channels, silence, one changed sample, truncation and non-finite controls')
+
 function processCpuDelta(before, after) {
   const index = rows => new Map(rows.map(({id, type, cpuTime}) => {
     assert(Number.isInteger(id) && typeof type === 'string' && Number.isFinite(cpuTime) && cpuTime >= 0, 'Invalid process CPU sample')
@@ -55,7 +81,7 @@ console.log('PASS: measured CPU delta, valid zero; changed/duplicate processes, 
 // Reuse the existing capture UI and production engine. This flag replaces the
 // manual three-button check; it does not introduce another audio renderer.
 if (process.argv.includes('--browser') || process.argv.includes('--creator-recording')) await testRealtimeCapture()
-if (process.argv.includes('--creator-prototype') || process.argv.includes('--creator-benchmark')) await testCreatorPrototype()
+if (['--creator-prototype', '--creator-benchmark', '--creator-fidelity', '--creator-fidelity-fault'].some(flag => process.argv.includes(flag))) await testCreatorPrototype()
 
 async function testCreatorPrototype() {
   const fs = await import('node:fs'), path = await import('node:path'), os = await import('node:os'), crypto = await import('node:crypto')
@@ -123,6 +149,7 @@ async function testCreatorPrototype() {
       }}, configurable: true})
     })
     const benchmark = process.argv.includes('--creator-benchmark')
+    const fidelity = process.argv.includes('--creator-fidelity') || process.argv.includes('--creator-fidelity-fault')
     await context.tracing.start({screenshots: !benchmark, snapshots: !benchmark})
     page = await context.newPage(); page.on('pageerror', error => errors.push(String(error)))
     const origin = `http://127.0.0.1:${server.address().port}`, navStarted = Date.now()
@@ -132,12 +159,13 @@ async function testCreatorPrototype() {
     report.prototypeBundleBytes = fs.statSync(path.join(bench, 'creator.js')).size
     assert(await page.locator('#connect').isDisabled()); assert.match(await page.locator('#connection').innerText(), /MIDI-capable/)
     assert.equal(await page.evaluate(() => __creatorControls.camera), 0); pass('no-device page, truthful MIDI fallback, no permission on load')
-    if (benchmark) {
-      await benchmarkCreator({browser, context, page, report, save, output, fs, hash, browserCall})
+    if (benchmark || fidelity) {
+      if (benchmark) await benchmarkCreator({browser, context, page, report, save, output, fs, hash, browserCall})
+      else await verifyCreatorFidelity({browser, page, report, save, pass, output, fs, hash, browserCall})
       await browserCall(browser, () => page.evaluate(() => __CreatorPrototype.close()), 'creator close')
       assert.equal(await page.evaluate(() => __CreatorPrototype.engine.context.state), 'closed')
       assert.equal(await page.evaluate(() => __CreatorPrototype.engine.core._timer), null)
-      assert.deepEqual(errors, []); report.status = 'MEASURED_SCOPED'; save(); return
+      assert.deepEqual(errors, []); report.status = benchmark ? 'MEASURED_SCOPED' : 'PASS_FIDELITY_SCOPED'; save(); return
     }
     await page.selectOption('#sound', 'tone-glass'); await page.selectOption('#register', '-12'); await page.locator('#volume').fill('61')
     await page.locator('#copy').click()
@@ -372,6 +400,7 @@ async function testCreatorPrototype() {
       await page.screenshot({path: path.join(output, `ui-${width}.png`), timeout: 3000})
     }
     pass('320/390/1440 layout, expanded explanations, native labels and viewport screenshots')
+    await verifyCreatorFidelity({browser, page, report, save, pass, output, fs, hash, browserCall})
     await browserCall(browser, () => page.evaluate(() => __CreatorPrototype.close()), 'creator close')
     assert.equal(await page.evaluate(() => __CreatorPrototype.engine.context.state), 'closed'); assert.equal(await page.evaluate(() => __CreatorPrototype.engine.core._timer), null)
     assert.deepEqual(errors, []); report.status = 'PASS_SCOPED'; save()
@@ -384,6 +413,85 @@ async function testCreatorPrototype() {
     if (browser) await browser.close()
     if (server?.listening) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)) }
     save()
+  }
+}
+
+async function verifyCreatorFidelity({browser, page, report, save, pass, output, fs, hash, browserCall}) {
+  report.fidelity = {scope: 'Independent concurrent final-gain worklet, aligned by audio frame; actual saved WAV reopened by a fresh browser decoder. Current production engine is mono, including summed reverb; no speaker/OS/editor/phone claim.', rows: []}; save()
+  while (await page.locator('#takes article').count()) await page.locator('#takes button', {hasText: 'Remove take'}).first().click()
+  await page.locator('#volume').fill('70'); await page.locator('#volume').dispatchEvent('input')
+  await page.selectOption('#register', '0')
+  for (const sound of ['tone-reference', 'pan-space']) {
+    const row = {sound}; report.fidelity.rows.push(row); save()
+    await page.selectOption('#sound', sound)
+    await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
+    await page.locator('#example').click(); await page.waitForFunction(() => __CreatorPrototype.engine?.ready)
+    await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
+    await page.locator('#example').click() // Initialize the engine, then stop the warmup notes.
+    await browserCall(browser, () => page.evaluate(async sound => {
+      const engine = __CreatorPrototype.engine, context = engine.context
+      const processor = 'creator-reference-' + sound
+      const code = `class Reference extends AudioWorkletProcessor {
+        constructor(){super();this.active=true;this.port.onmessage=()=>{this.active=false;this.port.postMessage({done:true})}}
+        process(inputs){if(this.active&&inputs[0]?.length)this.port.postMessage({frame:currentFrame,channels:inputs[0].map(channel=>channel.slice())});return this.active}
+      }registerProcessor('${processor}',Reference)`
+      const url = URL.createObjectURL(new Blob([code], {type: 'text/javascript'}))
+      try { await context.audioWorklet.addModule(url) } finally { URL.revokeObjectURL(url) }
+      const tap = new AudioWorkletNode(context, processor), drain = context.createGain()
+      drain.gain.value = 0; tap.connect(drain); drain.connect(context.destination)
+      const probe = window.__creatorFidelity = {tap, drain, blocks: [], sampleRate: context.sampleRate}
+      tap.port.onmessage = event => { if (event.data.done) probe.resolve?.(); else probe.blocks.push(event.data) }
+      engine.output.connect(tap)
+    }, sound), 'creator fidelity reference start')
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture?.kind === 'audio')
+    await page.evaluate(() => { __creatorFidelity.session = __CreatorPrototype.capture })
+    await page.locator('#example').click(); await page.waitForFunction(() => document.querySelector('#example').textContent === 'Play example')
+    await page.locator('#stop').click(); await page.waitForFunction(() => !__CreatorPrototype.capture && __CreatorPrototype.takes.length === 1)
+    const bytes = Buffer.from(await browserCall(browser, () => page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer()))), 'save fidelity WAV'))
+    const name = `fidelity-${sound}.wav`; fs.writeFileSync(output + '/' + name, bytes)
+    row.file = {name, bytes: bytes.length, sha256: hash(bytes)}; save() // Persist the real take before alignment or decoder can fail.
+    const reference = await browserCall(browser, () => page.evaluate(async () => {
+      const probe = __creatorFidelity, engine = __CreatorPrototype.engine
+      try {
+        await new Promise(resolve => { probe.resolve = resolve; probe.tap.port.postMessage('stop') })
+        const byFrame = new Map(probe.blocks.map(block => [block.frame, block.channels])), captured = probe.session.blocks
+        const count = byFrame.get(captured[0]?.frame)?.length
+        if (!count) throw Error('No reference channel at first captured frame')
+        let expected = captured[0].frame, samples = 0
+        for (const block of captured) {
+          const channels = byFrame.get(block.frame)
+          if (block.frame !== expected || channels?.length !== count || channels.some(channel => channel.length !== block.pcm.length)) throw Error('Reference/capture frame or channel mismatch')
+          expected += block.pcm.length; samples += block.pcm.length
+        }
+        const channels = Array.from({length: count}, () => new Float32Array(samples)); let at = 0
+        for (const block of captured) { byFrame.get(block.frame).forEach((channel, c) => channels[c].set(channel, at)); at += block.pcm.length }
+        return {sampleRate: probe.sampleRate, channels: channels.map(channel => Array.from(channel)), blocks: captured.length, firstFrame: captured[0].frame, lastFrame: expected, quality: engine.quality, poolSize: engine.poolSize}
+      } finally {
+        engine.output.disconnect(probe.tap); probe.tap.disconnect(); probe.drain.disconnect(); probe.tap.port.onmessage = null; probe.tap.port.close(); window.__creatorFidelity = null
+      }
+    }), 'creator fidelity reference stop and alignment')
+    const channels = reference.channels.map(values => Float32Array.from(values)); delete reference.channels
+    fs.writeFileSync(output + `/reference-${sound}.wav`, Buffer.from(wav(channels, reference.sampleRate)))
+    row.reference = {...reference, channels: channels.length, samplesPerChannel: channels[0].length}; save()
+    const decodeBytes = Buffer.from(bytes)
+    if (process.argv.includes('--creator-fidelity-fault')) {
+      decodeBytes.writeFloatLE(decodeBytes.readFloatLE(44) + .01, 44)
+      fs.writeFileSync(output + '/injected-one-sample.wav', decodeBytes); row.injected = 'One saved float sample changed; recorder/engine untouched'; save()
+    }
+    const decoded = await browserCall(browser, () => page.evaluate(async ({bytes, sampleRate}) => {
+      const context = new AudioContext({sampleRate})
+      try { const buffer = await context.decodeAudioData(new Uint8Array(bytes).buffer); return {sampleRate: buffer.sampleRate, channels: Array.from({length: buffer.numberOfChannels}, (_, c) => Array.from(buffer.getChannelData(c)))} }
+      finally { await context.close() }
+    }, {bytes: Array.from(decodeBytes), sampleRate: reference.sampleRate}), 'creator fidelity fresh decode')
+    row.comparison = pcmFidelity(decoded.channels, channels); save()
+    assert.equal(row.comparison.maxAbsoluteError, 0, 'Saved WAV differs from live final-gain samples')
+    assert.equal(reference.quality, 'standard'); assert.equal(reference.poolSize, 8); assert.equal(decoded.sampleRate, reference.sampleRate)
+    assert.equal(channels.length, 1, 'Current production mono contract changed; audit capture before accepting more channels')
+    let sum = 0, peak = 0; for (const value of channels[0]) { sum += value * value; peak = Math.max(peak, Math.abs(value)) }
+    row.signal = {rms: Math.sqrt(sum / channels[0].length), peak}; save(); assert(row.signal.rms > .001 && peak < .999)
+    assert.equal(await page.evaluate(() => window.__creatorFidelity), null)
+    await page.locator('#takes button', {hasText: 'Remove take'}).click()
+    pass('sample-exact live final gain → saved/fresh decoded WAV: ' + sound)
   }
 }
 
