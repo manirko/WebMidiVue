@@ -62,7 +62,10 @@ function send(event) {
   else if (type === 'off') engine.noteOff(source, channel, pitch)
   else if (type === 'bend') engine.pitchBend(source, channel, event.value)
   else if (type === 'panic') engine.panic()
-  if (capture && capture.events.length < 2000) capture.events.push({...event, at: engine.context.currentTime - capture.started})
+  if (capture) {
+    if (capture.events.length < 2000) capture.events.push({...event, at: engine.context.currentTime - capture.started})
+    else capture.eventsOverflow = true
+  }
 }
 function play(events) {
   stopNotes(); $('example').textContent = 'Stop example'
@@ -241,8 +244,9 @@ async function finish() {
       seconds = engine.context.currentTime - session.started
     }
     addTake(file, session, seconds)
-    lastPerformance = session.events
-    status(session.silent ? 'Take kept, but no music was detected. Check volume and input before another take.' : 'Take kept. Listen or watch before saving. Nothing has been uploaded.')
+    lastPerformance = session.eventsOverflow ? [] : session.events
+    const message = session.silent ? 'Take kept, but no music was detected. Check volume and input before another take.' : 'Take kept. Listen or watch before saving. Nothing has been uploaded.'
+    status(message + (session.eventsOverflow ? ' Repeat unavailable: too many note changes. The recorded file is kept.' : ''))
   } catch (error) { primary = error; throw error }
   finally { capture = null; try { await cleanCapture(session) } catch (error) { if (primary) primary.cleanupFailure = String(error); else throw error } }
 }
