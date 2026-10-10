@@ -156,3 +156,19 @@ for(const changes of [{controlsVisible:false},{revealMode:false},{revealProfile:
   assert.equal(plantStage.call({...livePlant,plantSignalState:1,...changes}),null,'Inactive sensor status animated a different session');
 }
 console.log('PASS: sensor Sleep/stabilization/active/unknown visuals and nine session guards; no session mutation');
+
+// Let the existing Three renderer choose its backend when WebGPU is absent.
+const setupStart=scene.indexOf('//  setup renderer');
+const setupEnd=scene.indexOf('const scene =',setupStart);
+assert(setupStart>=0 && setupEnd>setupStart,'Renderer setup boundary missing');
+let rendererInitialized=false;
+class ExistingRenderer {
+  constructor(){this.domElement={}}
+  setPixelRatio(){} setSize(){} setClearColor(){}
+  async init(){rendererInitialized=true}
+}
+const rendererFixture={navigator:{},THREE:{WebGPURenderer:ExistingRenderer,ACESFilmicToneMapping:1},
+  devicePixelRatio:1,innerWidth:320,innerHeight:320,prm:{exposure:1},document:{body:{appendChild(){}}}};
+Promise.resolve(vm.runInNewContext('(async()=>{'+scene.slice(setupStart,setupEnd)+'})()',rendererFixture))
+  .then(()=>{assert(rendererInitialized,'No renderer initialization without WebGPU');console.log('PASS: renderer setup delegates missing WebGPU to existing backend fallback')})
+  .catch(error=>{console.error(error);process.exitCode=1});

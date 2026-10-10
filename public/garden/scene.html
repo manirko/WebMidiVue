@@ -97,8 +97,6 @@ const N_BLOBS = innerWidth < 600 ? 24 : 40;
 //  setup renderer
 // ═══════════════════════════════════════════════════════════════════
 
-if (!navigator.gpu) throw new Error('GPU unavailable');
-
 const renderer = new THREE.WebGPURenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);

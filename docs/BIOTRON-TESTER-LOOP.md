@@ -343,3 +343,21 @@ and before-control0!=7 remain saved. This changes the tester, not runtime643.
 Sergey9Oct11:06 says he does not want his PC running overnight. Start with online
 W01–W03; offer bounded daytime Claude automation separately. Declined automation
 is NOT_RUN, neverPASS. Do not prescribe background/nightly machine commitments.
+
+## WebGPU absence —10 October
+
+The WebKit UI benchmark failed its realGarden handshake. Independent headed
+probe: nativeWebGPU absent, WebGL2 present, static fallback andGPU unavailable
+error. Source was rejecting the renderer before its built-in WebGL2 fallback.
+Removing that guard in an isolated response control producedgarden-rendered,
+hidden fallback andzero pageerrors without nativeMIDI. The first original
+JSON is reconstructed from complete preserved ownstdout after an output-name
+reuse mistake; the redirected.html route-control miss is retained separately.
+
+The product removes one guard; renderer/library/options/physics unchanged.
+Existing test:garden now exercises missingGPU setup; it is also in test:quick
+(the broader runner already listed it). This stub is notGPU acceptance: run
+the unchanged realGarden20s handshake in actual compiledWebKit/Chrome, then
+exact online/phone checks. No new renderer, mode, dependency orweaker gate.
+Library contract: https://threejs.org/docs/pages/WebGPURenderer.html and pinned
+https://github.com/mrdoob/three.js/blob/r184/src/renderers/webgpu/WebGPURenderer.js .
