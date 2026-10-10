@@ -39,7 +39,7 @@ async function run(action) {
   catch (error) { status(error.message || String(error)) }
   finally {
     busy = false; update()
-    if (disconnectRequested) { disconnectRequested = false; finishRequested = false; void run(async () => { if (capture) await finish(); await releaseMidi(); status('Biotron disconnected. Completed takes are kept.') }) }
+    if (disconnectRequested) { disconnectRequested = false; finishRequested = false; void run(async () => { await finishAndRelease(); status('Biotron disconnected. Completed takes are kept.') }) }
     else if (finishRequested) { finishRequested = false; if (capture) void run(finish) }
   }
 }
@@ -102,6 +102,12 @@ async function releaseMidi() {
   stopNotes(); update()
   if (failure) throw failure
 }
+async function finishAndRelease() {
+  let primary
+  try { if (capture) await finish() }
+  catch (error) { primary = error; throw error }
+  finally { try { await releaseMidi() } catch (error) { if (primary) primary.cleanupFailure = String(error); else throw error } }
+}
 $('connect').onclick = () => run(async () => {
   await ready()
   const access = await guard(navigator.requestMIDIAccess({sysex: false}), 'MIDI permission', 30000)
@@ -126,7 +132,7 @@ $('connect').onclick = () => run(async () => {
     $('connection').textContent = 'Biotron connected. No device settings are changed.'
   } catch (error) { try { await releaseMidi() } catch (cleanup) { error.cleanupFailure = String(cleanup) }; throw error }
 })
-$('release').onclick = () => run(async () => { if (capture) await finish(); await releaseMidi(); $('connection').textContent = 'Biotron released.' })
+$('release').onclick = () => run(async () => { await finishAndRelease(); $('connection').textContent = 'Biotron released.' })
 
 $('copy').onclick = async () => {
   const link = new URL(location.href); link.hash = new URLSearchParams({sound: $('sound').value, register: $('register').value, volume: $('volume').value})

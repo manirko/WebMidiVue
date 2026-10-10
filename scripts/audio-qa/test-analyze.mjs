@@ -76,12 +76,14 @@ async function testCreatorPrototype() {
         }
         return stream
       }
-      Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {value: async options => {
+      // Pin the whole controlled provider. WebKit dropped the native wrapper's
+      // expando after audio capture; a fixture must never fall through to hardware.
+      Object.defineProperty(navigator, 'mediaDevices', {value: {getUserMedia: async options => {
         const controls = window.__creatorControls; controls.camera++
         if (controls.cameraMode === 'pending') return new Promise(resolve => { controls.resolveCamera = () => resolve(createCamera(options)) })
         if (controls.cameraMode === 'success') return createCamera(options)
         throw new DOMException('Denied', 'NotAllowedError')
-      }, configurable: true})
+      }}, configurable: true})
     })
     await context.tracing.start({screenshots: true, snapshots: true})
     page = await context.newPage(); page.on('pageerror', error => errors.push(String(error)))
@@ -133,6 +135,7 @@ async function testCreatorPrototype() {
     pass('exact download/readback, Share cancel/reject/success keep the same file; no receiving-app success claim')
     await page.locator('#record-video').click(); await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
     assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 1); assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false)
+    assert.equal(await page.evaluate(() => __creatorControls.camera), 1); assert.equal(await page.locator('#status').innerText(), 'Denied')
     pass('camera denial retains the completed audio take')
     await page.evaluate(() => { __creatorControls.share = 'cancel'; Object.defineProperty(navigator, 'canShare', {value: () => false, configurable: true}) })
     await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
@@ -246,6 +249,19 @@ async function testCreatorPrototype() {
     await page.locator('#stop').click(); await page.waitForFunction(() => !document.querySelector('#record-audio').disabled, null, {timeout: 8000})
     assert.match(await page.locator('#status').innerText(), /finalization timed out/); assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 1)
     pass('missing stop acknowledgement times out visibly and retains the old take')
+    for (const action of ['disconnect', 'release']) {
+      await page.evaluate(() => { __creatorControls.input.state = 'connected'; __creatorControls.closed = false })
+      await page.locator('#connect').click(); await page.waitForFunction(() => typeof __creatorControls.input.onmidimessage === 'function')
+      await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+      await page.evaluate(() => { __CreatorPrototype.capture.tap.port.postMessage = () => {} })
+      if (action === 'disconnect') await page.evaluate(() => { __creatorControls.input.state = 'disconnected'; __creatorControls.access.onstatechange({port: __creatorControls.input}) })
+      else await page.locator('#release').click()
+      await page.waitForFunction(() => !document.querySelector('#record-audio').disabled, null, {timeout: 8000})
+      assert.match(await page.locator('#status').innerText(), /finalization timed out/)
+      assert(await page.evaluate(() => __creatorControls.closed && __creatorControls.input.onmidimessage === null))
+      assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 1)
+    }
+    pass('disconnect and explicit release close controlled MIDI inputs even when capture finalization fails; first timeout and prior take survive')
     await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
     await page.waitForFunction(() => __CreatorPrototype.takes.length === 2 && !__CreatorPrototype.capture, null, {timeout: 35000})
     assert(await page.evaluate(() => __CreatorPrototype.takes.at(-1).seconds >= 30 && __CreatorPrototype.takes.at(-1).seconds < 30.1))
