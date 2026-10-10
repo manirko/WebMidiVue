@@ -423,3 +423,45 @@ another failed lane. Capture bytes and hashes are saved before decoder access;
 capture/reopen calls are bounded by the shared browser guard. An earlier WebKit
 decode failure lost its unsaved encoded file; retain that first incomplete
 evidence and rerun the exact failure after this tester correction.
+
+## Thin creator prototypes — 10 October
+
+The existing generator now also bundles `creator.html`/`creator.js`: a reversible
+experiment around the same production engine, not a shipped Play feature.
+Generate with `python3 -I scripts/build-browser-qa-harness.py --output <new-dir>`,
+then `node <new-dir>/build.cjs`; serve that directory with the existing static
+server and open `/creator.html`. The production build/source and frozen b15 are
+unchanged. No engine, dependency, framework, cloud account or editor is added.
+
+The one page provides a short shoot/editor brief, final-gain WAV takes,
+Save/native Share with cancellation, named sound/register URL plus repeatable
+performance, and an optional native camera+synth/microphone video take. Only
+explicit Connect requests non-SysEx MIDI inputs whose name contains Biotron;
+no MIDI output, settings, calibration or firmware commands. Camera/microphone
+are requested only by Record video; microphone defaults off. Three 30-second
+takes bound retained buffers; previous takes survive a failed/cancelled start.
+Reload clears them; Save before leaving. No file is uploaded automatically.
+
+`node scripts/audio-qa/test-analyze.mjs --creator-prototype` extends this same
+tester. It saves first faults, actual WAV/video bytes and SHA, checks fresh
+decode/native video playback and independent ffmpeg decode, rejects silence,
+tests controlled clipboard/Share/native API failures, late permission replies,
+Stop/held-key replay and lifecycle boundaries. Camera/mic/MIDI providers are
+controlled fixtures; assertions do not certify real hardware/permissions,
+BFCache, phone/editor import, camera sync, human hearing or a completed clip.
+ffprobe/ffmpeg are existing local test dependencies, not product dependencies.
+
+Judge review and preserved before-fix controls found missing held-key panic and
+revoked kept-take URLs on pagehide. The minimal fixes record a performance stop,
+preserve completed URLs across controlled restoration, bound resume/preview and
+defer finish requests instead of dropping them while busy. Native restoration
+remains a separate test. Worklet registration is reused per context; three
+Chrome takes did not reproduce a registration error before that simplification.
+
+Business/user goal lives in existing T14/PLT-BIOTRON-001: compare the same finished
+creator task with usual tools. Hypothesis: at least half the total time without
+extra help or lost quality/reliability, followed by voluntary reuse. Software
+PASS is not that outcome; views/likes are not orders or contribution profit.
+Exact reference-video transcription/matching and the existing Waveform-route
+check remain separate unfinished tasks. Final pinned results belong to the
+existing context ledger; do not replace historical QA with this scoped proof.

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Make a Biotron clip — experiment</title>
+<style>
+:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#18201d;background:#f4f5f1;font-size:16px;line-height:1.5}
+*{box-sizing:border-box}body{margin:0}main{max-width:880px;margin:auto;padding:24px 16px}header{padding:24px 0}h1{font-size:32px;line-height:1.15;margin:8px 0 16px}h2{font-size:20px;margin:0 0 16px}p{margin:8px 0 16px}.muted,small{color:#4e5b54}.tag{font-size:12px;letter-spacing:.08em;text-transform:uppercase}section{background:#fff;padding:24px;border-radius:16px;margin:16px 0}.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.fields{display:grid;grid-template-columns:2fr 1fr;gap:16px}label{display:block}select,textarea,input{font:inherit;max-width:100%}select,textarea{width:100%;padding:12px;border:1px solid #acb9b0;border-radius:8px;background:white}button,.save{font:inherit;border:1px solid #668573;background:#fff;color:#153427;border-radius:8px;min-height:48px;padding:12px 16px;cursor:pointer;display:inline-block;text-decoration:none}button:hover,.save:hover{background:#e9f0e9}button:disabled{opacity:.5;cursor:default}button.primary{background:#215740;color:white;border-color:#215740}button.primary:hover{background:#17442f}:focus-visible{outline:3px solid #bb5e20;outline-offset:3px}[hidden]{display:none!important}audio,video{display:block;max-width:100%;width:100%;margin:16px 0}video{max-height:420px;background:#16251c}details{margin:16px 0}summary{cursor:pointer;min-height:48px;padding:12px 0;font-weight:600}li{margin:8px 0}.status{min-height:48px;background:#e9f0e9;padding:12px 16px;border-radius:8px;overflow-wrap:anywhere}textarea{height:96px}.take{border-left:4px solid #215740;padding-left:16px}.keyboard{font-size:14px}footer{font-size:14px;color:#4e5b54;padding:16px 0}@media(max-width:600px){section{padding:16px}.fields{grid-template-columns:1fr}h1{font-size:28px}}@media(any-hover:none) and (any-pointer:coarse){.keyboard{display:none}}
+</style>
+<main>
+<header><span class="tag">Playtronica · creator experiment · 10 October 2026</span><h1>Make a Biotron clip</h1><p>Biotron turns changes at the plant contacts into notes. This page makes the sound.</p><p class="muted">Try a repeatable example without a device. With Biotron, record your own performance.</p></header>
+<section aria-labelledby="sound-heading"><h2 id="sound-heading">1. Get your sound</h2>
+<div class="fields"><label>Sound<select id="sound"></select></label><label>Register<select id="register"><option value="-12">Low</option><option value="0" selected>Middle</option><option value="12">High</option></select></label></div>
+<p><label>Volume <input id="volume" type="range" min="0" max="100" value="70"></label></p>
+<div class="row"><button id="example">Play example</button><button id="connect">Connect Biotron</button><button id="release" hidden>Release Biotron</button></div>
+<p id="connection" class="muted">The example uses fixed notes. Plant notes vary with the input.</p>
+<p class="keyboard">After playing the example, you can play your computer keyboard: A S D F G H J K.</p>
+<div class="row"><button id="copy">Copy sound link</button><button id="repeat" disabled>Repeat last performance</button></div>
+<p id="link-status" role="status"></p><textarea id="link-fallback" readonly aria-label="Sound link to copy" hidden></textarea>
+</section>
+<section aria-labelledby="record-heading"><h2 id="record-heading">2. Record a take</h2><p>Record sound for your editor, or try camera and sound in one file.</p>
+<div class="row"><button class="primary" id="record-audio">Record sound</button><button id="record-video">Record video</button><button id="stop" disabled>Stop recording</button></div>
+<p><label><input type="checkbox" id="voice"> Include microphone in video</label><small>Use headphones if you include speech. Sound-only takes contain this synth.</small></p>
+<p id="status" class="status" role="status" aria-live="polite">Ready. Each take lasts up to 30 seconds.</p>
+<video id="preview" muted playsinline hidden aria-label="Camera preview"></video>
+<div id="takes"></div>
+<p class="muted">Listen before saving. Wait for the sound to fade before stopping. Files stay here until reload; save useful takes.</p>
+</section>
+<section aria-labelledby="video-heading"><h2 id="video-heading">3. Finish your video</h2>
+<details><summary>A short shoot you can adapt</summary><ol><li>Show the plant, contacts and Biotron in the same shot.</li><li>Show a touch and let the music be heard.</li><li>Say what creates the notes and where the sound comes from.</li><li>Show the setup someone needs to try it.</li></ol><p>Choose your own story. A separate soundtrack does not prove the visible touch caused each note.</p></details>
+<details><summary>Use sound in your usual editor</summary><ol><li>Save a useful take.</li><li>Open it in your editor alongside your camera video.</li><li>Keep speech audible. Align the take if you want matching gestures.</li><li>Export and open the final video outside this page.</li></ol><p>WAV editor import and phone video recording still need physical tests.</p></details>
+<details><summary>Compare these experiments</summary><p>Finish the same kind of clip with your usual tools, then try this page.</p><p>Count all editing, transfers, retries and help. Did you finish sooner? Would you choose this again?</p><p>Target to test: halve the total time, with no extra help or lost quality. This is a hypothesis.</p></details>
+</section>
+<footer>Internal prototype. It does not replace the frozen test version for Sergey. No upload, firmware or device-settings commands.</footer>
+</main><script defer src="/creator.js"></script>
+</html>
