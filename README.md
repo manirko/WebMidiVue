@@ -40,8 +40,15 @@ with Settings readback. Copy-link feedback resets for the exact new route.
 This is one reversible functional trial, not the selected winner of the 30 static
 Rams layouts. Current build/link, precise test scopes and first failures are in
 [the context handoff](https://github.com/manirko/playtronica-context-1/blob/codex/biotron-firmware-fix-review-20261008/projects/biotron-paul-7818/NOW.md).
-The separate sound-only creator trial saves WAV for a usual camera/CapCut workflow;
-its different origin does not automatically inherit this page's sound selection.
+The beta includes a collapsed “Record sound for a video · Experiment” entry to
+`/creator.html` on the same origin. It releases sound and Settings MIDI before
+leaving; pending or failed release stays on the page with an explicit retry.
+The creator trial saves WAV for the usual camera/CapCut workflow. Choose the sound
+again there; sound selection is not automatically transferred. Return keeps an
+active take for Listen/Save, then warns before leaving unsaved takes behind.
+The earlier separate creator origin remains a historical trial. Current scoped
+checks, the unresolved cold-recording incident and native/editor gates are in the
+Biotron context ledger; passing retries do not close an unexplained first failure.
 Frozen b15/Sergey acceptance and physical/customer gates remain separate.
 
 After Andrey found the ca trial visually unchanged, the current experiment puts

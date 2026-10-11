@@ -616,3 +616,45 @@ remain separate. Phone/installedSafari/speakers/OS underruns/perceptual quality,
 all presets/registers/levels/rates/stereo/uncaptured tails, real camera/mic/speech/
 sync, GUI editor and creator time/reuse/viewer acceptance remain OPEN. Current
 65337prototype0c and frozenSergey b15/ZIP unchanged; no deployment/native requests.
+
+
+### Same-origin creator checkpoint — 11 October 2026
+
+Runtime `982e8e74f5372a436d334fb4968de7aef9a6707d`, final executable tester
+`c5a9501c15b50252fbb0f7a3c8e8b2d4937ff313`. Beta main and creator share one
+build/origin and one production audio core. The native Settings release promise
+remains owned through the visible 10-second timeout and pagehide; late settlement
+does not navigate. Trusted UI cannot start another session during that barrier.
+Creator Return finishes an active WAV and stays for Listen/Save; confirmation is
+invalidated by a new take. Failed audio release after pagehide keeps the old owner
+for retry before another engine is allocated. No DSP, firmware or dependency change.
+
+Current separate scopes: main handoff12Chrome/11PWWebKit PASS; normal creator35
+checks each engine PASS;16 WAV/reference/download files independently RIFF/size/SHA
+read; full sound each engine PASS with11plant cases,26commands,17boundaries and
+14Settings actions;6quality profiles each engine PASS; production isolation PASS;
+Chrome7-stage persistent PWA PASS. Quick tests were last run on03a (the later c5
+change only adds bounded creator observations). These are not an all-brand gate,
+OS install, actual phone/USB/hearing or CapCut acceptance.
+
+An original03a cold Record→Example→900ms→Stop produced no audio blocks and no take.
+The visible failure and worklet done acknowledgement are preserved. The original
+tester and engine match the earlier35PASS inputs. c5 adds context state/clock,
+visibility and block counts before Stop plus bounded actual state before a
+first-fault screenshot. Its cold lifecycle17PASS does not explain that incident.
+Next discriminator: native processorerror/statechange events without warming the
+engine, wrapping native promises or increasing waits. Only if the clock runs with
+zero blocks/errors is a temporary recorder first-process/input-dimensions probe
+useful. No speculative DSP patch or success-only retry loop.
+
+Original WebKit Delete5000ms and Cache/API Context stopped causes also remain OPEN.
+A matching historical native protocol control14PASS/43selected events/0console
+errors changes observation timing; it is diagnostic evidence, not closure.
+The tester now retains actual telemetry POSTs and asserts the main session identity
+before opening other contexts, guards against Node exit with an unsettled unit,
+and restores the valid sensor fixture before sending the retry query. Procedural
+mis-oracles and first failures remain alongside positive controls.
+
+Exact files/logs/pins: `/private/tmp/biotron-creator-handoff-20261011`; long-term
+archive and current Goal status are in the existing context ledger. Sergey b15,
+production and prior playing previews are unchanged.
