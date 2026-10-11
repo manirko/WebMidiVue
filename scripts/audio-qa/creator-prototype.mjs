@@ -44,7 +44,7 @@ async function run(action) {
   let done; runFinished = new Promise(resolve => { done = resolve })
   busy = true; update()
   try { await action() }
-  catch (error) { if (started === generation && pageActive) status((error.message || String(error)) + (error.takeOutcome || '')) }
+  catch (error) { if (started === generation && pageActive) status((error.name === 'AbortError' ? 'Start cancelled. Previous takes are kept.' : error.message || String(error)) + (error.takeOutcome || '')) }
   finally {
     done()
     if (started !== generation || !pageActive) return
