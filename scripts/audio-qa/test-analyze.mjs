@@ -355,7 +355,10 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
       const target = boundary === 'ready-cached' ? __CreatorPrototype.engine : __CreatorPrototype.engine.context.audioWorklet
       const method = boundary === 'ready-cached' ? 'ensureReady' : 'addModule', original = target[method]
       delete __creatorControls.resolveRecordStart
-      target[method] = (...args) => (boundary === 'ready-cached' ? Promise.resolve() : original.apply(target, args)).then(() => new Promise(resolve => { __creatorControls.resolveRecordStart = resolve }))
+      target[method] = (...args) => new Promise((resolve, reject) => {
+        if (boundary === 'ready-cached') __creatorControls.resolveRecordStart = resolve
+        else original.apply(target, args).then(() => { __creatorControls.resolveRecordStart = resolve }, reject)
+      })
       __creatorControls.restoreRecordStart = () => { target[method] = original }
     }, boundary)
     await page.locator('#record-audio').click()
