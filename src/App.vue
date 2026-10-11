@@ -49,8 +49,8 @@
           </details>
           <router-view v-slot="{ Component }">
             <!-- One Biotron player stays mounted while its settings change. -->
-            <SoundLab v-if="betaBuild && biotronSoundRoute" mode="reveal" profile-id="biotron" :inert="creatorOpening" />
             <div v-if="!firstPlay" :inert="creatorOpening"><component :is="Component" /></div>
+            <SoundLab v-if="betaBuild && biotronSoundRoute" mode="reveal" profile-id="biotron" :inert="creatorOpening" />
           </router-view>
         </CompatibilityGate>
       </main>

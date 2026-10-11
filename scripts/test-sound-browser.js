@@ -1252,6 +1252,10 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
 
 async function verifyLazyPlayerRecovery(browser, origin) {
   const proof = [], errors = []
+  const settingsGeometry = page => page.locator('.biotron-settings-beta').evaluate(element => {
+    const box = element.getBoundingClientRect()
+    return {x: box.x + scrollX, y: box.y + scrollY, width: box.width, height: box.height}
+  })
   const isolate = async () => {
     const context = await browser.newContext({serviceWorkers: 'block'})
     context.setDefaultTimeout(5000)
@@ -1282,8 +1286,13 @@ async function verifyLazyPlayerRecovery(browser, origin) {
     assert.equal(requests, 1, 'Failed sound chunk automatically retried')
     await idle(page)
     const settingsRequests = await page.evaluate(() => __lazyMidiRequests.length)
+    const settingsBefore = destination === '/biotron' ? await settingsGeometry(page) : null
     await page.getByRole('button', {name: 'Retry sounds', exact: true}).click()
     await page.locator('.sound-lab').waitFor()
+    const settingsAfter = settingsBefore ? await settingsGeometry(page) : null
+    if (settingsBefore) for (const key of ['x', 'y', 'width', 'height']) {
+      assert(Math.abs(settingsBefore[key] - settingsAfter[key]) <= 1, `Lazy Retry moved Settings ${key}: ${settingsBefore[key]}→${settingsAfter[key]}`)
+    }
     assert.equal(requests, 2); assert.equal(await page.locator('.sound-lab').count(), 1)
     await idle(page)
     assert.equal(await page.evaluate(() => __lazyMidiRequests.length), settingsRequests, 'Retry requested additional Settings access')
@@ -1299,7 +1308,7 @@ async function verifyLazyPlayerRecovery(browser, origin) {
     }
     await page.getByRole('button', {name: 'Stop & release', exact: true}).click()
     await page.locator('.sound-lab[data-audio-state="closed"]').waitFor()
-    proof.push({destination, requests, retry: 'PASS', persistentExample: 'PASS', midiRequests: await page.evaluate(() => __lazyMidiRequests)})
+    proof.push({destination, requests, retry: 'PASS', settingsBefore, settingsAfter, persistentExample: 'PASS', midiRequests: await page.evaluate(() => __lazyMidiRequests)})
     await context.close()
   }
   const context = await isolate(), page = await context.newPage()
