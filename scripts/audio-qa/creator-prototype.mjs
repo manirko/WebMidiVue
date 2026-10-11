@@ -123,7 +123,9 @@ $('connect').onclick = () => run(async () => {
   const controller = new AbortController(); startAbort = controller; const signal = controller.signal; update()
   try {
     await ready(signal)
+    signal.throwIfAborted()
     const access = await guard(navigator.requestMIDIAccess({sysex: false}), 'MIDI permission', 30000, signal)
+    signal.throwIfAborted()
     const available = [...access.inputs.values()].filter(input => /biotron/i.test(input.name || ''))
     if (!available.length) throw Error('Biotron not found. Connect USB, then try again.')
     midi = access; inputs = available
@@ -141,6 +143,7 @@ $('connect').onclick = () => run(async () => {
         }
       }, () => {}).finally(() => { opening.delete(input); update() })
       await guard(pending, 'MIDI input', 10000, signal)
+      signal.throwIfAborted()
       input.onmidimessage = event => {
         const message = parseMidiMessage(event.data)
         const type = {'note-on': 'on', 'note-off': 'off', 'pitch-bend': 'bend', panic: 'panic'}[message.type]
@@ -188,6 +191,7 @@ async function startAudio(signal) {
   const session = {kind: 'audio', engine, tap, drain, blocks: [], events: [], started: engine.context.currentTime, sound: currentSound().id, sampleRate: engine.context.sampleRate}
   capture = session
   tap.port.onmessage = event => {
+    if (capture !== session) return
     if (event.data.done) { session.done = true; session.resolve?.(); requestFinish() }
     else session.blocks.push(event.data)
   }
@@ -214,7 +218,7 @@ async function finish() {
     if (engine.activeVoiceCount) send({type: 'panic'})
     // Auto-limit may already have acknowledged completion.
     await guard(new Promise(resolve => { session.resolve = resolve; if (session.done) resolve(); else session.tap.port.postMessage('stop') }), 'Sound finalization', 5000)
-    if (started !== generation) return
+    if (started !== generation || !pageActive || capture !== session) return
     let expected = session.blocks[0]?.frame, samples = 0
     for (const block of session.blocks) { if (block.frame !== expected) throw Error('Sound capture has a gap. Existing takes are kept.'); expected += block.pcm.length; samples += block.pcm.length }
     if (!samples) throw Error('No audio blocks received. Try again; existing takes are kept.')
@@ -229,7 +233,7 @@ async function finish() {
     const message = session.silent ? 'Take kept, but no music was detected. Check volume and input before another take.' : 'Take kept. Listen before saving. Nothing has been uploaded.'
     status(message + (session.eventsOverflow ? ' Repeat unavailable: too many note changes. The recorded file is kept.' : ''))
   } catch (error) { primary = error; throw error }
-  finally { capture = null; try { await cleanCapture(session) } catch (error) { if (primary) primary.cleanupFailure = String(error); else throw error } }
+  finally { if (capture === session) capture = null; try { await cleanCapture(session) } catch (error) { if (primary) primary.cleanupFailure = String(error); else throw error } }
 }
 function addTake(file, session, seconds) {
   const url = URL.createObjectURL(file), take = {file, url, events: session.events, kind: session.kind, seconds}

@@ -345,7 +345,11 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
     const controls = __creatorControls
     const input = {id: 'lifecycle-biotron', name: 'Biotron controlled lifecycle', state: 'connected',
       open() { controls.opens = (controls.opens || 0) + 1; if (controls.open === 'pending') return new Promise((resolve, reject) => { controls.resolveOpen = () => resolve(input); controls.rejectOpen = () => reject(Error('Open rejected')) }); return Promise.resolve(input) },
-      async close() { controls.closes = (controls.closes || 0) + 1; if (controls.closeFailures > 0) { controls.closeFailures--; throw Error('Controlled close failure') }; return input }}
+      async close() {
+        controls.closes = (controls.closes || 0) + 1
+        if (controls.close === 'pending') return new Promise(resolve => { controls.resolveClose = () => resolve(input) })
+        if (controls.closeFailures > 0) { controls.closeFailures--; throw Error('Controlled close failure') }; return input
+      }}
     const access = {inputs: new Map([[input.id, input]])}; Object.defineProperty(access, 'outputs', {get() { throw Error('MIDI output touched') }})
     controls.input = input; controls.access = access
     Object.defineProperty(navigator, 'requestMIDIAccess', {configurable: true, value: options => {
@@ -381,6 +385,21 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
     await page.locator('#connect').click(); await page.waitForFunction(() => typeof __creatorControls.input.onmidimessage === 'function')
     await page.locator('#release').click(); await page.waitForFunction(() => document.querySelector('#release').hidden)
   }
+  await page.evaluate(() => { __creatorControls.permission = 'success'; __creatorControls.open = 'pending' })
+  const opensBeforeClose = await page.evaluate(() => __creatorControls.opens)
+  await page.locator('#connect').click(); await page.waitForFunction(opens => __creatorControls.opens > opens, opensBeforeClose)
+  await page.locator('#stop').click(); await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
+  await page.evaluate(() => { __creatorControls.close = 'pending'; __creatorControls.resolveOpen() })
+  await page.waitForFunction(() => document.querySelector('#connection').textContent.includes('Cancelled MIDI release timed out'), null, {timeout: 12000})
+  await page.evaluate(() => { __creatorControls.close = 'success' })
+  await page.locator('#release').click(); await page.waitForFunction(() => document.querySelector('#release').hidden)
+  const closePending = await observe('native-close/pending-after-timeout-and-release-retry')
+  assert(await page.locator('#connect').isDisabled(), 'Reconnect must wait for actual native close settlement after a guarded timeout')
+  assert(!closePending.recordDisabled, 'Example recording must stay available while a native close is pending')
+  await page.evaluate(() => __creatorControls.resolveClose())
+  await page.waitForFunction(() => !document.querySelector('#connect').disabled)
+  assert.equal(await retained(), previousSha)
+  pass('native close settlement remains a reconnect barrier across timeout and successful Release retry; recording stays available')
   // Resolve runs before abort, but its await continuation runs after abort.
   await page.evaluate(() => { __creatorControls.permission = 'pending'; __creatorControls.open = 'success' })
   const opensBeforeRace = await page.evaluate(() => __creatorControls.opens)
