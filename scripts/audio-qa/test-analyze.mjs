@@ -547,9 +547,10 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
       await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted: true})); window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true})) })
       await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Returned.') && !document.querySelector('#record-audio').disabled)
     } else {
-      await page.waitForFunction(() => /Controlled ready failure|closed AudioContext/.test(document.querySelector('#status').textContent))
+      await page.waitForFunction(() => !document.querySelector('#record-audio').disabled && !__CreatorPrototype.capture)
     }
     const observation = await observe(`capture/${boundary}/failure`)
+    if (boundary !== 'ready-pagehide') assert.match(observation.status, boundary === 'ready-closed' ? /^(Context is closed|Cannot resume a closed AudioContext)/ : /^Controlled ready failure during capture/)
     assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false, 'Ready failure must finalize or explicitly discard its owned capture before closing sound')
     assert(await page.locator('#stop').isDisabled()); assert(await page.locator('#record-audio').isEnabled())
     assert.equal(await retained(), previousSha)
