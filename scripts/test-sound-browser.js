@@ -299,7 +299,7 @@ async function verifyCreatorHandoff(page, origin) {
   await page.locator('#return').click(); await page.locator('#leave-confirm').click()
   await page.waitForFunction(() => Boolean(window.__finishCreatorReturn))
   await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted:true})); window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted:true})); __finishCreatorReturn() })
-  await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
+  await page.waitForFunction(() => !document.querySelector('#record-audio') || !document.querySelector('#record-audio').disabled)
   assert.equal(page.url(), origin + '/creator.html', 'Old Return redirected the restored page after pagehide')
   assert.equal(crypto.createHash('sha256').update(Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer()))))).digest('hex'), hash)
   pass('pending Return cannot redirect after pagehide/pageshow; previous WAV stays byte-identical')

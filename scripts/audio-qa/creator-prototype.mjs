@@ -177,11 +177,14 @@ $('connect').onclick = () => run(async () => {
 })
 $('release').onclick = () => run(async () => { await finishAndRelease(); $('connection').textContent = 'Biotron released.' })
 async function returnToMain() {
+  const started = generation
   if (capture || startAbort) return $('return').onclick()
   if (opening.size + closingPorts.size) throw Error('Previous MIDI connection is still closing. Keep this page open, then retry Return.')
   await releaseMidi()
+  if (!pageActive || started !== generation) return
   if (closingPorts.size) throw Error('Previous MIDI connection is still closing. Keep this page open, then retry Return.')
   stopNotes(); await guard(engine?.stop(), 'Sound release')
+  if (!pageActive || started !== generation) return
   location.assign('/#/biotron/play?sound=1')
 }
 $('return').onclick = () => {
