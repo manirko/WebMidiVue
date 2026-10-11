@@ -45,7 +45,7 @@
             <summary>Record sound for a video · Experiment</summary>
             <p>Keep a short WAV take for CapCut or your usual editor. Film with your camera app. This stops sound and releases Biotron; choose the sound again on the recording page.</p>
             <button id="creator-action" class="btn btn-outline-secondary" type="button" :disabled="creatorOpening" @click="openCreator">{{ creatorOpening ? 'Releasing Biotron…' : 'Open recording experiment' }}</button>
-            <p v-if="creatorMessage" role="status">{{ creatorMessage }} Press Open recording experiment to retry.</p>
+            <p v-if="creatorMessage" role="status">{{ creatorMessage }} {{ creatorOpening ? 'Waiting for release.' : 'Press Open recording experiment to retry.' }}</p>
           </details>
           <router-view v-slot="{ Component }">
             <!-- One Biotron player stays mounted while its settings change. -->
@@ -257,17 +257,21 @@ export default {
       if (this.creatorOpening) return
       if (!canReloadApp()) { this.creatorMessage = 'Finish the firmware update before leaving.'; return }
       this.creatorOpening = true; this.creatorMessage = ''
-      let timer
+      let timer, active = true
+      const cancel = () => { active = false }
+      window.addEventListener('pagehide', cancel, {once:true})
+      const release = (async () => await stopPersistentSound() && await releaseSettingsOwners())()
       try {
         const released = await Promise.race([
-          (async () => await stopPersistentSound() && await releaseSettingsOwners())(),
+          release,
           new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error('Release is still pending. Keep this page open.')), 10000) })
         ])
+        if (!active) return
         if (!released) throw new Error('Biotron could not be released. Close other MIDI apps.')
         if (!canReloadApp()) throw new Error('Finish the firmware update before leaving.')
         window.location.assign('/creator.html')
-      } catch (error) { this.creatorMessage = error.message || 'Could not release sound or Biotron.' }
-      finally { clearTimeout(timer); this.creatorOpening = false }
+      } catch (error) { if (active) this.creatorMessage = error.message || 'Could not release sound or Biotron.' }
+      finally { clearTimeout(timer); await release.catch(() => {}); window.removeEventListener('pagehide', cancel); this.creatorOpening = false }
     },
     closeFeedback() { this.feedbackOpen = false; this.$refs.feedbackAction?.focus() },
     async openFeedback() {

@@ -234,9 +234,16 @@ async function verifyCreatorHandoff(page, origin) {
   try { await page.getByRole('button', {name:'Listen to example', exact:true}).click({timeout:750}); restartSucceeded = true }
   catch (error) { if (error.name !== 'TimeoutError') throw error }
   assert.equal(restartSucceeded, false, 'Example restarted while previous Settings owner was being released')
+  await page.getByText('Release is still pending. Keep this page open.', {exact:false}).waitFor({timeout:12000})
+  restartSucceeded = false
+  try { await page.getByRole('button', {name:'Listen to example', exact:true}).click({timeout:750}); restartSucceeded = true }
+  catch (error) { if (error.name !== 'TimeoutError') throw error }
+  assert.equal(restartSucceeded, false, 'Timed-out handoff released its barrier before native Settings close settled')
   await page.evaluate(() => __finishSettingsClose())
-  await page.waitForURL(origin + '/creator.html')
-  pass('Settings → Play retains old pending output owner until native close settles')
+  await page.waitForFunction(() => !document.querySelector('#creator-action').disabled)
+  assert.equal(new URL(page.url()).pathname, '/', 'Timed-out handoff navigated after late release')
+  await page.locator('#creator-action').click(); await page.waitForURL(origin + '/creator.html')
+  pass('Settings → Play retains pending owner through handoff timeout; settled retry alone opens creator')
   await page.locator('#return').click(); await page.waitForURL(origin + '/#/biotron/play?sound=1')
   await page.getByRole('button', {name:'Listen to example', exact:true}).click()
   await page.waitForFunction(() => window.__soundContext?.state === 'running')
@@ -245,9 +252,11 @@ async function verifyCreatorHandoff(page, origin) {
   await page.waitForFunction(() => Boolean(window.__finishAudioClose))
   assert.equal(new URL(page.url()).pathname, '/')
   assert.equal(await page.locator('#creator-action').isDisabled(), true)
-  await page.evaluate(() => __finishAudioClose())
-  await page.waitForURL(origin + '/creator.html')
-  pass('example audio close is confirmed before the recording page opens')
+  await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted:true})); window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted:true})); __finishAudioClose() })
+  await page.waitForFunction(() => !document.querySelector('#creator-action') || !document.querySelector('#creator-action').disabled)
+  assert.equal(new URL(page.url()).pathname, '/', 'Old main handoff redirected the restored page')
+  await page.locator('#creator-action').click(); await page.waitForURL(origin + '/creator.html')
+  pass('pagehide cancels late main handoff; confirmed release permits explicit retry')
   await page.locator('#record-audio').click()
   await page.waitForFunction(() => window.__CreatorPrototype?.capture)
   await page.locator('#example').click(); await page.waitForTimeout(1500)
@@ -303,6 +312,18 @@ async function verifyCreatorHandoff(page, origin) {
   assert.equal(page.url(), origin + '/creator.html', 'Old Return redirected the restored page after pagehide')
   assert.equal(crypto.createHash('sha256').update(Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer()))))).digest('hex'), hash)
   pass('pending Return cannot redirect after pagehide/pageshow; previous WAV stays byte-identical')
+  await page.locator('#example').click(); await page.waitForFunction(() => __CreatorPrototype.engine?.ready)
+  await page.evaluate(() => { const owned = __CreatorPrototype.engine; window.__hiddenEngine = owned; window.__nativeHiddenClose = owned.context.close.bind(owned.context); owned.context.close = async () => { throw Error('Pagehide audio close refused') }; window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted:true})); window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted:true})) })
+  await page.getByText(/Cleanup failed:.*Pagehide audio close refused/).waitFor()
+  await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture || !document.querySelector('#record-audio').disabled)
+  assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false, 'Pagehide forgot its rejected audio owner before Record')
+  assert.equal(await page.evaluate(() => __CreatorPrototype.engine === __hiddenEngine), true)
+  await page.evaluate(() => { __hiddenEngine.context.close = __nativeHiddenClose })
+  await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture?.blocks.length > 0)
+  assert.equal(await page.evaluate(() => __hiddenEngine.context.state), 'closed')
+  await page.locator('#stop').click(); await page.waitForFunction(() => !__CreatorPrototype.capture && !document.querySelector('#record-audio').disabled)
+  assert.equal(crypto.createHash('sha256').update(Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer()))))).digest('hex'), hash)
+  pass('pagehide close rejection keeps old owner; next Record retries close before allocation and retains WAV')
   await page.locator('#return').click(); await page.locator('#leave-confirm').click(); await page.waitForURL(origin + '/#/biotron/play?sound=1')
   pass('confirmed Return retry releases device and returns to main Play')
   if (page.context().browser().browserType().name() === 'chromium') {
@@ -1208,6 +1229,12 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
       return route.fulfill({status: 202, contentType: 'application/json', body: '{"accepted":true}'})
     })
     await context.addInitScript(() => {
+      const nativeFetch = window.fetch
+      window.__sentTelemetry = []
+      window.fetch = function (url, options) {
+        if (url === '/api/telemetry') { try { window.__sentTelemetry.push(JSON.parse(options.body)) } catch { window.__sentTelemetry.push({invalidPayload:true}) } }
+        return nativeFetch.apply(this, arguments)
+      }
       window.__soundMidiRequests = []
       window.__soundMidiSent = []
       window.__failSoundCloseOnce = false
@@ -1887,10 +1914,15 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await page.getByRole('heading', {name: 'Can you hear the notes?'}).waitFor()
     const disconnectedFeedback = page.getByRole('link', {name: 'Not yet — WhatsApp'})
     assert((await disconnectedFeedback.getAttribute('href')).includes('Reached%3A%20Biotron%20disconnected%20before%20first%20sound'))
-    await verifyCapabilityFallbacks(browser, origin)
-    if (process.env.BIOTRON_TEST_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR, 'telemetry-events.json'), JSON.stringify(telemetryEvents, null, 2))
+    const expectedSession = await page.evaluate(() => window.__sentTelemetry.find(event => event.event_name === 'session.started')?.session_id)
+    if (process.env.BIOTRON_TEST_EVIDENCE_DIR) {
+      fs.mkdirSync(process.env.BIOTRON_TEST_EVIDENCE_DIR, {recursive:true})
+      fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR, 'telemetry-events.json'), JSON.stringify({expectedSession, events:telemetryEvents}, null, 2))
+    }
+    assert(expectedSession, 'Main page did not send session.started')
     assert(!telemetryEvents.some(event => event.invalidPayload), 'Telemetry receiver got malformed JSON')
-    assert(telemetryEvents.some(event => event.event_name === 'session.started' && event.service_name === 'biotron'))
+    assert(telemetryEvents.some(event => event.session_id === expectedSession && event.event_name === 'session.started' && event.service_name === 'biotron'))
+    await verifyCapabilityFallbacks(browser, origin)
     assert(telemetryEvents.every(event => !('raw_midi' in event) && !('device_name' in event)))
     await verifyGardenStates(page, origin)
     await verifyPlantSignal(page, origin)
