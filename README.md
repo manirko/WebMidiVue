@@ -44,6 +44,13 @@ The separate sound-only creator trial saves WAV for a usual camera/CapCut workfl
 its different origin does not automatically inherit this page's sound selection.
 Frozen b15/Sergey acceptance and physical/customer gates remain separate.
 
+After Andrey found the ca trial visually unchanged, the current experiment puts
+the larger visual beside one connection/sound/keyboard panel. Mobile stacks the
+same controls. Nonurgent offline installation lives below Settings; the critical
+app-update action stays above the workspace. Six Chrome and six test-WebKit
+profiles, keyboard43, visual11, Chrome PWA and production isolation pass on
+`1e93e93`; human visual/native acceptance stays open. No audio/MIDI/FW change.
+
 ## Project setup
 
 The Biotron beta **Play** page has **Play with keyboard** and **Octave**.
