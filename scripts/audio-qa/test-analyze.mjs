@@ -344,6 +344,31 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
   await page.locator('#example').click()
   const retained = async () => hash(Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer())))))
   const previousSha = await retained(); report.lifecycle.previousWavSha256 = previousSha; save()
+  for (const boundary of ['ready-cached', 'recorder-module']) {
+    if (boundary === 'recorder-module') {
+      await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted: true})))
+      await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true})))
+      await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
+      await page.locator('#example').click(); await page.locator('#example').click()
+    }
+    await page.evaluate(boundary => {
+      const target = boundary === 'ready-cached' ? __CreatorPrototype.engine : __CreatorPrototype.engine.context.audioWorklet
+      const method = boundary === 'ready-cached' ? 'ensureReady' : 'addModule', original = target[method]
+      delete __creatorControls.resolveRecordStart
+      target[method] = (...args) => (boundary === 'ready-cached' ? Promise.resolve() : original.apply(target, args)).then(() => new Promise(resolve => { __creatorControls.resolveRecordStart = resolve }))
+      __creatorControls.restoreRecordStart = () => { target[method] = original }
+    }, boundary)
+    await page.locator('#record-audio').click()
+    await page.waitForFunction(() => typeof __creatorControls.resolveRecordStart === 'function')
+    await page.evaluate(() => { __creatorControls.resolveRecordStart(); queueMicrotask(() => document.querySelector('#stop').click()) })
+    await page.waitForFunction(() => !document.querySelector('#stop').textContent.includes('Cancel'))
+    const observation = await observe(`record/${boundary}/resolve-before-abort`)
+    assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false, 'Cancelled record-start continuation must not create a capture')
+    assert(!/Recording sound/.test(observation.status)); assert.equal(await retained(), previousSha)
+    await page.evaluate(() => __creatorControls.restoreRecordStart())
+    assert(await page.locator('#record-audio').isEnabled())
+    pass(`${boundary}: resolve-before-abort record start creates no capture and preserves the prior WAV`)
+  }
   await page.evaluate(() => {
     const controls = __creatorControls
     const input = {id: 'lifecycle-biotron', name: 'Biotron controlled lifecycle', state: 'connected',
