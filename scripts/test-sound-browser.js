@@ -226,7 +226,6 @@ async function verifyCreatorHandoff(page, origin) {
   await page.waitForURL(origin + '/creator.html')
   pass('Settings → Play retains old pending output owner until native close settles')
   await page.locator('#return').click(); await page.waitForURL(origin + '/#/biotron/play?sound=1')
-  await openSoundHelp(page)
   await page.getByRole('button', {name:'Listen to example', exact:true}).click()
   await page.waitForFunction(() => window.__soundContext?.state === 'running')
   await page.evaluate(() => { const owned = __soundContext, native = owned.close.bind(owned); owned.close = () => new Promise((resolve, reject) => { window.__finishAudioClose = () => native().then(resolve, reject) }) })
