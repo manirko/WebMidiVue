@@ -172,12 +172,16 @@ async function verifySettingsActions(page, origin) {
     if (process.env.BIOTRON_TEST_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR,
       'settings-actions.json'), JSON.stringify(records, null, 2))
   }
-  for (let scale = 0; scale <= 12; scale++) {
+  const changeScale = async scale => {
     const marker = await page.evaluate(() => window.__soundMidiSent.length)
     await sections['Plant sensor'].getByRole('combobox', {name: '🎼 Scale', exact: true}).selectOption(String(scale))
     await page.waitForFunction(({marker, scale}) => window.__soundMidiSent.slice(marker).some(message => message[3] === 4 && message[4] === scale), {marker, scale})
     await page.waitForFunction(marker => window.__soundMidiSent.slice(marker).some(message => message[3] === 123), marker)
     await page.getByText('Saved on Biotron.', {exact: true}).waitFor()
+    return marker
+  }
+  for (let scale = 0; scale <= 12; scale++) {
+    const marker = await changeScale(scale)
     assert.deepStrictEqual(await page.evaluate(start => window.__soundMidiSent.slice(start).filter(message => message[3] !== 123), marker),
       [[240, 20, 13, 4, scale, 247]])
   }
@@ -342,16 +346,14 @@ async function verifySettingsActions(page, origin) {
     assert.equal(await page.evaluate(() => window.__soundMidiSent.length), failMarker, 'failed IndexedDB write sent MIDI/query')
     assert.equal((await presetRecords(page, 'read', [a]))[0].data.scale, 3, 'quota changed the stored record')
     await page.evaluate(() => {IDBObjectStore.prototype.put = window.__presetPut})
-    await scale.selectOption('9')
-    await page.getByText('Saved on Biotron.', {exact:true}).waitFor()
+    await changeScale(9)
     assert.equal((await presetRecords(page, 'read', [a]))[0].data.scale, 9)
     pass('actual IndexedDB quota preserves the edit, blocks MIDI and retry recovers')
 
     await openSettingsForTest(other, origin)
     await selector(other).selectOption(String(b))
     await other.getByRole('button', {name:'Apply preset to Biotron', exact:true}).waitFor()
-    await scale.selectOption('6')
-    await page.getByText('Saved on Biotron.', {exact:true}).waitFor()
+    await changeScale(6)
     const [storedA, storedB] = await presetRecords(page, 'read', [a, b])
     assert.equal(storedA.data.scale, 6); assert.equal(storedB.data.scale, 3)
     assert.equal(await selector(page).inputValue(), String(a), 'rerender displayed the other tab selection')
@@ -363,8 +365,7 @@ async function verifySettingsActions(page, origin) {
     await page.getByText('Saved in this browser.',{exact:true}).waitFor()
     assert.equal((await presetRecords(page, 'read', [a]))[0].name, 'Tab A saved')
     assert.equal((await presetRecords(page, 'read', [b]))[0].saved, false)
-    await scale.selectOption('5')
-    await page.getByText('Saved on Biotron.', {exact:true}).waitFor()
+    await changeScale(5)
     const draft = Number(await selector(page).inputValue())
     assert(draft !== a && draft !== b, 'saved preset reused another tab draft')
     const [source, untouched, fork] = await presetRecords(page, 'read', [a, b, draft])
