@@ -110,7 +110,10 @@ async function main() {
   releaseSettings = async () => true; await app.openCreator()
   assert.deepEqual(navigations, ['/creator.html']); assert.equal(deadlines.size, 0)
   navigations.length = 0; releaseSettings = () => new Promise(resolve => { finishSettings = resolve })
-  const hiddenCreator = app.openCreator(); await Promise.resolve(); await Promise.resolve()
+  finishSettings = null
+  const hiddenCreator = app.openCreator()
+  for (let i = 0; i < 20 && !finishSettings; i++) await Promise.resolve()
+  assert.equal(typeof finishSettings, 'function', 'Handoff never requested Settings release')
   listeners.get('pagehide')(); finishSettings(true); await hiddenCreator
   assert.equal(navigations.length, 0, 'Late handoff redirected a restored page')
   assert.equal(listeners.has('pagehide'), false, 'Handoff leaked its lifecycle listener')
@@ -128,4 +131,6 @@ async function main() {
   assert.equal(await session.api.releaseSettingsOwners(), true); assert.equal(waited, 2)
   console.log('App update safety passed: multiple firmware owners, no audio interruption during flash, failed stop, explicit release, double click')
 }
-main().catch(error => { console.error(error); process.exitCode = 1 })
+let completed = false
+main().then(() => { completed = true }).catch(error => { completed = true; console.error(error); process.exitCode = 1 })
+process.once('beforeExit', () => { if (!completed) { console.error('App update test ended with an unsettled operation'); process.exitCode = 1 } })

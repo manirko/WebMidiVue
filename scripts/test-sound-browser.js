@@ -851,13 +851,11 @@ async function verifyPlantSignal(page, origin) {
     assert.equal(await reads(), count, 'failed read must not keep opening outputs')
     await save(`${mode}: unknown, no stale warning, no continued reads`)
     await page.getByRole('link', {name: 'Settings', exact: true}).click()
-    await page.getByRole('link', {name: 'Play', exact: true}).click()
+    // Restore the provider before retry; send() captures its mode at request time.
     await page.evaluate(() => { window.__soundSensorReplyMode = 'valid' })
-    // The current read can already be pending; an explicit, correctly matched reply settles it.
-    await page.evaluate(() => {
-      const nonce = window.__soundMidiSent.filter(m => m.length === 7 && m[3] === 125 && m[5] === 5).at(-1)[4]
-      window.__emitSoundMidi([0xf0, 0x0b, 125, nonce, 5, ...Array(24).fill(0), 60, 0, 0, 0xf7])
-    })
+    const beforeRetry = await reads()
+    await page.getByRole('link', {name: 'Play', exact: true}).click()
+    await page.waitForFunction(before => window.__soundMidiSent.filter(m => m.length === 7 && m[3] === 125 && m[5] === 5).length > before, beforeRetry)
     await page.locator('.sound-lab[data-plant-state="0"]').waitFor()
   }
   await page.getByRole('link', {name: 'Settings', exact: true}).click()
