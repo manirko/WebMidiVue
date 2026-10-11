@@ -119,6 +119,9 @@ async function testCreatorPrototype() {
       const processTarget = 'process(inputs){const a=inputs[0]?.[0];'
       assert(derived.includes(processTarget), 'native process observation target changed')
       derived = derived.replace(processTarget, "process(inputs){if(!this.coldSeen){this.coldSeen=true;this.port.postMessage({coldProcessEntered:true,frame:currentFrame})}const a=inputs[0]?.[0];")
+      const messageTarget = 'tap.port.onmessage = event => {'
+      assert(derived.includes(messageTarget), 'native observation message target changed')
+      derived = derived.replace(messageTarget, messageTarget + '\n    if (event.data.coldProcessEntered) return // observation metadata is not PCM')
       if (process.argv.includes('--creator-cold-processor-fault')) {
         const faultTarget = 'const a=inputs[0]?.[0];'
         assert(derived.includes(faultTarget), 'native processor fault target changed')
