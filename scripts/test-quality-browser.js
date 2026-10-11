@@ -157,6 +157,7 @@ async function auditProfile(browser, origin, profile) {
     window.__copiedText = ''
     Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {writeText: async text => {
       if (window.__blockClipboard) throw Error('Injected clipboard denial')
+      if (window.__deferClipboard) await new Promise(resolve => {window.__finishClipboard = resolve})
       window.__copiedText = text
     }}})
     window.__layoutShiftScore = PerformanceObserver.supportedEntryTypes.includes('layout-shift') ? 0 : null
@@ -426,6 +427,24 @@ async function auditProfile(browser, origin, profile) {
   }, null, 2))
 
   if (!profile.midi) {
+    // The shared player survives navigation; copy feedback belongs to the exact route.
+    const notice = page.locator('.sound-lab .compatibility-notice')
+    await page.evaluate(() => {window.__deferClipboard = true})
+    await notice.getByRole('button', {name: /^(Copy page link|Link copied)$/}).click()
+    await page.waitForFunction(() => typeof window.__finishClipboard === 'function')
+    const requestedUrl = page.url()
+    await nav.getByRole('link', {name: 'Settings', exact: true}).click()
+    await notice.getByRole('button', {name: 'Copy page link', exact: true}).waitFor()
+    await page.evaluate(() => {window.__deferClipboard = false; window.__finishClipboard()})
+    await page.waitForFunction(url => window.__copiedText === url, requestedUrl)
+    assert.equal(await notice.getByRole('button', {name: 'Link copied', exact: true}).count(), 0,
+      `${profile.name}: stale clipboard completion claims the new route was copied`)
+    await notice.getByRole('button', {name: 'Copy page link', exact: true}).click()
+    await notice.getByRole('button', {name: 'Link copied', exact: true}).waitFor()
+    assert.equal(await page.evaluate(() => window.__copiedText), page.url())
+    fs.writeFileSync(path.join(artifacts, `${profile.name}-route-copy.json`), JSON.stringify({
+      requestedUrl, currentUrl: page.url(), staleCompletionIgnored: true, freshCopyCorrect: true
+    }, null, 2))
     await page.goto(`${origin}/#/sound`, {waitUntil: 'domcontentloaded'})
     await page.locator('.sound-lab .compatibility-notice').waitFor()
     const sharedQuality = await readQuality(page)

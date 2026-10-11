@@ -39,7 +39,7 @@
           <p>{{ revealCopy.instruction }}</p>
           <details v-if="revealStage === 'intro'" class="play-help"><summary>Connection steps</summary><ol><li>Push both contact cables onto the device’s CONTACT PINS.</li><li>Clip them to two separate points on the same plant.</li><li>Connect USB with a data cable, then press Start listening.</li></ol><a href="/midi-access.html" target="_blank" rel="noopener">Browser permission help</a></details>
 
-          <CompatibilityNotice v-if="midiAdvisory" :issue="midiAdvisory" advisory />
+          <CompatibilityNotice v-if="midiAdvisory" :key="$route.fullPath" :issue="midiAdvisory" advisory />
           <div v-if="revealIssue" class="sound-lab__connect-notice" role="status" aria-live="polite">
             <strong>{{ revealIssue.title }}</strong>
             <span>{{ revealIssue.body }}</span>
@@ -113,7 +113,7 @@
       <h1>Play your device</h1>
     </header>
 
-    <CompatibilityNotice v-if="midiAdvisory" :issue="midiAdvisory" advisory />
+    <CompatibilityNotice v-if="midiAdvisory" :key="$route.fullPath" :issue="midiAdvisory" advisory />
 
     <section class="sound-lab__controls" aria-label="Sound controls">
       <button v-if="!capabilities.midi" type="button" class="btn btn-dark" @click="toggleExample" :disabled="releaseBlocked || !capabilities.audio">{{ examplePlaying || audioStarting ? 'Stop example' : 'Listen to example' }}</button>
