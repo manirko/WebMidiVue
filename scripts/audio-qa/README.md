@@ -54,3 +54,55 @@ Its immutable run folder includes the source manifest, structured per-level
 audio/frame report and browser trace. Missing Garden renderer, failed audio
 oracles, uncaught errors, or retained host timers/frames/audio contexts fail
 the lane. This is isolated production-engine PCM, not running Play output.
+
+
+## Immutable hosted paths and maps — night11→12Oct2026
+
+Extend the existing quality/performance lanes; do not create another tester.
+Use an existing immutable beta artifact with its exact `release-evidence.json`
+and firmware update disabled. The published bdaaf113 runtime285 is the pinned
+baseline; a local dirty CSS proof is not a newly published release.
+
+```sh
+python3 -I scripts/run-biotron-qa.py --output /private/tmp/unique-hosted-attempt --browser --browsers webkit,firefox --timeout 180 --online-origin https://bdaaf113.biotron-settings-beta.pages.dev --artifact-root /private/tmp/biotron-layout-loading-20261011/dist-2852480 --journeys --only test:quality:browser,test:quality:browser@webkit,test:quality:browser@firefox,test:ui-performance,test:ui-performance@webkit,test:ui-performance@firefox
+```
+
+This opt-in lane never rebuilds its artifact. Inputs stay immutable during a run.
+The quality lane checks73 public bytes before actions; it validates creator.html's
+observed canonical redirect and rejects mismatched/cross-origin final bytes.
+Exactly `_headers` and `_worker.js` are hidden config, not HTTP payload.
+Fresh profiles block service workers and intercept non-GET/HEAD/OPTIONS: attempted
+POSTs are recorded and fulfilled locally503/aborted, never delivered. Native MIDI
+and getUserMedia are unavailable/test providers; no user profile is touched.
+The runner observes owned PID/start identities; uncertain cleanup stops later lanes.
+
+Six widths exercise actual Play/Settings/creator,16focus steps, Volume37 fresh-tab
+readback, one actual lazychunk failure/Retry, short recorded Round WAV/Listen/Save
+and confirmed Return. WebKit's full traversal uses Alt+Tab only after an explicit
+nativeHTML Tab-vs-Alt+Tab control; no OS preference changes. `journeys.json` and
+self-contained `audit.html` separate functional transitions from audit FAILs.
+They map executed test paths, not live people, heatmaps, demand or sales.
+Flat computed RGB/alpha contrast uses4.5 normal/3 large; gradients/group opacity
+remain unmeasured. Existing design targets44px primary controls/24px ranges are
+geometry budgets, not a blanket WCAG failure rule. `QUALITY_JOURNEY_FAULT=contrast`
+injects1:1 in test DOM only; strict exit1/retained firstfault is expected.
+
+Performance retains the existing20route/3synthetic-load final-gain score. It adds
+TTFB/DCL/load/resources and supported LCP candidate/CLS/longtasks. Unsupported APIs
+stay null/NOT MEASURABLE. One host run is not field CWV, a calibrated benchmark,
+a speed-up, perceptual audio or native hardware acceptance. Existing RMS/spectrum/
+timing/Delete/source caps must not be relaxed to obtain green.
+
+For direct `npm run test:biotron`, create the output parent before setting
+BIOTRON_QA_OUTPUT; the runner creates its own parent. Sound now derives a unique
+firstfault folder from QA_OUTPUT when explicit BIOTRON_TEST_EVIDENCE_DIR is absent;
+an explicit folder remains unchanged. Its existing page-error fault proves saved
+state before DOM/screenshot/cleanup. Timing failures remain first FAIL/UNKNOWN even
+if another attempt passes. Required full gate and selected repeats are separate.
+
+Current findings on online285: tinted-surface links below4.5; WebKit's diagnostic,
+Help and creator controls too small. Minimal existing CSS fixes are local/source
+only. Exact stylesheet control proved explicit height44 fixes native WebKit select
+while preserving its arrow. Main DSP/transport/FW/dependencies and source caps remain
+unchanged. Real phone/speaker/Windows/DAW/novice/aesthetic/customer/telemetry delivery/
+retention/BOOT/CapCut finished video are separate OPEN gates.

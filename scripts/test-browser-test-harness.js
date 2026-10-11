@@ -7,7 +7,7 @@ const path = require('node:path')
 const vm = require('node:vm')
 const {EventEmitter} = require('node:events')
 const {chromium} = require('playwright-core')
-const {chromePath, browserConfig, browserCall, qaOrigin, verifyOnlineIdentity, createStaticServer} = require('./browser-test-harness')
+const {chromePath, browserConfig, browserCall, qaOrigin, verifyOnlineIdentity, verifyOnlineArtifact, isolateOnlineWrites, createStaticServer} = require('./browser-test-harness')
 
 assert.throws(() => browserConfig('safari'), /Unknown BIOTRON_QA_BROWSER/,
   'Safari must never silently run Chrome or Playwright WebKit')
@@ -72,8 +72,65 @@ function readHttp(url, options = {}) {
 }
 
 ;(async () => {
+  const handlers = []
+  const writes = await isolateOnlineWrites({route: async (pattern, fn) => {assert.equal(pattern, '**/*'); handlers.push(fn)}})
+  const transmitted = [], blocked = []
+  for (const [method, url] of [['GET', 'https://fixture.test/js/app.js'], ['POST', 'https://fixture.test/api/telemetry'], ['PUT', 'https://other.test/private']]) {
+    await handlers[0]({request: () => ({method: () => method, url: () => url}),
+      fallback: () => transmitted.push(method), fulfill: options => blocked.push(options.status), abort: reason => blocked.push(reason)})
+  }
+  assert.deepEqual(transmitted, ['GET']); assert.deepEqual(blocked, [503, 'blockedbyclient'])
+  assert.equal(writes.blocked.length, 2)
+  const identityRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'biotron-online-identity-'))
+  try {
+    const payload = {'release-evidence.json': JSON.stringify({commit: 'a'.repeat(40), firmware_update_enabled: false}),
+      'creator.html': '<h1>Exact creator</h1>', '_headers': 'config', '_worker.js': 'config'}
+    for (const [name, body] of Object.entries(payload)) fs.writeFileSync(path.join(identityRoot, name), body)
+    const fakeContext = {request: {get: async url => {
+      const name = new URL(url).pathname.slice(1)
+      return {status: () => 200, body: async () => Buffer.from(payload[name]), url: () => name === 'creator.html' ? url.slice(0, -5) : url}
+    }}}
+    assert.equal((await verifyOnlineArtifact(fakeContext, 'https://fixture.test', identityRoot)).files.length, 2)
+    payload['creator.html'] += 'stale'; await assert.rejects(verifyOnlineArtifact(fakeContext, 'https://fixture.test', identityRoot), /artifact mismatch/)
+    payload['creator.html'] = '<h1>Exact creator</h1>'
+    const get = fakeContext.request.get
+    fakeContext.request.get = async url => ({...await get(url), url: () => 'https://other.test/creator'})
+    await assert.rejects(verifyOnlineArtifact(fakeContext, 'https://fixture.test', identityRoot), /artifact mismatch/)
+  } finally {fs.rmSync(identityRoot, {recursive: true, force: true})}
+  console.log('PASS hosted write isolation, exact bytes, canonical redirect and cross-origin negative controls')
+  const qualitySource = fs.readFileSync(path.join(__dirname, 'test-quality-browser.js'), 'utf8')
+  const colourStart = qualitySource.indexOf('      const rgb = '), colourEnd = qualitySource.indexOf('      const contrast = ', colourStart)
+  assert(colourStart > 0 && colourEnd > colourStart)
+  const colour = vm.runInNewContext(qualitySource.slice(colourStart, colourEnd) + ';\n({rgb,over,luminance})')
+  const ratio = (fg, bg) => {const values = [colour.luminance(fg), colour.luminance(bg)].sort((a, b) => b - a); return (values[0] + .05) / (values[1] + .05)}
+  assert.equal(ratio([0, 0, 0], [255, 255, 255]), 21)
+  assert.equal(ratio([255, 255, 255], [255, 255, 255]), 1)
+  assert.equal(colour.over([0, 0, 0, .5], [255, 255, 255])[0], 127.5)
+  assert(ratio([13,110,253], [237,240,233]) < 4.5)
+  assert(ratio([10,88,202], [237,240,233]) > 4.5)
+  console.log('PASS contrast math/alpha compositing; current pale-surface link fails and darker control passes')
+
 
   const soundSource = fs.readFileSync(path.join(__dirname, 'test-sound-browser.js'), 'utf8')
+  const evidenceStart = soundSource.indexOf('if (process.env.BIOTRON_QA_OUTPUT && !process.env.BIOTRON_TEST_EVIDENCE_DIR)')
+  const evidenceEnd = soundSource.indexOf('const cacheTraceEnabled', evidenceStart)
+  assert(evidenceStart > 0 && evidenceEnd > evidenceStart)
+  for (const explicit of [false, true]) {
+    const env = {BIOTRON_QA_OUTPUT: '/fixture', ...(explicit ? {BIOTRON_TEST_EVIDENCE_DIR:'/explicit'} : {})}, calls = []
+    vm.runInNewContext(soundSource.slice(evidenceStart, evidenceEnd), {process:{env}, path, console:{log:()=>{}},
+      fs:{mkdirSync:(...args)=>calls.push(args),mkdtempSync:prefix=>prefix+'unique'}})
+    assert.equal(env.BIOTRON_TEST_EVIDENCE_DIR, explicit ? '/explicit' : '/fixture/sound-browser-unique')
+    assert.equal(calls.length, explicit ? 0 : 1)
+  }
+  const renderStart = qualitySource.indexOf('function qualityJourneyHtml('), renderEnd = qualitySource.indexOf('// Additional coverage', renderStart)
+  const render = vm.runInNewContext(qualitySource.slice(renderStart, renderEnd) + ';qualityJourneyHtml')
+  const attack = '<img src=x onerror=alert(1)><script>evil()</script>'
+  const html = render({engine:attack,version:'1',status:'FAIL',origin:attack,capturedAt:'now',sourceSha256:'x',limits:'scope',
+    transitions:[{from:'x',to:'y',action:attack,result:'FAIL',wallMs:1}],findings:[],audits:[],notRun:[]})
+  assert(html.includes('<main ') && html.includes('</main>'))
+  assert(!html.includes('<img src=x') && !html.includes('<script>evil()'))
+  assert(html.includes('&lt;img') && html.includes('data-result="FAIL"'))
+  console.log('PASS direct gate evidence fallback/explicit preservation; generated report escapes untrusted text and retains main landmark')
   const traceStart = soundSource.indexOf('function installCacheLifecycleTrace(')
   const traceEnd = soundSource.indexOf('\nconst soakArgument', traceStart)
   const calls = [], events = {}, nativePromise = Promise.resolve([])

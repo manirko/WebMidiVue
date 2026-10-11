@@ -19,6 +19,9 @@ p.add_argument('--browsers', default='', help='Additional sequential full Biotro
 p.add_argument('--soak-seconds', type=int, default=0, help='Optional real-time soak, 1–28800 seconds; requires --browser')
 p.add_argument('--require-complete', action='store_true', help='Exit nonzero when required browser coverage is absent')
 p.add_argument('--only', default=None, help='Comma-separated planned lane names for an affected-only recheck; other lanes stay NOT RUN and required builds are retained')
+p.add_argument('--online-origin', help='Immutable beta HTTPS origin; --artifact-root and explicit --only required, no rebuild')
+p.add_argument('--artifact-root', type=pathlib.Path, help='Existing immutable compiled beta; never overwritten')
+p.add_argument('--journeys', action='store_true', help='Extended paths/contrast/focus in the existing quality lane')
 a = p.parse_args()
 if not math.isfinite(a.timeout) or a.timeout <= 0: p.error('--timeout must be finite and positive')
 if not 0 <= a.soak_seconds <= 28800: p.error('--soak-seconds must be from 0 to 28800')
@@ -49,6 +52,23 @@ for name in selected:
  if (script in portable_lanes and script != 'test:firmware:browser') or script in ('test:sound:soak', 'test:audio:realtime', 'test:audio:load', 'test:ui-performance'):
   required_builds.add('test:beta-build')
  if script == 'test:firmware:browser': required_builds.add('test:firmware:browser')
+if a.online_origin or a.artifact_root:
+ if not a.online_origin or not a.artifact_root or not a.browser or not a.only:
+  p.error('Online QA requires --online-origin, --artifact-root, --browser and explicit --only')
+ from urllib.parse import urlparse
+ import re
+ parsed = urlparse(a.online_origin)
+ if not (parsed.scheme == 'https' and re.fullmatch(r'[0-9a-f]{8}\.biotron-settings-beta\.pages\.dev', parsed.netloc) and parsed.path in ('', '/') and not parsed.query and not parsed.fragment):
+  p.error('Online origin must be an immutable beta HTTPS origin')
+ if any(matrix_lanes.get(name, (name,))[0] not in ('test:quality:browser', 'test:ui-performance') for name in selected):
+  p.error('Only isolated quality/UI-performance lanes are write-protected for hosted QA')
+ if any(matrix_lanes.get(name, (name,))[0] == 'test:quality:browser' for name in selected) and not a.journeys:
+  p.error('Hosted quality requires --journeys (SW-free/write-protected)')
+ a.artifact_root = a.artifact_root.resolve()
+ release = a.artifact_root/'release-evidence.json'
+ if not release.is_file() or json.loads(release.read_text()).get('firmware_update_enabled') is not False:
+  p.error('Pinned artifact with disabled firmware update required')
+ required_builds.clear()
 selected = set(selected) | required_builds if selected else set(TESTS)
 run_id = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+uuid.uuid4().hex[:8]
 a.output = a.output/run_id
@@ -61,7 +81,7 @@ for directory in ('src', 'public', 'beta-assets', 'scripts'):
 inputs.extend(path for pattern in ('package*.json', '*config*', '.env*') for path in ROOT.glob(pattern) if path.is_file())
 input_hashes = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(set(inputs))}
 (a.output/'inputs.json').write_text(json.dumps(input_hashes,indent=2))
-(a.output/'run.json').write_text(json.dumps(dict(run_id=run_id,head=head,working_tree=status,timeout=a.timeout,soak_seconds=a.soak_seconds,selected=[name for name in TESTS if name in selected],required_builds=sorted(required_builds)),indent=2))
+(a.output/'run.json').write_text(json.dumps(dict(run_id=run_id,head=head,working_tree=status,timeout=a.timeout,soak_seconds=a.soak_seconds,selected=[name for name in TESTS if name in selected],required_builds=sorted(required_builds),online_origin=a.online_origin,artifact_root=str(a.artifact_root) if a.artifact_root else None,journeys=a.journeys),indent=2))
 print('Evidence:', a.output, flush=True)
 def process_snapshot():
  """Only PID/parent/start/status metadata; never commands or user profile data."""
@@ -143,6 +163,8 @@ with (a.output/'tests.jsonl').open('x') as journal:
    lane_timeout = a.soak_seconds + max(a.timeout, 180)
   started = time.monotonic()
   lane_env = dict(os.environ, BIOTRON_QA_OUTPUT=str(a.output), BIOTRON_QA_BROWSER=browser)
+  if a.online_origin: lane_env.update(BIOTRON_QA_ORIGIN=a.online_origin, BIOTRON_QA_DIST_ROOT=str(a.artifact_root))
+  if a.journeys and script == 'test:quality:browser': lane_env['QUALITY_BROWSER_JOURNEYS'] = '1'
   if script == 'test:auditions:browser': lane_env['AUDITION_BROWSER_OUTPUT'] = str(a.output / name.replace(':', '-'))
   if script == 'test:quality:browser': lane_env['QUALITY_BROWSER_OUTPUT'] = str(a.output / name.replace(':', '-'))
   if script in ('test:sound:browser', 'test:pwa:browser', 'test:sound:soak'): lane_env['BIOTRON_TEST_EVIDENCE_DIR'] = str(a.output / name.replace(':', '-'))
@@ -151,8 +173,26 @@ with (a.output/'tests.jsonl').open('x') as journal:
   process = subprocess.Popen(command,cwd=ROOT,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,start_new_session=True,env=lane_env)
   timed_out = False
   interrupted = False
+  observed_owned = {}
+  inventory_ok = True
   try:
-   output, _ = process.communicate(timeout=lane_timeout)
+   if a.online_origin:
+    deadline = time.monotonic() + lane_timeout
+    while True:
+     try: observed_owned.update(owned_descendants(process.pid, process_snapshot()))
+     except (OSError, subprocess.SubprocessError): inventory_ok = False
+     remaining = deadline - time.monotonic()
+     if remaining <= 0: raise subprocess.TimeoutExpired(command, lane_timeout)
+     try: output, _ = process.communicate(timeout=min(.2, remaining)); break
+     except subprocess.TimeoutExpired: pass
+    try:
+     snapshot = process_snapshot()
+     survivors = [pid for pid, start in observed_owned.items() if pid in snapshot and snapshot[pid][1] == start and not snapshot[pid][2].startswith('Z')]
+     cleanup_confirmed = inventory_ok and not survivors
+     cleanup_reason = 'Observed owned process identities released' if cleanup_confirmed else 'Process inventory unavailable or observed child still alive'
+    except (OSError, subprocess.SubprocessError): cleanup_confirmed = False; cleanup_reason = 'Process inventory unavailable'
+    continuation_allowed = cleanup_confirmed
+   else: output, _ = process.communicate(timeout=lane_timeout)
   except (subprocess.TimeoutExpired, KeyboardInterrupt) as error:
    timed_out = isinstance(error, subprocess.TimeoutExpired)
    interrupted = isinstance(error, KeyboardInterrupt)
@@ -161,10 +201,10 @@ with (a.output/'tests.jsonl').open('x') as journal:
    output += '\n'+type(error).__name__+'\n'
   filename = name.replace(':','-')+'.log'
   (a.output/filename).write_text(output)
-  result = 'INTERRUPTED' if interrupted else 'TIMEOUT' if timed_out else 'INCONCLUSIVE' if script == 'test:ui-performance' and process.returncode == 2 else 'PASS' if process.returncode == 0 else 'FAIL'
+  result = 'CLEANUP NOTCONFIRMED' if cleanup_confirmed is False and not timed_out and not interrupted else 'INTERRUPTED' if interrupted else 'TIMEOUT' if timed_out else 'INCONCLUSIVE' if script == 'test:ui-performance' and process.returncode == 2 else 'PASS' if process.returncode == 0 else 'FAIL'
   record = dict(at=at,run_id=run_id,head=head,test=name,browser=browser,result=result,exit_code=process.returncode,command=command,cleanup_confirmed=cleanup_confirmed,cleanup_reason=cleanup_reason,timeout=lane_timeout,duration_seconds=round(time.monotonic()-started,3),evidence=filename,sha256=hashlib.sha256((a.output/filename).read_bytes()).hexdigest())
   journal.write(json.dumps(record)+'\n'); journal.flush()
-  print(name, record['result'], flush=True); failed |= interrupted or timed_out or process.returncode != 0
+  print(name, record['result'], flush=True); failed |= interrupted or timed_out or process.returncode != 0 or cleanup_confirmed is False
   counts[record['result']] = counts.get(record['result'], 0)+1
   if interrupted: break
 (a.output/'summary.json').write_text(json.dumps(dict(run_id=run_id,counts=counts,software_checks_passed=not failed,coverage_complete=not failed and not counts.get('NOT RUN') and sum(counts.values()) == len(TESTS)),indent=2))

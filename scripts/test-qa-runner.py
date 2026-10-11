@@ -165,6 +165,23 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  for arguments in [['--only',''],['--only',','],['--only','test:unknown'],['--only','test:sound,test:sound'],['--soak-seconds','600'],['--browser','--soak-seconds','-1'],['--browser','--soak-seconds','28801'],['--timeout','nan'],['--timeout','inf'],['--browsers','firefox'],['--browser','--browsers','firefox,firefox'],['--browser','--browsers','../unowned'],['--browser','--browsers','safari']]:
   invalid = subprocess.run([sys.executable,str(runner),'--output',str(output),*arguments],env=environment,capture_output=True,text=True,timeout=5)
   assert invalid.returncode==2 and 'error:' in invalid.stderr, arguments
+ artifact = root/'pinned-artifact'; artifact.mkdir()
+ (artifact/'release-evidence.json').write_text(json.dumps({'firmware_update_enabled':False}))
+ online_args=['--browser','--online-origin','https://bdaaf113.biotron-settings-beta.pages.dev','--artifact-root',str(artifact),'--journeys','--only','test:quality:browser']
+ npm.write_text('#!/bin/sh\necho "origin=$BIOTRON_QA_ORIGIN artifact=$BIOTRON_QA_DIST_ROOT journeys=$QUALITY_BROWSER_JOURNEYS"\n')
+ online=subprocess.run([sys.executable,str(runner),'--output',str(output),*online_args],env=environment,capture_output=True,text=True,timeout=10)
+ assert online.returncode==0,online.stdout+online.stderr
+ latest=max(output.iterdir(),key=lambda p:p.stat().st_mtime_ns)
+ rows=[json.loads(line) for line in (latest/'tests.jsonl').read_text().splitlines()]
+ passed=[row for row in rows if row['result']=='PASS']; assert len(passed)==1 and passed[0]['test']=='test:quality:browser'
+ assert passed[0]['cleanup_confirmed'] is True
+ assert json.loads((latest/'run.json').read_text())['required_builds']==[]
+ assert 'journeys=1' in (latest/passed[0]['evidence']).read_text()
+ for args in [online_args[:-2],online_args[:-1]+['test:sound:browser'],[x for x in online_args if x!='--journeys'],
+              [x.replace('https://bdaaf113.biotron-settings-beta.pages.dev','https://other.test') for x in online_args]]:
+  invalid=subprocess.run([sys.executable,str(runner),'--output',str(output),*args],env=environment,capture_output=True,text=True,timeout=5)
+  assert invalid.returncode==2 and 'error:' in invalid.stderr,args
+ print('Hosted runner: no rebuild, exact origin/artifact/lane guards, write-protected journey mode and observed cleanup verified')
  npm.write_text('#!/bin/sh\ncase "$2" in test:ui-performance) echo fixture-inconclusive; exit 2;; test:pwa:browser) echo "capture-dir=$BIOTRON_TEST_EVIDENCE_DIR"; exit 2;; *) echo fixture-pass;; esac\n')
  inconclusive = subprocess.run([sys.executable,str(runner),'--output',str(output),'--browser','--browsers','firefox,webkit'],env=environment,capture_output=True,text=True,timeout=15)
  assert inconclusive.returncode == 1, inconclusive.stdout+inconclusive.stderr

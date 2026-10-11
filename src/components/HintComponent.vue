@@ -17,7 +17,7 @@ export default {
 <style scoped>
 .hint { display: inline-block; max-width: 100%; vertical-align: middle; }
 .hint[open] { display: block; width: min(28rem, 100%); }
-summary { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: 50%; cursor: pointer; }
+summary { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 50%; cursor: pointer; }
 summary::-webkit-details-marker { display: none; }
 summary:hover, summary:focus-visible { background: #e9f0ff; outline: none; }
 img { width: 1rem; height: 1rem; filter: invert(35%) sepia(95%) saturate(3300%) hue-rotate(210deg) brightness(96%); }

@@ -2,7 +2,7 @@ const assert = require('assert')
 const path = require('path')
 const fs = require('node:fs')
 const {devices} = require('playwright-core')
-const {launchBrowser, contextOptions, qaOrigin, verifyOnlineIdentity, createStaticServer} = require('./browser-test-harness')
+const {launchBrowser, contextOptions, qaOrigin, verifyOnlineIdentity, verifyOnlineArtifact, isolateOnlineWrites, createStaticServer} = require('./browser-test-harness')
 
 const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
 const server = createStaticServer(root)
@@ -469,11 +469,279 @@ async function auditProfile(browser, origin, profile) {
   return `${profile.name}: initial CLS ${cls(result.cls)}, overflow ${result.documentOverflow}px; Play CLS ${cls(playResult.cls)}; ${expandedResults.length} opened states checked; ${hintCount} explanations checked`
 }
 
+function qualityJourneyHtml(report) {
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+  const rows = report.transitions.map((t, i) => `<tr data-result="${esc(t.result)}"><td>${i + 1}</td><td>${esc(t.from)} → ${esc(t.to)}</td><td>${esc(t.action)}</td><td>${esc(t.result)}</td><td>${esc(t.wallMs)}</td></tr>`).join('')
+  const findings = report.findings.map(f => `<details><summary>${esc(f.label)} · ${esc(f.category)} · FAIL</summary><pre>${esc(JSON.stringify(f, null, 2))}</pre></details>`).join('')
+  const surfaces = report.audits.map(a => `<tr><td>${esc(a.label)}</td><td>${a.viewport}</td><td>${a.overflow}</td><td>${a.contrast.length}</td><td>${a.unmeasured.length}</td><td>${esc(a.navigation?.ttfbMs)}</td></tr>`).join('')
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Biotron browser paths — Playtronica</title><style>
+  *{box-sizing:border-box}body{margin:0;background:#f7f8fb;color:#111;font:16px/1.5 system-ui,-apple-system,sans-serif}.container{max-width:1100px;margin:auto;padding:24px 16px}header{background:linear-gradient(135deg,#5c6bc0,#3949ab);color:white;padding:32px;border-radius:12px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:24px 0}.card,section{background:white;padding:24px;border-radius:12px;box-shadow:0 2px 12px #00000012}section{margin:24px 0}h1{font-size:28px;line-height:1.2}h2{font-size:20px}strong{font-size:24px}small{color:#444;overflow-wrap:anywhere}header small{color:white}button,summary{font:inherit;cursor:pointer;min-height:44px;padding:8px}button{background:white;color:#111;border:1px solid #687080;border-radius:8px}button:hover,summary:hover{background:#eef1ff}:focus-visible{outline:3px solid #3949ab;outline-offset:3px}.table-wrap{overflow-x:auto}table{border-collapse:collapse;min-width:680px;width:100%}th{background:#3949ab;color:white;text-align:left}td,th{padding:16px;border-bottom:1px solid #dde1e8}tr:nth-child(even){background:#f7f8fb}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.5 monospace}details{margin:16px 0}@media(max-width:768px){.stats{grid-template-columns:repeat(2,1fr)}header{padding:24px}}
+  </style><main class="container"><header><h1>Biotron · executed browser paths</h1><p>${esc(report.engine)} ${esc(report.version)} · ${esc(report.status)}</p><small>${esc(report.capturedAt)} · ${esc(report.origin)}</small></header>
+  <div class="stats"><div class="card"><strong>${report.transitions.length}</strong><p>Executed transitions</p></div><div class="card"><strong>${report.audits.length}</strong><p>Measured surfaces</p></div><div class="card"><strong>${report.findings.length}</strong><p>Unresolved audit groups</p></div><div class="card"><strong>${report.notRun.length}</strong><p>Explicitly outside scope</p></div></div>
+  <section><h2>Behaviour map</h2><p>Each arrow below comes from a completed fixture action. PASS applies to that action; separate accessibility FAILs still fail the lane. This is a test path, not analytics of real people.</p><button onclick="filter('all')">All transitions</button> <button onclick="filter('FAIL')">Failed transitions</button><div class="table-wrap"><table id="map"><thead><tr><th>#</th><th>From → To</th><th>Action</th><th>Result</th><th>Observed ms</th></tr></thead><tbody>${rows}</tbody></table></div></section>
+  <section><h2>Measured interface</h2><div class="table-wrap"><table><thead><tr><th>Surface</th><th>Width</th><th>Overflow px</th><th>Contrast samples</th><th>Unmeasured samples</th><th>Observed TTFB ms</th></tr></thead><tbody>${surfaces}</tbody></table></div><p>Gradient/image/group-opacity contrast needs visual review. Timing is one lab observation, not field CWV or a speed comparison.</p></section>
+  <section><h2>Findings</h2>${findings || '<p>No finding within these assertions.</p>'}<details><summary>First fault and cleanup</summary><pre>${esc(JSON.stringify({firstFault:report.firstFault,cleanup:report.cleanup,keyboardMethod:report.keyboardMethod},null,2))}</pre></details></section>
+  <section><h2>Limits and next evidence</h2><ul>${report.notRun.map(x=>`<li>${esc(x)}</li>`).join('')}</ul><p>${esc(report.limits)}</p><p>Next customer task: plant WAV → actual CapCut import/reopen/export → finished video. Automatic measurements do not select the aesthetic winner or establish demand.</p></section><footer><small>Generated from journeys.json · source SHA256 ${esc(report.sourceSha256)} · hosted bytes remain pinned.</small></footer></main><script>function filter(result){document.querySelectorAll('#map tbody tr').forEach(row=>{row.hidden=result!=='all'&&row.dataset.result!==result})}</script></html>`
+}
+
+// Additional coverage uses the existing quality lane and actual compiled pages.
+// Maps describe executed fixture paths, never population behaviour or demand.
+async function auditJourneys(browser, origin) {
+  assert(['none', 'contrast'].includes(process.env.QUALITY_JOURNEY_FAULT || 'none'), 'Unknown journey fault')
+  const crypto = require('node:crypto')
+  const report = {status: 'RUNNING', capturedAt: new Date().toISOString(), origin,
+    engine: browser.browserType().name(), version: browser.version(), transitions: [], audits: [], errors: [], findings: [],
+    sourceSha256: crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),
+    limits: 'Existing5s UI and CLS0.1; contrast4.5 normal/3 large. Timing observations are not field CWV.',
+    notRun: ['Native MIDI/speaker/phone', 'CapCut/final video', 'Novice discovery/aesthetic preference',
+      'Sales/profit', 'Microphone/camera', 'Customer release', 'Telemetry delivery/retention', 'All possible state combinations']}
+  const write = () => fs.writeFileSync(path.join(artifacts, 'journeys.json'), JSON.stringify(report, null, 2))
+  let context, page, state = 'start'
+  const tabKey = browser.browserType().name() === 'webkit' ? 'Alt+Tab' : 'Tab'
+  report.keyboardMethod = {key: tabKey, scope: 'Playwright WebKit uses Option/Alt+Tab for full control traversal; no OS setting change'}
+  const step = async (action, next, fn) => {
+    const from = state, began = Date.now()
+    try { await fn(); report.transitions.push({from, action, to: next, result: 'PASS', wallMs: Date.now() - began}); state = next; write() }
+    catch (error) {
+      report.status = 'FAIL'; report.firstFault ||= {from, action, intended: next, error: String(error), at: new Date().toISOString()}
+      report.transitions.push({from, action, to: next, result: 'FAIL', wallMs: Date.now() - began}); write()
+      throw error
+    }
+  }
+  const surface = async label => {
+    if (process.env.QUALITY_JOURNEY_FAULT === 'contrast' && label === 'Play1440')
+      await page.locator('h1').evaluate(e => {e.style.color = 'rgb(245,245,245)'; e.style.backgroundColor = 'rgb(245,245,245)'})
+    const reading = await page.evaluate(() => {
+      const visible = e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden' &&
+        !e.closest('[hidden],details:not([open]) > :not(summary)')
+      const rgb = value => (value.match(/[\d.]+/g) || []).map(Number)
+      const over = (front, back) => [...front.slice(0, 3).map((v, i) => v * (front[3] ?? 1) + back[i] * (1 - (front[3] ?? 1))), 1]
+      const luminance = c => c.slice(0, 3).map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4)
+        .reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0)
+      const contrast = [], unmeasured = []
+      for (const e of document.querySelectorAll('h1,h2,h3,p,small,label,summary,button,a,select,textarea,span')) {
+        if (!visible(e) || e.matches(':disabled') || ![...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) continue
+        let ancestors = [], node = e
+        while (node) {ancestors.unshift(node); node = node.parentElement}
+        if (ancestors.some(a => getComputedStyle(a).backgroundImage !== 'none' || +getComputedStyle(a).opacity !== 1)) {
+          unmeasured.push({text: e.textContent.trim().slice(0, 80), reason: 'Gradient/image/group opacity needs visual review'}); continue
+        }
+        let bg = [255, 255, 255, 1]
+        for (const a of ancestors) bg = over(rgb(getComputedStyle(a).backgroundColor), bg)
+        const s = getComputedStyle(e), fg = over(rgb(s.color), bg), l = [luminance(fg), luminance(bg)].sort((a, b) => b - a)
+        const ratio = (l[0] + .05) / (l[1] + .05), size = parseFloat(s.fontSize)
+        const minimum = size >= 24 || (size >= 18.66 && +s.fontWeight >= 700) ? 3 : 4.5
+        contrast.push({text: e.textContent.trim().slice(0, 80), ratio, minimum, foreground: s.color, background: bg.slice(0, 3)})
+      }
+      const controls = [...document.querySelectorAll('input:not([type=hidden]),select,textarea')].filter(visible)
+      const unnamed = controls.filter(e => !e.getAttribute('aria-label') && !e.getAttribute('aria-labelledby') && !e.labels?.length).map(e => e.outerHTML.slice(0, 120))
+      const n = performance.getEntriesByType('navigation')[0]
+      return {url: location.href, viewport: innerWidth, overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        headings: [...document.querySelectorAll('h1,h2,h3')].filter(visible).map(e => ({level: +e.tagName.slice(1), text: e.textContent})),
+        lang: document.documentElement.lang, mainCount: document.querySelectorAll('main').length, unnamed,
+        contrast, unmeasured,
+        primaryTargets: [...document.querySelectorAll('button:not(:disabled),summary,select,a.save')].filter(visible).map(e => {
+          const r = e.getBoundingClientRect(); return {text: e.textContent.trim().slice(0,80), width: r.width, height: r.height}
+        }),
+        ranges: [...document.querySelectorAll('input[type=range]')].filter(visible).map(e => ({id:e.id,height:e.getBoundingClientRect().height})),
+        reducedMotion: matchMedia('(prefers-reduced-motion:reduce)').matches,
+        navigation: n && {ttfbMs: n.responseStart - n.requestStart, domContentLoadedMs: n.domContentLoadedEventEnd,
+          loadMs: n.loadEventEnd, transferSize: n.transferSize},
+        paint: performance.getEntriesByType('paint').map(e => ({name: e.name, ms: e.startTime}))}
+    })
+    reading.label = label; report.audits.push(reading); write()
+    assert(reading.overflow <= 1, `${label}: horizontal overflow`)
+    assert.equal(reading.lang, 'en'); assert.equal(reading.mainCount, 1)
+    assert.equal(reading.headings.filter(h => h.level === 1).length, 1)
+    assert.deepEqual(reading.unnamed, []); assert(reading.reducedMotion)
+    const failed = reading.contrast.filter(c => c.ratio < c.minimum)
+    const smallTargets = reading.primaryTargets.filter(t => t.width < 44 || t.height < 44)
+    const smallRanges = reading.ranges.filter(t => t.height < 24)
+    if (smallTargets.length || smallRanges.length) {
+      report.findings.push({label, category:'touch-target',result:'FAIL',smallTargets,smallRanges})
+      if (!report.firstFault) {
+        report.firstFault = {from:state,action:label,error:'Measured control target below existing44/24px budget',at:new Date().toISOString()};write()
+        await page.locator('body').innerText({timeout:1000}).then(text=>fs.writeFileSync(path.join(artifacts,'journey-first-dom.txt'),text)).catch(()=>{})
+        await page.screenshot({path:path.join(artifacts,'journey-first-fault.png'),timeout:1000}).catch(()=>{})
+      }
+    }
+    if (failed.length) {
+      report.findings.push({label, category: 'contrast', result: 'FAIL', controls: failed})
+      if (!report.firstFault) {
+        report.firstFault = {from: state, action: label, error: 'Measured text contrast below threshold', at: new Date().toISOString()}
+        write()
+        await page.screenshot({path: path.join(artifacts, 'journey-first-fault.png'), timeout: 1000}).catch(() => {})
+      }
+      write()
+    }
+  }
+  try {
+    for (const width of [1440, 320, 375, 414, 768, 1024]) {
+      state = `fresh-${width}`
+      context = await browser.newContext(contextOptions({viewport: {width, height: 900}, hasTouch: width < 500,
+        reducedMotion: 'reduce', serviceWorkers: 'block'}, browser))
+      context.setDefaultTimeout(5000)
+      report.writes ||= []; const writes = await isolateOnlineWrites(context); report.writes.push(writes)
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'requestMIDIAccess', {configurable: true, value: undefined})
+        Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {writeText: async () => {throw Error('Clipboard fault control')}}})
+        if (navigator.mediaDevices) navigator.mediaDevices.getUserMedia = async () => {throw Error('Native camera/microphone forbidden in this lane')}
+      })
+      if (process.env.BIOTRON_QA_ORIGIN !== undefined && width === 1440) {
+        report.identity = await verifyOnlineArtifact(context, origin, root); write()
+      }
+      if (width === 1440 && tabKey === 'Alt+Tab') {
+        const control = await context.newPage(); report.keyboardControl = {}
+        for (const key of ['Tab', 'Alt+Tab']) {
+          await control.setContent('<a href="#a">Link</a><button>Button</button><input type="range"><select><option>Choice</option></select>')
+          const tags = []
+          for (let i = 0; i < 6; i++) {await control.keyboard.press(key); tags.push(await control.evaluate(() => document.activeElement.tagName))}
+          report.keyboardControl[key] = tags
+        }
+        write(); await control.close()
+        assert(!report.keyboardControl.Tab.includes('BUTTON') && report.keyboardControl['Alt+Tab'].includes('BUTTON') &&
+          report.keyboardControl['Alt+Tab'].includes('A'), 'WebKit keyboard policy changed; do not silently switch traversal')
+      }
+      page = await context.newPage(); currentPage = page; currentProfile = `journey-${width}`
+      page.on('pageerror', error => report.errors.push({url: page.url(), error: error.message}))
+      await step('cold Play', `play-${width}`, async () => {
+        await page.goto(origin + '/#/biotron/play?sound=1', {waitUntil: 'networkidle'})
+        await page.locator('.sound-lab:visible').waitFor(); await surface(`Play${width}`)
+      })
+      if (width === 1440) {
+        const focus = []
+        await step('keyboard Tab traversal', 'keyboard-focus', async () => {
+          for (let i = 0; i < 16; i++) {
+            await page.keyboard.press(tabKey)
+            focus.push(await page.evaluate(() => {
+              const e = document.activeElement, s = getComputedStyle(e), r = e.getBoundingClientRect()
+              return {tag: e.tagName, text: (e.getAttribute('aria-label') || e.textContent).trim().slice(0, 80),
+                focusVisible: e.matches(':focus-visible'), outline: s.outlineStyle, outlineWidth: parseFloat(s.outlineWidth),
+                boxShadow: s.boxShadow, height: r.height, width: r.width}
+            }))
+          }
+          report.focus = focus; write()
+          assert(focus.every(f => f.height > 0 && f.width > 0 && f.focusVisible), 'Tab focused an invisible/non-visible control')
+          assert(focus.every(f => f.outlineWidth > 0 && f.outline !== 'none' || f.boxShadow !== 'none'), 'Keyboard focus has no measured outline/shadow')
+        })
+        await step('set browser Volume37', 'volume37', async () => {
+          await page.locator('#biotron-play-volume').focus()
+          await page.keyboard.press('Home')
+          for (let i = 0; i < 37; i++) await page.keyboard.press('ArrowRight')
+          assert.equal(await page.locator('.sound-lab').getAttribute('data-volume'), '37')
+        })
+        const fresh = await context.newPage()
+        await step('fresh second tab readback', 'two-tabs37', async () => {
+          await fresh.goto(origin + '/#/biotron/play?sound=1', {waitUntil: 'networkidle'})
+          await fresh.locator('.sound-lab[data-volume="37"]').waitFor()
+        })
+        await fresh.close()
+      }
+      await step('Settings navigation', `settings-${width}`, async () => {
+        await page.getByRole('navigation', {name: 'Biotron tasks'}).getByRole('link', {name: 'Settings', exact: true}).click()
+        await page.getByRole('heading', {name: 'Settings', level: 2}).waitFor(); await surface(`Settings${width}`)
+      })
+      await step('return Play', `return-${width}`, async () => {
+        await page.getByRole('navigation', {name: 'Biotron tasks'}).getByRole('link', {name: 'Play', exact: true}).click()
+        await page.getByRole('heading', {name: 'Plant music', level: 1}).waitFor()
+      })
+      await step('creator cold load', `creator-${width}`, async () => {
+        await page.goto(origin + '/creator.html', {waitUntil: 'networkidle'})
+        await page.waitForFunction(() => document.querySelector('#sound')?.options.length > 0); await surface(`Creator${width}`)
+      })
+      if (width === 1440) {
+        await step('record example and finish', 'take-kept', async () => {
+          await page.locator('#record-audio').click(); await page.getByText('Recording sound. Play the example, keyboard or connected Biotron. Maximum 30 seconds.', {exact: true}).waitFor()
+          await page.locator('#example').click(); await page.waitForTimeout(1500); await page.locator('#example').click()
+          await page.locator('#stop').click(); await page.locator('.take').waitFor()
+          const take = await page.evaluate(async () => {
+            const t = window.__CreatorPrototype.takes[0], bytes = new Uint8Array(await t.file.arrayBuffer())
+            let binary = ''; for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192))
+            return {name: t.file.name, seconds: t.seconds, bytes: btoa(binary)}
+          })
+          const bytes = Buffer.from(take.bytes, 'base64'); delete take.bytes
+          fs.writeFileSync(path.join(artifacts, 'online-example.wav'), bytes)
+          const data = bytes.subarray(44), samples = Array.from({length: data.length / 4}, (_, i) => data.readFloatLE(i * 4))
+          const rms = Math.sqrt(samples.reduce((sum, v) => sum + v * v, 0) / samples.length)
+          report.take = {...take, bytes: bytes.length, sha256: crypto.createHash('sha256').update(bytes).digest('hex'), rms}; write()
+          assert.equal(bytes.toString('ascii', 0, 4), 'RIFF'); assert(samples.every(Number.isFinite)); assert(rms > .001)
+          assert(samples.every(v => Math.abs(v) < 1), 'Online take clipped')
+        })
+        await step('listen to kept file', 'file-reopened', async () => {
+          await page.locator('.take audio').evaluate(async audio => {await audio.play()})
+          await page.waitForFunction(() => document.querySelector('.take audio').currentTime > .1)
+          await page.locator('.take audio').evaluate(audio => audio.pause())
+        })
+        await step('Return keeps file pending decision', 'leave-warning', async () => {
+          await page.locator('#return').click(); await page.locator('#leave-confirm:visible').waitFor()
+          assert.equal(await page.locator('.take').count(), 1); assert(new URL(page.url()).pathname.includes('creator'))
+        })
+        await step('Save before explicit leave', 'saved', async () => {
+          const downloadPromise = page.waitForEvent('download'); await page.getByRole('link', {name: 'Save sound', exact: true}).click()
+          const download = await downloadPromise, destination = path.join(artifacts, 'downloaded-example.wav')
+          await download.saveAs(destination)
+          assert(fs.readFileSync(destination).equals(fs.readFileSync(path.join(artifacts, 'online-example.wav'))))
+        })
+        await step('confirmed return', 'returned-main', async () => {
+          await page.locator('#leave-confirm').click(); await page.waitForURL(/#\/biotron\/play/); await page.locator('.sound-lab:visible').waitFor()
+        })
+      } else await step('empty return', `returned-${width}`, async () => {
+        await page.locator('#return').click(); await page.waitForURL(/#\/biotron\/play/)
+      })
+      assert.deepEqual(report.errors, [])
+      if (process.env.BIOTRON_QA_ORIGIN !== undefined) report.identityAfter = await verifyOnlineIdentity(context, origin, root)
+      await context.close(); context = null; report.cleanup = 'CONFIRMED: isolated contexts closed'; write()
+    }
+    state = 'fresh-resource-control'
+    context = await browser.newContext({viewport: {width: 1024, height: 900}, serviceWorkers: 'block'})
+    context.setDefaultTimeout(5000)
+    report.writes.push(await isolateOnlineWrites(context))
+    await context.addInitScript(() => Object.defineProperty(navigator, 'requestMIDIAccess', {configurable: true, value: undefined}))
+    let resourceAttempts = 0
+    await context.route('**/js/sound-lab.*.js', route => ++resourceAttempts === 1 ? route.abort('failed') : route.fallback())
+    page = await context.newPage(); currentPage = page
+    report.resourceErrors = []; page.on('pageerror', error => report.resourceErrors.push(error.message))
+    await step('one Sound chunk network failure', 'retry-offered', async () => {
+      await page.goto(origin + '/#/biotron', {waitUntil: 'domcontentloaded'})
+      await page.getByRole('button', {name: 'Retry sounds', exact: true}).waitFor()
+      assert(await page.locator('.biotron-settings-beta').isVisible(), 'Sound failure hides Settings')
+      assert.equal(resourceAttempts, 1)
+    })
+    await step('Retry sounds actual reload', 'sound-recovered', async () => {
+      await page.getByRole('button', {name: 'Retry sounds', exact: true}).click()
+      await page.locator('.sound-lab:visible').waitFor(); assert.equal(resourceAttempts, 2)
+      assert(await page.locator('.biotron-settings-beta').isVisible())
+    })
+    assert.deepEqual(report.resourceErrors, [], 'Lazy resource failure left an unhandled browser error')
+    report.resourceFault = {attempts: resourceAttempts, result: 'PASS', scope: 'One deliberately aborted lazy Sound chunk and actual Retry; not arbitrary network failure recovery'}
+    await context.close(); context = null; report.cleanup = 'CONFIRMED: all isolated contexts closed'; write()
+    assert.deepEqual(report.findings, [], 'Accessibility findings remain FAIL; functional transitions do not waive them')
+    report.status = 'PASS_SCOPED'; write()
+  } catch (error) {
+    report.status = 'FAIL'; report.firstFault ||= {from: state, error: String(error), at: new Date().toISOString()}; write()
+    if (page && !page.isClosed() && !fs.existsSync(path.join(artifacts,'journey-first-fault.png'))) {
+      await page.locator('body').innerText({timeout: 1000}).then(text => fs.writeFileSync(path.join(artifacts, 'journey-first-dom.txt'), text)).catch(() => {})
+      await page.screenshot({path: path.join(artifacts, 'journey-first-fault.png'), timeout: 1000}).catch(() => {})
+    }
+    throw error
+  } finally {
+    if (context) {
+      await context.close().then(() => {report.cleanup = 'CONFIRMED: failed isolated context closed'}, error => {
+        report.cleanup = 'NOTCONFIRMED: ' + error; report.status = 'FAIL'
+      })
+    }
+    write()
+    fs.writeFileSync(path.join(artifacts, 'audit.html'), qualityJourneyHtml(report))
+  }
+}
+
 ;(async () => {
+  if (process.env.BIOTRON_QA_ORIGIN !== undefined) assert.equal(process.env.QUALITY_BROWSER_JOURNEYS, '1', 'Hosted quality requires SW-free/write-protected journeys mode')
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const origin = qaOrigin(server)
   const browser = await launchBrowser()
   try {
+    if (process.env.QUALITY_BROWSER_JOURNEYS === '1') return await auditJourneys(browser, origin)
     const results = []
     for (const profile of profiles) {
       results.push(await auditProfile(browser, origin, profile))

@@ -13,7 +13,7 @@ const {pathToFileURL} = require('node:url')
 
 const repo = path.resolve(process.argv[2] || path.join(__dirname, '..'))
 const localRequire = createRequire(path.join(repo, 'package.json'))
-const {launchBrowser, browserCall, qaOrigin, verifyOnlineIdentity, createStaticServer} = localRequire(path.join(repo, 'scripts/browser-test-harness.js'))
+const {launchBrowser, browserCall, qaOrigin, verifyOnlineIdentity, isolateOnlineWrites, createStaticServer} = localRequire(path.join(repo, 'scripts/browser-test-harness.js'))
 const outputParent = process.env.BIOTRON_QA_OUTPUT || process.argv[3] || os.tmpdir()
 const fault = process.env.UI_PERF_FAULT || 'none'
 const quality = process.env.UI_PERF_QUALITY || 'safe'
@@ -61,6 +61,7 @@ async function cleanup() {
     q.phase = null
     cancelAnimationFrame(q.raf)
     q.observer?.disconnect()
+    for (const observer of q.startupObservers || []) observer.disconnect()
     if (q.tap) {
       q.tap.port.postMessage({type: 'stop'})
       try { q.output?.disconnect(q.tap) } catch { /* already released */ }
@@ -121,6 +122,7 @@ async function cleanup() {
   context = await browser.newContext({viewport: {width: 1366, height: 900}, serviceWorkers: 'block'})
   context.setDefaultTimeout(5000)
   if (process.env.BIOTRON_QA_ORIGIN !== undefined) {
+    report.onlineWrites = await isolateOnlineWrites(context)
     report.phase = 'remote-identity'
     report.onlineIdentityBefore = await verifyOnlineIdentity(context, origin, dist)
   }
@@ -128,7 +130,20 @@ async function cleanup() {
   await context.addInitScript(injectedFault => {
     const q = window.__uiPerf = {contexts: [], output: null, gesture: null, gardenAt: null, gardenWindow: null, gardenMessages: 0,
       phase: null, phaseId: 0, fault: injectedFault, midiCalls: [], measurementPhase: 'cold-play',
-      intervals: new Set(), blobs: new Set(), longtasksSupported: false}
+      intervals: new Set(), blobs: new Set(), longtasksSupported: false, startupObservers: [], startup: {lcpMs: null, cls: null, longtasks: []}}
+    const supported = PerformanceObserver.supportedEntryTypes || []
+    for (const type of ['largest-contentful-paint', 'layout-shift', 'longtask']) {
+      if (!supported.includes(type)) continue
+      if (type === 'layout-shift') q.startup.cls = 0
+      const observer = new PerformanceObserver(list => {
+        for (const entry of list.getEntries()) {
+          if (type === 'largest-contentful-paint') q.startup.lcpMs = entry.startTime
+          if (type === 'layout-shift' && !entry.hadRecentInput) q.startup.cls += entry.value
+          if (type === 'longtask') q.startup.longtasks.push({start: entry.startTime, duration: entry.duration})
+        }
+      })
+      observer.observe({type, buffered: true}); q.startupObservers.push(observer)
+    }
     localStorage.setItem('playtronica-sound-volume-v1', '70')
     localStorage.removeItem('biotron-sound-experiment-v1')
     const connect = AudioNode.prototype.connect
@@ -186,6 +201,14 @@ async function cleanup() {
   await page.goto(`${origin}/#/biotron/play`)
   await page.locator('.sound-lab:visible').waitFor()
   report.coldNavigationWallMs = Date.now() - coldStarted
+  report.navigation = await page.evaluate(() => {
+    const n = performance.getEntriesByType('navigation')[0]
+    return n ? {ttfbMs: n.responseStart - n.requestStart, domContentLoadedMs: n.domContentLoadedEventEnd,
+      loadMs: n.loadEventEnd, transferSize: n.transferSize, startup: window.__uiPerf.startup,
+      resources: performance.getEntriesByType('resource').map(r => ({name: r.name, duration: r.duration,
+        transferSize: r.transferSize, decodedBodySize: r.decodedBodySize}))} : null
+  })
+  if (report.navigation?.startup.cls !== null) assert(report.navigation.startup.cls <= .1, 'Cold load exceeds existing CLS0.1 budget')
   for (let index = 0; index < 20; index++) {
     const destination = index % 2 === 0 ? 'Settings' : 'Play'
     report.phase = 'route-transition'; report.routeAttempt = {sequence: index + 1, destination}; save()

@@ -8,6 +8,13 @@ const {devices} = require('playwright-core')
 const {browserConfig, browserCall, launchBrowser, contextOptions, qaOrigin, verifyOnlineIdentity, createStaticServer} = require('./browser-test-harness')
 
 const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
+// Direct npm gates can set QA_OUTPUT without the runner's per-lane evidence env.
+// Preserve firstfault before DOM/capture/cleanup in that case too.
+if (process.env.BIOTRON_QA_OUTPUT && !process.env.BIOTRON_TEST_EVIDENCE_DIR) {
+  fs.mkdirSync(process.env.BIOTRON_QA_OUTPUT, {recursive: true})
+  process.env.BIOTRON_TEST_EVIDENCE_DIR = fs.mkdtempSync(path.join(process.env.BIOTRON_QA_OUTPUT, 'sound-browser-'))
+  console.log('Sound evidence:', process.env.BIOTRON_TEST_EVIDENCE_DIR)
+}
 const cacheTraceEnabled = process.argv.includes('--cache-lifecycle-trace')
 const cacheMainBypass = process.argv.includes('--cache-main-bypass')
 const workerControl = process.argv.find(value => value.startsWith('--service-workers='))?.split('=')[1] || 'allow'

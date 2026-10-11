@@ -1,5 +1,6 @@
 const fs = require('fs')
 const http = require('http')
+const crypto = require('node:crypto')
 const path = require('path')
 
 const mime = {
@@ -126,6 +127,44 @@ async function verifyOnlineIdentity(context, origin, root) {
   return {origin, commit: release.commit, buildId: release.build_id, byteIdenticalMetadata: true}
 }
 
+// Install before navigation in SW-free isolated contexts. Test POSTs never
+// reach the hosted preview; the recorded attempts are not delivery evidence.
+async function isolateOnlineWrites(context) {
+  const evidence = {blocked: [], policy: 'GET/HEAD/OPTIONS only; telemetry POST receives local503'}
+  await context.route('**/*', route => {
+    const request = route.request(), method = request.method()
+    if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return route.fallback()
+    evidence.blocked.push({method, url: request.url()})
+    if (new URL(request.url()).pathname === '/api/telemetry')
+      return route.fulfill({status: 503, contentType: 'application/json', body: '{"error":"isolated_test_no_remote_write"}'})
+    return route.abort('blockedbyclient')
+  })
+  return evidence
+}
+
+// Cloudflare hides these config files and canonicalises .html. All other
+// emitted bytes must match; a first successful HTTP read is not a runtime test.
+async function verifyOnlineArtifact(context, origin, root) {
+  const identity = await verifyOnlineIdentity(context, origin, root)
+  const inventory = directory => fs.readdirSync(directory, {withFileTypes: true})
+    .flatMap(entry => entry.isDirectory() ? inventory(path.join(directory, entry.name)) : [path.join(directory, entry.name)])
+  const readings = []
+  for (const file of inventory(root).sort()) {
+    const name = path.relative(root, file).split(path.sep).join('/')
+    if (['_headers', '_worker.js'].includes(name)) continue
+    const response = await context.request.get(origin + '/' + name, {timeout: 15000, maxRedirects: 3})
+    const expected = fs.readFileSync(file), actual = await response.body()
+    const final = new URL(response.url()), requested = '/' + name
+    const permittedPath = name.endsWith('.html') && name !== 'index.html' ? requested.slice(0, -5) : requested
+    if (response.status() !== 200 || final.origin !== origin ||
+        ![requested, permittedPath, ...(name === 'index.html' ? ['/'] : [])].includes(final.pathname) || !actual.equals(expected))
+      throw new Error(`Online artifact mismatch: ${name} -> ${response.status()} ${response.url()}`)
+    readings.push({file: name, url: response.url(), bytes: actual.length,
+      sha256: crypto.createHash('sha256').update(actual).digest('hex')})
+  }
+  return {...identity, files: readings, excludedConfigFiles: ['_headers', '_worker.js']}
+}
+
 function createStaticServer(root, options = {}) {
   return http.createServer((request, response) => {
     const pathname = new URL(request.url, 'http://127.0.0.1').pathname
@@ -152,4 +191,4 @@ function createStaticServer(root, options = {}) {
   })
 }
 
-module.exports = {chromePath, browserNames, browserConfig, browserCall, launchBrowser, launchPersistentContext, contextOptions, qaOrigin, verifyOnlineIdentity, createStaticServer}
+module.exports = {chromePath, browserNames, browserConfig, browserCall, launchBrowser, launchPersistentContext, contextOptions, qaOrigin, verifyOnlineIdentity, verifyOnlineArtifact, isolateOnlineWrites, createStaticServer}
