@@ -13,6 +13,8 @@ if (['-12', '0', '12'].includes(settings.get('register'))) $('register').value =
 if (settings.has('volume') && /^\d{1,3}$/.test(settings.get('volume')) && +settings.get('volume') <= 100) $('volume').value = settings.get('volume')
 
 let engine, busy = false, capture, midi, inputs = [], timers = [], pressed = new Map(), lastPerformance = [], takes = [], takeNumber = 0, workletContext, startAbort, finishRequested = false, disconnectRequested = false
+let generation = 0, pageActive = true, runFinished = Promise.resolve(), hiddenCleanup = Promise.resolve(), lostCurrentTake = false
+const opening = new Set()
 const status = text => { $('status').textContent = text }
 const currentSound = () => sounds.find(sound => sound.id === $('sound').value)
 const guard = (promise, label, ms = 10000, signal) => new Promise((resolve, reject) => {
@@ -24,6 +26,7 @@ const guard = (promise, label, ms = 10000, signal) => new Promise((resolve, reje
 })
 function update() {
   for (const id of ['sound', 'register', 'record-audio', 'connect']) $(id).disabled = busy || Boolean(capture)
+  $('connect').disabled ||= opening.size > 0
   $('repeat').disabled = busy || !lastPerformance.length
   $('stop').disabled = !startAbort && (!capture || busy)
   $('stop').textContent = startAbort ? 'Cancel start' : 'Stop recording'
@@ -33,11 +36,15 @@ function update() {
   if (!navigator.requestMIDIAccess) { $('connect').disabled = true; $('connection').textContent = 'This browser cannot receive Biotron notes. The example and recording still work. Use a MIDI-capable browser to play the plant.' }
 }
 async function run(action) {
-  if (busy) return
+  if (busy || !pageActive) return
+  const started = generation
+  let done; runFinished = new Promise(resolve => { done = resolve })
   busy = true; update()
   try { await action() }
-  catch (error) { status(error.message || String(error)) }
+  catch (error) { if (started === generation && pageActive) status(error.message || String(error)) }
   finally {
+    done()
+    if (started !== generation || !pageActive) return
     busy = false; update()
     if (disconnectRequested) { disconnectRequested = false; finishRequested = false; void run(async () => { await finishAndRelease(); status('Biotron disconnected. Completed takes are kept.') }) }
     else if (finishRequested) { finishRequested = false; if (capture) void run(finish) }
@@ -46,8 +53,9 @@ async function run(action) {
 function requestFinish() { if (busy) finishRequested = true; else void run(finish) }
 async function ready(signal) {
   if (!engine || engine.stopped) engine = createRealtimeElementarySynth({preset: currentSound().preset, volume: +$('volume').value})
-  try { await guard(engine.resume(), 'Sound resume', 10000, signal); await guard(engine.ensureReady(), 'Sound start', 10000, signal) }
-  catch (error) { try { await guard(engine.stop(), 'Sound cleanup') } catch (cleanup) { error.cleanupFailure = String(cleanup) }; throw error }
+  const owned = engine
+  try { await guard(owned.resume(), 'Sound resume', 10000, signal); await guard(owned.ensureReady(), 'Sound start', 10000, signal) }
+  catch (error) { try { await guard(owned.stop(), 'Sound cleanup') } catch (cleanup) { error.cleanupFailure = String(cleanup) }; throw error }
 }
 function stopNotes() {
   if (engine?.activeVoiceCount) send({type: 'panic'})
@@ -112,14 +120,24 @@ async function finishAndRelease() {
   finally { try { await releaseMidi() } catch (error) { if (primary) primary.cleanupFailure = String(error); else throw error } }
 }
 $('connect').onclick = () => run(async () => {
-  await ready()
-  const access = await guard(navigator.requestMIDIAccess({sysex: false}), 'MIDI permission', 30000)
-  const available = [...access.inputs.values()].filter(input => /biotron/i.test(input.name || ''))
-  if (!available.length) throw Error('Biotron not found. Connect USB, then try again.')
-  midi = access; inputs = available
+  startAbort = new AbortController(); const signal = startAbort.signal; update()
   try {
-    for (const input of inputs) {
-      await guard(input.open(), 'MIDI input')
+    await ready(signal)
+    const access = await guard(navigator.requestMIDIAccess({sysex: false}), 'MIDI permission', 30000, signal)
+    const available = [...access.inputs.values()].filter(input => /biotron/i.test(input.name || ''))
+    if (!available.length) throw Error('Biotron not found. Connect USB, then try again.')
+    midi = access; inputs = available
+    for (const input of available) {
+      const pending = input.open(); opening.add(input)
+      // Native open cannot be aborted. Keep reconnect disabled until its late close.
+      void Promise.resolve(pending).then(async () => {
+        if (signal.aborted) await guard(input.close(), 'Cancelled MIDI release')
+      }).catch(error => {
+        if (!signal.aborted) return
+        if (!inputs.includes(input)) inputs.push(input)
+        midi ||= access; $('connection').textContent = error.message + '. Try Release Biotron.'
+      }).finally(() => { opening.delete(input); update() })
+      await guard(pending, 'MIDI input', 10000, signal)
       input.onmidimessage = event => {
         const message = parseMidiMessage(event.data)
         const type = {'note-on': 'on', 'note-off': 'off', 'pitch-bend': 'bend', panic: 'panic'}[message.type]
@@ -134,6 +152,7 @@ $('connect').onclick = () => run(async () => {
     }
     $('connection').textContent = 'Biotron connected. No device settings are changed.'
   } catch (error) { try { await releaseMidi() } catch (cleanup) { error.cleanupFailure = String(cleanup) }; throw error }
+  finally { startAbort = null }
 })
 $('release').onclick = () => run(async () => { await finishAndRelease(); $('connection').textContent = 'Biotron released.' })
 
@@ -163,7 +182,7 @@ async function startAudio(signal) {
   }
   const tap = new AudioWorkletNode(engine.context, 'creator-take'), drain = engine.context.createGain()
   drain.gain.value = 0; tap.connect(drain); drain.connect(engine.context.destination)
-  const session = {kind: 'audio', tap, drain, blocks: [], events: [], started: engine.context.currentTime, sound: currentSound().id, sampleRate: engine.context.sampleRate}
+  const session = {kind: 'audio', engine, tap, drain, blocks: [], events: [], started: engine.context.currentTime, sound: currentSound().id, sampleRate: engine.context.sampleRate}
   capture = session
   tap.port.onmessage = event => {
     if (event.data.done) { session.done = true; session.resolve?.(); requestFinish() }
@@ -173,10 +192,13 @@ async function startAudio(signal) {
   status('Recording sound. Play the example, keyboard or connected Biotron. Maximum 30 seconds.')
 }
 async function cleanCapture(session) {
-  engine.output.disconnect(session.tap); session.tap.disconnect(); session.drain.disconnect(); session.tap.port.onmessage = null; session.tap.port.close()
+  session.cleaning ||= Promise.resolve().then(() => {
+    session.engine.output.disconnect(session.tap); session.tap.disconnect(); session.drain.disconnect(); session.tap.port.onmessage = null; session.tap.port.close()
+  })
+  await session.cleaning
 }
 async function finish() {
-  const session = capture
+  const session = capture, started = generation
   if (!session) return
   let file, seconds, primary
   try {
@@ -184,6 +206,7 @@ async function finish() {
     if (engine.activeVoiceCount) send({type: 'panic'})
     // Auto-limit may already have acknowledged completion.
     await guard(new Promise(resolve => { session.resolve = resolve; if (session.done) resolve(); else session.tap.port.postMessage('stop') }), 'Sound finalization', 5000)
+    if (started !== generation) return
     let expected = session.blocks[0]?.frame, samples = 0
     for (const block of session.blocks) { if (block.frame !== expected) throw Error('Sound capture has a gap. Existing takes are kept.'); expected += block.pcm.length; samples += block.pcm.length }
     if (!samples) throw Error('No audio blocks received. Try again; existing takes are kept.')
@@ -228,8 +251,23 @@ function start() { return run(async () => { startAbort = new AbortController(); 
 $('record-audio').onclick = start
 $('stop').onclick = () => startAbort ? startAbort.abort() : run(finish)
 document.addEventListener('visibilitychange', () => { if (document.hidden) { startAbort?.abort(); stopNotes(); if (capture) requestFinish() } })
-window.addEventListener('pagehide', () => { startAbort?.abort(); stopNotes(); const session = capture; capture = null; if (session) void cleanCapture(session); void releaseMidi(); void engine?.stop() })
-window.addEventListener('pageshow', event => { if (event.persisted) { busy = false; capture = null; update(); status('Returned. Kept takes remain available; restart sound when ready.') } })
+window.addEventListener('pagehide', () => {
+  pageActive = false; generation++; busy = true; startAbort?.abort(); stopNotes()
+  const session = capture, owned = engine; lostCurrentTake ||= Boolean(session)
+  capture = null; engine = null; workletContext = null; finishRequested = false; disconnectRequested = false
+  hiddenCleanup = Promise.allSettled([hiddenCleanup, runFinished, session && cleanCapture(session), releaseMidi(), owned?.stop()])
+})
+window.addEventListener('pageshow', event => {
+  if (!event.persisted) return
+  pageActive = true; const returned = generation; update()
+  void hiddenCleanup.then(results => {
+    if (!pageActive || returned !== generation) return
+    busy = false; update()
+    const failure = results.find(result => result.status === 'rejected')
+    status((lostCurrentTake ? 'Returned. The current recording was not kept. Previous takes remain available.' : 'Returned. Kept takes remain available.') + (failure ? ' Cleanup failed: ' + failure.reason : ' Restart sound when ready.'))
+    lostCurrentTake = false
+  })
+})
 update()
 
 // Existing autonomous tester reads actual bytes and sends UI actions. This
