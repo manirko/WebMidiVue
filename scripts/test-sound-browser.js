@@ -1166,7 +1166,16 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     })
     const page = await context.newPage()
     const errors = []
-    page.on('pageerror', error => errors.push(error.message))
+    const pageErrors = []
+    page.on('pageerror', error => {
+      errors.push(error.message)
+      pageErrors.push({at: new Date().toISOString(), url: page.url(), name: error.name, message: error.message, stack: error.stack})
+      const evidence = process.env.BIOTRON_TEST_EVIDENCE_DIR
+      if (evidence) {
+        fs.mkdirSync(evidence, {recursive: true})
+        fs.writeFileSync(path.join(evidence, 'page-errors.json'), JSON.stringify(pageErrors, null, 2))
+      }
+    })
     if (process.argv.includes('--settings-actions-only')) {
       if (process.env.BIOTRON_TEST_EVIDENCE_DIR) fs.mkdirSync(process.env.BIOTRON_TEST_EVIDENCE_DIR, {recursive: true})
       await verifySettingsActions(page, origin)
