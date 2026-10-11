@@ -67,14 +67,15 @@ async function ready(signal) {
       stopNotes()
       try {
         if (owned.context.state !== 'running') throw Error('Recording context is not running')
-        await finish(); error.takeOutcome = '. Current take kept. Previous takes remain available.'
+        await finish()
       } catch (failure) {
-        error.takeFailure = String(failure); error.takeOutcome = '. Current take was not saved. Previous takes remain available.'
+        error.takeFailure = String(failure)
         if (capture === session) capture = null
         try { await cleanCapture(session) } catch (cleanup) { error.cleanupFailure = String(cleanup) }
       }
+      error.takeOutcome = session.kept ? '. Current take kept. Previous takes remain available.' : '. Current take was not saved. Previous takes remain available.'
     }
-    try { await guard(owned.stop(), 'Sound cleanup') } catch (cleanup) { error.cleanupFailure = String(cleanup) }
+    try { await guard(owned.stop(), 'Sound cleanup') } catch (cleanup) { error.cleanupFailure ||= String(cleanup) }
     throw error
   }
 }
@@ -304,7 +305,7 @@ async function finish() {
 }
 function addTake(file, session, seconds) {
   const url = URL.createObjectURL(file), take = {file, url, events: session.events, kind: session.kind, seconds}
-  takes.push(take); takeNumber++
+  takes.push(take); session.kept = true; takeNumber++
   const section = document.createElement('article'); section.className = 'take'
   const title = document.createElement('h3'); title.textContent = 'Take ' + takeNumber + ' · ' + seconds.toFixed(1) + ' seconds'
   const media = document.createElement('audio'); media.controls = true; media.src = url

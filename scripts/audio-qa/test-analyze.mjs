@@ -448,6 +448,18 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
   await page.locator('#example').click()
   const retained = async () => hash(Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer())))))
   const previousSha = await retained(); report.lifecycle.previousWavSha256 = previousSha; save()
+  await page.evaluate(() => {
+    const output = __CreatorPrototype.engine.output, original = output.connect
+    output.connect = () => { output.connect = original; __creatorControls.connectFailureSession = __CreatorPrototype.capture; throw Error('Controlled recorder connection failure') }
+  })
+  await page.locator('#record-audio').click()
+  await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
+  const connectionFailure = await observe('pcm/connect-throw/outcome')
+  assert.match(connectionFailure.status, /Controlled recorder connection failure/)
+  assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false)
+  assert.equal(await page.evaluate(() => __creatorControls.connectFailureSession.tap.port.onmessage), null)
+  assert.equal(await retained(), previousSha)
+  pass('synchronous recorder connect failure preserves the primary error, closes the provisional port and keeps the prior WAV')
   for (const boundary of ['delayed', 'resolve-abort', 'cancel-late', 'pagehide-late', 'deadline', 'done-before-pcm']) {
     await page.evaluate(() => { __creatorControls.pcmMode = 'hold'; delete __creatorControls.releaseFirstPCM; delete __creatorControls.heldPCM })
     // A fresh context makes module loading part of the single recorder deadline.
@@ -509,7 +521,7 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
     await page.locator('#example').click(); await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
     pass(`first PCM/${boundary}: truthful pending/cancel/deadline boundary, previous WAV retained and next recording succeeds`)
   }
-  for (const boundary of ['ready-running', 'ready-closed', 'ready-no-ack', 'ready-pagehide']) {
+  for (const boundary of ['ready-running', 'ready-cleanup-after-keep', 'ready-closed', 'ready-no-ack', 'ready-pagehide']) {
     await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
     await page.locator('#example').click()
     await page.waitForFunction(() => __CreatorPrototype.capture.blocks.some(block => block.pcm.some(value => Math.abs(value) > .001)))
@@ -519,6 +531,10 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
       const engine = __CreatorPrototype.engine, session = __CreatorPrototype.capture
       __creatorControls.readyErrorOwner = engine; __creatorControls.readyErrorSession = session
       engine.ensureReady = () => Promise.reject(Error('Controlled ready failure during capture'))
+      if (boundary === 'ready-cleanup-after-keep') {
+        const disconnect = engine.output.disconnect.bind(engine.output)
+        engine.output.disconnect = (...args) => { disconnect(...args); if (args[0] === session.tap) throw Error('Controlled detach failure after WAV retention') }
+      }
       if (boundary === 'ready-closed') await engine.context.close()
       if (['ready-no-ack', 'ready-pagehide'].includes(boundary)) {
         const post = session.tap.port.postMessage.bind(session.tap.port)
@@ -539,10 +555,10 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
     assert.equal(await retained(), previousSha)
     assert.equal(await page.evaluate(() => __creatorControls.readyErrorOwner.context.state), 'closed')
     assert.equal(await page.evaluate(() => __creatorControls.readyErrorSession.tap.port.onmessage), null)
-    if (boundary === 'ready-running') {
+    if (['ready-running', 'ready-cleanup-after-keep'].includes(boundary)) {
       assert.match(observation.status, /Current take kept/); assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 2)
       const file = Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes.at(-1).file.arrayBuffer()))))
-      fs.writeFileSync(`${output}/ready-failure-kept.wav`, file); report.lifecycle.readyFailureWavSha256 = hash(file); save()
+      fs.writeFileSync(`${output}/${boundary}-kept.wav`, file); (report.lifecycle.readyFailureWavSha256 ||= {})[boundary] = hash(file); save()
       const pcm = Float32Array.from({length: (file.length - 44) / 4}, (_, i) => file.readFloatLE(44 + i * 4))
       assert.equal(file.toString('ascii', 0, 4), 'RIFF'); assert.equal(file.readUInt32LE(40), file.length - 44)
       assert(creatorFixtureMetrics(pcm, file.readUInt32LE(24)).music > .001)
