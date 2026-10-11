@@ -83,9 +83,17 @@ keyboards may omit `code`; use the example preview or a supported MIDI device in
 rollover limits and physical Windows keyboards need human testing. Automated
 coverage lives in the existing sound-core, sound-browser and audition-browser
 lanes, including every experiment, octave, edit/IME guards and audio-only Play.
+Install the committed dependency versions without updating the lock file:
+
 ```
-npm install
+npm ci --legacy-peer-deps --ignore-scripts --no-audit --no-fund
 ```
+
+Keep shared build dependencies in `~/ProjectData/WebMidiVue/`, keyed by the
+package-lock SHA, rather than a disposable temporary directory. A checkout may
+use an ignored `node_modules` symlink to that exact installation. If it disappears,
+restore the same lock file and verify its SHA before rebuilding; do not upgrade
+packages to repair the environment. The compiler also writes its cache there.
 
 ### Compiles and hot-reloads for development
 ```
