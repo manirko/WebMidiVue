@@ -394,6 +394,7 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash}) {
   await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
   const returned = await observe('active-take/pagehide/return')
   assert.match(returned.status, /current recording.*(not kept|lost)/i, 'Return must explicitly identify the lost current recording')
+  assert(!/Cleanup failed/.test(returned.status), 'Normal pagehide must release recording nodes before closing its audio engine')
   assert.equal(returned.takes, 1); assert.equal(await retained(), previousSha)
   assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false)
   pass('active pagehide visibly identifies current-take loss and preserves previous WAV; late rejection cannot overwrite a newer recording')
