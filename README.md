@@ -28,6 +28,22 @@ Do not alter production/manufacturing, send feedback, or flash a physical board
 from software-test results. Pinned firmware, compatible board, owner approval,
 backup and rollback remain separate requirements.
 
+## 11 October: separate shared-workspace experiment
+
+On `codex/biotron-next-release-20261010`, the existing Biotron player stays visible
+above Settings. The task links focus the requested section; a cold Settings URL
+starts at the top. Use Play to return to the same Stop control. Ready examples
+continue, held keys release, and unfinished startup still cancels on navigation.
+Periodic sensor reads remain limited to foreground Play so they do not contend
+with Settings readback. Copy-link feedback resets for the exact new route.
+
+This is one reversible functional trial, not the selected winner of the 30 static
+Rams layouts. Current build/link, precise test scopes and first failures are in
+[the context handoff](https://github.com/manirko/playtronica-context-1/blob/codex/biotron-firmware-fix-review-20261008/projects/biotron-paul-7818/NOW.md).
+The separate sound-only creator trial saves WAV for a usual camera/CapCut workflow;
+its different origin does not automatically inherit this page's sound selection.
+Frozen b15/Sergey acceptance and physical/customer gates remain separate.
+
 ## Project setup
 
 The Biotron beta **Play** page has **Play with keyboard** and **Octave**.
