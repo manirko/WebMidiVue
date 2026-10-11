@@ -110,15 +110,19 @@ async function testCreatorPrototype() {
   engine.node.addEventListener('processorerror', () => remember('processorerror', {node: 'synth'}))
   let firstBlock = true
   tap.port.addEventListener('message', event => {
+    if (event.data.coldProcessEntered) remember('process-entered', {frame: event.data.frame})
     if (firstBlock && event.data.pcm) { firstBlock = false; remember('first-pcm', {frame: event.data.frame, samples: event.data.pcm.length}) }
     if (event.data.done) remember('done')
   })
   drain.gain.value = 0; tap.connect(drain); drain.connect(engine.context.destination)`
       let derived = before.replace(target, observe)
+      const processTarget = 'process(inputs){const a=inputs[0]?.[0];'
+      assert(derived.includes(processTarget), 'native process observation target changed')
+      derived = derived.replace(processTarget, "process(inputs){if(!this.coldSeen){this.coldSeen=true;this.port.postMessage({coldProcessEntered:true,frame:currentFrame})}const a=inputs[0]?.[0];")
       if (process.argv.includes('--creator-cold-processor-fault')) {
-        const processTarget = 'process(inputs){const a=inputs[0]?.[0];'
-        assert(derived.includes(processTarget), 'native processor fault target changed')
-        derived = derived.replace(processTarget, "process(inputs){throw Error('Injected cold recorder processor failure');const a=inputs[0]?.[0];")
+        const faultTarget = 'const a=inputs[0]?.[0];'
+        assert(derived.includes(faultTarget), 'native processor fault target changed')
+        derived = derived.replace(faultTarget, "throw Error('Injected cold recorder processor failure');const a=inputs[0]?.[0];")
       }
       fs.writeFileSync(entry, derived)
       report.coldNative = {scope: 'Native listeners on actual nodes; generated recorder-only observation changes timing; production source/core unchanged. No extra awaits or warmup before Stop.',
