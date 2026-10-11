@@ -471,7 +471,13 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
     if (boundary === 'delayed') {
       await page.evaluate(() => __creatorControls.releaseFirstPCM())
       await page.waitForFunction(() => document.querySelector('#stop').textContent === 'Stop recording')
-      await page.locator('#example').click(); await page.waitForTimeout(900); await page.locator('#stop').click()
+      await page.locator('#example').click(); await page.waitForTimeout(900)
+      report.lifecycle.delayedFrames = await page.evaluate(() => {
+        const blocks = __CreatorPrototype.capture.blocks, gaps = []
+        for (let i = 1; i < blocks.length; i++) if (blocks[i].frame !== blocks[i - 1].frame + blocks[i - 1].pcm.length) gaps.push({previous: blocks[i - 1].frame, samples: blocks[i - 1].pcm.length, next: blocks[i].frame})
+        return {blocks: blocks.length, first: blocks[0]?.frame, last: blocks.at(-1)?.frame, gaps: gaps.slice(0, 20), held: __creatorControls.heldPCM?.length}
+      }); save()
+      await page.locator('#stop').click()
       await page.waitForFunction(() => __CreatorPrototype.takes.length === 2 && !__CreatorPrototype.capture)
       await page.locator('#example').click(); await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
     } else {
