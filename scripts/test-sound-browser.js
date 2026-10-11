@@ -1176,6 +1176,13 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
         fs.writeFileSync(path.join(evidence, 'page-errors.json'), JSON.stringify(pageErrors, null, 2))
       }
     })
+    if (process.argv.includes('--page-error-capture-fault')) {
+      await page.goto(`${origin}/#/biotron/play`)
+      const failure = page.waitForEvent('pageerror', {timeout: 5000})
+      await page.evaluate(() => setTimeout(() => { throw new Error('Injected page-error capture control') }, 0))
+      await failure
+      assert.deepStrictEqual(errors, [])
+    }
     if (process.argv.includes('--settings-actions-only')) {
       if (process.env.BIOTRON_TEST_EVIDENCE_DIR) fs.mkdirSync(process.env.BIOTRON_TEST_EVIDENCE_DIR, {recursive: true})
       await verifySettingsActions(page, origin)
