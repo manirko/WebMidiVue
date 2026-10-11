@@ -41,6 +41,12 @@
         <CompatibilityGate :route="$route">
           <DeviceTaskNav v-if="betaBuild && biotronSoundRoute" class="workspace-nav" device-name="Biotron"
             :active-task="$route.path === '/biotron' ? 'settings' : 'play'" play-route="/biotron/play" settings-route="/biotron" />
+          <details v-if="betaBuild && biotronSoundRoute" class="beta-compatibility">
+            <summary>Record sound for a video · Experiment</summary>
+            <p>Keep a short WAV take for CapCut or your usual editor. Film with your camera app. This stops sound and releases Biotron; choose the sound again on the recording page.</p>
+            <button id="creator-action" class="btn btn-outline-secondary" type="button" :disabled="creatorOpening" @click="openCreator">{{ creatorOpening ? 'Releasing Biotron…' : 'Open recording experiment' }}</button>
+            <p v-if="creatorMessage" role="status">{{ creatorMessage }} Press Open recording experiment to retry.</p>
+          </details>
           <router-view v-slot="{ Component }">
             <!-- One Biotron player stays mounted while its settings change. -->
             <SoundLab v-if="betaBuild && biotronSoundRoute" mode="reveal" profile-id="biotron" />
@@ -136,7 +142,7 @@ import {
   requestAppUpdate
 } from "@pwa-entry";
 import {canReloadApp} from '@/appUpdateSafety.mjs';
-import {stopPersistentSound} from '@/audio/sessionState.mjs';
+import {stopPersistentSound, releaseSettingsOwners} from '@/audio/sessionState.mjs';
 import {
   clearInstallPrompt,
   getInstallPrompt,
@@ -156,6 +162,8 @@ export default {
       offlineStatus: getOfflineStatus(),
       appUpdate: getAppUpdateStatus(),
       appUpdating: false,
+      creatorOpening: false,
+      creatorMessage: '',
       online: navigator.onLine,
       installPrompt: getInstallPrompt(),
       installed: runningStandalone(),
@@ -245,6 +253,22 @@ export default {
     window.removeEventListener("appinstalled", this.handleInstalled)
   },
   methods: {
+    async openCreator() {
+      if (this.creatorOpening) return
+      if (!canReloadApp()) { this.creatorMessage = 'Finish the firmware update before leaving.'; return }
+      this.creatorOpening = true; this.creatorMessage = ''
+      let timer
+      try {
+        const released = await Promise.race([
+          (async () => await stopPersistentSound() && await releaseSettingsOwners())(),
+          new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error('Release is still pending. Keep this page open.')), 10000) })
+        ])
+        if (!released) throw new Error('Biotron could not be released. Close other MIDI apps.')
+        if (!canReloadApp()) throw new Error('Finish the firmware update before leaving.')
+        window.location.assign('/creator.html')
+      } catch (error) { this.creatorMessage = error.message || 'Could not release sound or Biotron.' }
+      finally { clearTimeout(timer); this.creatorOpening = false }
+    },
     closeFeedback() { this.feedbackOpen = false; this.$refs.feedbackAction?.focus() },
     async openFeedback() {
       this.feedbackOpen = true

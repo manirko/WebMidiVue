@@ -2,6 +2,16 @@ import {reactive, shallowRef} from 'vue'
 import {DEFAULT_VOLUME} from './core.mjs'
 export const soundSessionState = reactive({running: false, volume: DEFAULT_VOLUME, calibrating: false, audition: null})
 const controller = shallowRef(null)
+const settingsOwners = new Set()
+export const registerSettingsOwner = release => settingsOwners.add(release)
+export const unregisterSettingsOwner = release => settingsOwners.delete(release)
+export async function releaseSettingsOwners() {
+  for (const release of settingsOwners) {
+    if (!await release()) return false
+    settingsOwners.delete(release)
+  }
+  return true
+}
 const experimentKey = 'biotron-sound-experiment-v1'
 export const getSoundController = () => controller.value
 export function registerSoundController(nextController) { controller.value = nextController }

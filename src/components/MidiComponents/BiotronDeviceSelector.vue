@@ -37,7 +37,7 @@
 <script>
   import {buildSettingsQuery, parseSettingsResponse} from "@/biotron/settingsReadback.mjs";
   import {MIDI_PROMPT_HINT, requestSharedMidiAccess} from "@/audio/midiAccess.mjs";
-  import {soundSessionState, stopPersistentSound} from "@/audio/sessionState.mjs";
+  import {soundSessionState, stopPersistentSound, registerSettingsOwner, unregisterSettingsOwner} from "@/audio/sessionState.mjs";
   const portIdentity = (port) => [port.manufacturer || "", port.name || ""].join("\u0000");
   const androidCablePair = (devices) => /android/i.test(navigator.userAgent || "") && devices.length === 2 && devices.every((device) => device.input && portIdentity(device.output) === portIdentity(devices[0].output) && portIdentity(device.input) === portIdentity(devices[0].input));
   // 123 is reserved for persisted-settings readback in firmware protocol v1.
@@ -85,6 +85,8 @@
         promptHint: MIDI_PROMPT_HINT,
         operationId: 0,
         unmounted: false,
+        portOperations: new Set(),
+        navigationRelease: null,
         recalibrationNonce: 0,
         recalibrationRequest: null,
         settingsReadbackNonce: 0,
@@ -126,7 +128,8 @@
         return this.refreshDevices();
       },
       async connectMidi() {
-        if (this.connecting) return;
+        if (this.connecting || this.navigationRelease) return;
+        registerSettingsOwner(this.releaseForNavigation);
         const operationId = ++this.operationId;
         const permissionAbort = new AbortController();
         this.permissionAbort = permissionAbort;
@@ -160,7 +163,6 @@
         this.permissionAbort?.abort();
         this.permissionAbort = null;
         if (this.midiAccess) this.midiAccess.onstatechange = null;
-        this.selectedDevice = null;
         this.$emit('device_changed', undefined);
         this.connecting = false;
         this.midiError = 'MIDI connection cancelled. The browser permission prompt may remain open; press Retry after answering it.';
@@ -246,7 +248,26 @@
           console.log("Could not request Biotron calibration", error);
         }
       },
-      async closeDevice(device) {
+      trackPortOperation(pending) {
+        this.portOperations.add(pending);
+        void pending.finally(() => this.portOperations.delete(pending)).catch(() => {});
+        return pending;
+      },
+      releaseForNavigation() {
+        this.navigationRelease ||= (async () => {
+          ++this.operationId;
+          this.permissionAbort?.abort();
+          if (this.midiAccess) this.midiAccess.onstatechange = null;
+          while (this.portOperations.size) await Promise.allSettled([...this.portOperations]);
+          this.released = false;
+          await this.releaseMidi();
+          if (this.released) unregisterSettingsOwner(this.releaseForNavigation);
+          return this.released;
+        })().finally(() => { this.navigationRelease = null; });
+        return this.navigationRelease;
+      },
+      closeDevice(device) { return this.trackPortOperation(this.closePorts(device)); },
+      async closePorts(device) {
         if (!device) return [];
         const failures = [];
         if (device.input) device.input.onmidimessage = null;
@@ -257,6 +278,9 @@
             failures.push(port.name);
             console.log('Could not close MIDI port', err);
           }
+        }
+        if (this.unmounted && device === this.selectedDevice && !failures.length) {
+          this.selectedDevice = null; unregisterSettingsOwner(this.releaseForNavigation);
         }
         return failures;
       },
@@ -323,7 +347,8 @@
         else if (!this.devices[this.currentMidiNum]) this.currentMidiNum = 0;
         await this.deviceChanged();
       },
-      async deviceChanged() {
+      deviceChanged() { return this.navigationRelease || this.trackPortOperation(this.changeDevice()); },
+      async changeDevice() {
         if (this.released) return;
         const operationId = ++this.operationId;
         this.connecting = true;
@@ -357,6 +382,10 @@
 
         try {
           await nextDevice.output.open();
+          if (operationId !== this.operationId || this.unmounted) {
+            await this.closeDevice(nextDevice);
+            return;
+          }
           if (nextDevice.input) {
             await nextDevice.input.open();
             if (operationId !== this.operationId || this.unmounted) {
@@ -372,9 +401,9 @@
           this.$emit("device_changed", nextDevice.output);
           this.scheduleVersionQuery(nextDevice, operationId);
         } catch (err) {
-          await this.closeDevice(nextDevice);
+          const failures = await this.closeDevice(nextDevice);
           if (operationId === this.operationId && !this.unmounted) {
-            this.selectedDevice = null;
+            if (!failures.length) this.selectedDevice = null;
             this.$emit("device_changed", undefined);
             this.midiError = "Could not open the selected device. Another MIDI app may be using it.";
           }
@@ -462,6 +491,7 @@
       }
     },
     mounted() {
+      registerSettingsOwner(this.releaseForNavigation);
       this.connectMidi();
     },
     beforeUnmount() {
@@ -481,8 +511,9 @@
         if (device?.input) device.input.onmidimessage = null;
         // Play and Settings share the same SysEx-enabled MIDI access. Keep the
         // input open only while the persistent sound session owns it.
-        if (soundSessionState.running && device) this.closeDevice({output: device.output});
-        else this.closeDevice(device);
+        this.closeDevice(soundSessionState.running && device ? {output: device.output} : device).then(failures => {
+          if (!failures.length) { this.selectedDevice = null; unregisterSettingsOwner(this.releaseForNavigation); }
+        });
       }
     }
   }

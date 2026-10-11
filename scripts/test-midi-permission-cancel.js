@@ -65,7 +65,7 @@ const bind = (componentOptions, props = {}, withData = true) => {
     module: {exports: {}}, AbortController, navigator: global.navigator,
     requestSharedMidiAccess: midiAccess.requestSharedMidiAccess,
     MIDI_PROMPT_HINT: 'Allow MIDI', soundSessionState: {running: false},
-    stopPersistentSound: async () => true, console: {log() {}},
+    stopPersistentSound: async () => true, registerSettingsOwner() {}, unregisterSettingsOwner() {}, console: {log() {}},
     setTimeout, clearTimeout, buildSettingsQuery: () => [], parseSettingsResponse: () => null
   }
   const selector = component('src/components/MidiComponents/BiotronDeviceSelector.vue', selectorContext)

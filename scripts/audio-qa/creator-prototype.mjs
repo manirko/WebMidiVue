@@ -14,7 +14,7 @@ if (settings.has('volume') && /^\d{1,3}$/.test(settings.get('volume')) && +setti
 
 let engine, busy = false, capture, midi, inputs = [], timers = [], pressed = new Map(), lastPerformance = [], takes = [], takeNumber = 0, workletContext, startAbort, finishRequested = false, disconnectRequested = false
 let generation = 0, pageActive = true, runFinished = Promise.resolve(), hiddenCleanup = Promise.resolve(), lostCurrentTake = false
-const opening = new Set()
+const opening = new Set(), closingPorts = new Set()
 const status = text => { $('status').textContent = text }
 const currentSound = () => sounds.find(sound => sound.id === $('sound').value)
 const guard = (promise, label, ms = 10000, signal) => new Promise((resolve, reject) => {
@@ -26,12 +26,14 @@ const guard = (promise, label, ms = 10000, signal) => new Promise((resolve, reje
 })
 function update() {
   for (const id of ['sound', 'register', 'record-audio', 'connect']) $(id).disabled = busy || Boolean(capture)
-  $('connect').disabled ||= opening.size > 0
-  $('connect').textContent = opening.size ? 'Waiting for previous connection' : 'Connect Biotron'
+  $('connect').disabled ||= opening.size + closingPorts.size > 0
+  $('connect').textContent = opening.size + closingPorts.size ? 'Waiting for previous connection' : 'Connect Biotron'
   $('repeat').disabled = busy || !lastPerformance.length
   $('stop').disabled = !startAbort && (!capture || busy)
   $('stop').textContent = startAbort ? 'Cancel start' : 'Stop recording'
   $('example').disabled = busy
+  $('return').disabled = busy && !startAbort
+  $('leave-confirm').disabled = busy
   $('release').hidden = !midi
   $('connect').hidden = Boolean(midi)
   if (!navigator.requestMIDIAccess) { $('connect').disabled = true; $('connection').textContent = 'This browser cannot receive Biotron notes. The example and recording still work. Use a MIDI-capable browser to play the plant.' }
@@ -102,12 +104,17 @@ window.addEventListener('keyup', event => {
 })
 window.addEventListener('blur', stopNotes)
 
+function closeInput(input) {
+  const pending = input.close(); closingPorts.add(pending)
+  void Promise.resolve(pending).finally(() => { closingPorts.delete(pending); update() }).catch(() => {})
+  return pending
+}
 async function releaseMidi() {
   const owned = inputs; inputs = []; let failure
   if (midi) midi.onstatechange = null
   for (const input of owned) {
     input.onmidimessage = null
-    try { await guard(input.close(), 'MIDI release') }
+    try { await guard(closeInput(input), 'MIDI release') }
     catch (error) { failure ||= error; inputs.push(input) }
   }
   if (!failure) midi = null
@@ -138,7 +145,7 @@ $('connect').onclick = () => run(async () => {
         if (!signal.aborted) return
         let closing
         try {
-          closing = input.close(); await guard(closing, 'Cancelled MIDI release')
+          closing = closeInput(input); await guard(closing, 'Cancelled MIDI release')
           inputs = inputs.filter(item => item !== input); if (!inputs.length && midi === access) midi = null
         } catch (error) {
           if (!inputs.includes(input)) inputs.push(input)
@@ -166,6 +173,22 @@ $('connect').onclick = () => run(async () => {
   finally { startAbort = null }
 })
 $('release').onclick = () => run(async () => { await finishAndRelease(); $('connection').textContent = 'Biotron released.' })
+async function returnToMain() {
+  if (capture || startAbort) return $('return').onclick()
+  if (opening.size + closingPorts.size) throw Error('Previous MIDI connection is still closing. Keep this page open, then retry Return.')
+  await releaseMidi()
+  if (closingPorts.size) throw Error('Previous MIDI connection is still closing. Keep this page open, then retry Return.')
+  stopNotes(); await guard(engine?.stop(), 'Sound release')
+  location.assign('/#/biotron/play?sound=1')
+}
+$('return').onclick = () => {
+  $('leave-confirm').hidden = true
+  if (startAbort) { startAbort.abort(); status('Start cancelled. Wait for release, then return. Previous takes are kept.'); return }
+  if (capture) return run(async () => { await finish(); status('Take kept. Listen and Save sound before returning. Press Return again when ready.') })
+  if (takes.length) { $('leave-confirm').hidden = false; status('Save useful takes first. Leaving removes the files from this page. Saved WAV files stay on your device.'); return }
+  return run(returnToMain)
+}
+$('leave-confirm').onclick = () => capture || startAbort ? $('return').onclick() : run(returnToMain)
 
 $('copy').onclick = async () => {
   const link = new URL(location.href); link.hash = new URLSearchParams({sound: $('sound').value, register: $('register').value, volume: $('volume').value})
@@ -265,7 +288,7 @@ function addTake(file, session, seconds) {
   remove.onclick = () => { media.pause(); media.removeAttribute('src'); media.load(); URL.revokeObjectURL(url); takes = takes.filter(item => item !== take); section.remove() }
   row.append(save, share, remove); section.append(title, media, row, message); $('takes').append(section)
 }
-function start() { return run(async () => { startAbort = new AbortController(); update(); try { await startAudio(startAbort.signal) } finally { startAbort = null } }) }
+function start() { $('leave-confirm').hidden = true; return run(async () => { startAbort = new AbortController(); update(); try { await startAudio(startAbort.signal) } finally { startAbort = null } }) }
 $('record-audio').onclick = start
 $('stop').onclick = () => startAbort ? startAbort.abort() : run(finish)
 document.addEventListener('visibilitychange', () => { if (document.hidden) { startAbort?.abort(); stopNotes(); if (capture) requestFinish() } })

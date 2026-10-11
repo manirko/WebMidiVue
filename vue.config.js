@@ -63,6 +63,12 @@ module.exports = {
       config.plugins.delete('pwa')
       config.plugins.delete('workbox')
     } else {
+      config.entry('creator').add(path.resolve(__dirname, 'scripts/audio-qa/creator-prototype.mjs'))
+      config.plugin('html').tap(args => { args[0].excludeChunks = ['creator']; return args })
+      config.plugin('creator-html').use(require('html-webpack-plugin'), [{
+        filename: 'creator.html', template: path.resolve(__dirname, 'scripts/audio-qa/creator-prototype.html'),
+        chunks: ['creator'], inject: 'body'
+      }])
       config.plugin('copy').tap(args => {
         if (biotronFirmwareBeta) {
           args[0].patterns.push({
@@ -120,6 +126,7 @@ module.exports = {
       clientsClaim: true,
       skipWaiting: false,
       navigateFallback: 'index.html',
+      navigateFallbackDenylist: [/^\/creator\.html$/],
       // Vue CLI excludes install icons by default; cache them explicitly so the
       // installed app remains complete when the first offline launch occurs.
       exclude: [/\.map$/, /favicon\.ico$/, /^manifest.*\.js?$/, /^firmware\//, /^_headers$/, /^_worker\.js$/,

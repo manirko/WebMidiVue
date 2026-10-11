@@ -52,6 +52,12 @@ fs.writeFileSync(path.join(output, 'before.json'), JSON.stringify(before, null, 
     const asset = await worker.fetch(new Request('https://test.local/telemetry.html'), {ASSETS: {fetch: () => new Response('asset control')}})
     assert.equal(await asset.text(), 'asset control', 'built worker did not forward ordinary assets')
     const uf2 = path.join(destination, 'firmware', 'biotron-1.10.10-internal.uf2')
+    const creator = fs.readFileSync(path.join(destination, 'creator.html'), 'utf8')
+    const mainHtml = fs.readFileSync(path.join(destination, 'index.html'), 'utf8')
+    assert(/src=["']\/js\/creator\.[^"']+\.js/.test(creator), 'creator HTML lacks its hashed entry')
+    assert(!/src=["']\/js\/creator\./.test(mainHtml), 'main entry started the recorder automatically')
+    assert(!/\/creator\.js|Browser regression bench|Run sound levels/.test(creator), 'QA bench or unbuilt creator script was shipped')
+    assert(fs.readFileSync(path.join(destination, 'service-worker.js'), 'utf8').includes('creator.html'), 'creator is missing from offline assets')
     if (mode === 'biotron-firmware-beta') {
       assert.equal(digest(uf2), '598d5a084f1eb3274e7c62b7bbeec1701f49d28edad87662e19c084dfc75477d')
       assert(!fs.readFileSync(path.join(destination, 'service-worker.js'), 'utf8').includes('biotron-1.10.10-internal.uf2'), 'firmware was cached offline')

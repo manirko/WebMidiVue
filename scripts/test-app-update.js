@@ -18,12 +18,14 @@ async function main() {
   const compiled = babel.transformSync(source, {babelrc: false, configFile: false,
     plugins: ['@babel/plugin-transform-modules-commonjs']}).code
   let stop = async () => true
-  let stops = 0, requests = 0
-  const context = {window: {addEventListener() {}, removeEventListener() {}}, document: {},
+  let stops = 0, requests = 0, releaseSettings = async () => true
+  const navigations = [], deadlines = new Map()
+  const context = {window: {addEventListener() {}, removeEventListener() {}, location: {assign: url => navigations.push(url)}}, document: {},
+    setTimeout: fn => { const id = {}; deadlines.set(id, fn); return id }, clearTimeout: id => deadlines.delete(id),
     module: {exports: {}}, exports: {}, require: name => {
     if (name === 'vue') return {defineAsyncComponent: () => ({})}
     if (name === '@/appUpdateSafety.mjs') return safety
-    if (name === '@/audio/sessionState.mjs') return {stopPersistentSound: () => { stops++; return stop() }}
+    if (name === '@/audio/sessionState.mjs') return {stopPersistentSound: () => { stops++; return stop() }, releaseSettingsOwners: () => releaseSettings()}
     if (name === '@pwa-entry') return {requestAppUpdate: async canReload => {
       assert(canReload(), 'Firmware became busy while sound was stopping')
       requests++
@@ -83,6 +85,39 @@ async function main() {
   assert.equal(focuses, 1, 'Old tab navigation did not direct the user to Update app')
   definition.beforeUnmount.call(routeApp)
   assert.equal(removed, 1, 'App router guard was not removed on unmount')
+  const creatorApp = () => ({creatorOpening: false, creatorMessage: '', openCreator: definition.methods.openCreator})
+  app = creatorApp(); safety.setFirmwareUpdateBusy(ownerA, true)
+  const oldStops = stops
+  await app.openCreator(); assert.equal(stops, oldStops); assert.equal(navigations.length, 0)
+  safety.setFirmwareUpdateBusy(ownerA, false)
+  stop = async () => false; await app.openCreator(); assert.equal(navigations.length, 0)
+  stop = async () => true; releaseSettings = async () => false
+  await app.openCreator(); assert.equal(navigations.length, 0); assert.match(app.creatorMessage, /could not be released/)
+  releaseSettings = async () => { safety.setFirmwareUpdateBusy(ownerA, true); return true }
+  await app.openCreator(); assert.equal(navigations.length, 0)
+  safety.setFirmwareUpdateBusy(ownerA, false)
+  let finishSettings
+  releaseSettings = () => new Promise(resolve => { finishSettings = resolve })
+  const pendingCreator = app.openCreator(); await Promise.resolve(); await Promise.resolve()
+  await app.openCreator(); assert.equal(app.creatorOpening, true)
+  assert.equal(deadlines.size, 1)
+  for (const deadline of deadlines.values()) deadline()
+  await pendingCreator; assert.equal(app.creatorOpening, false); assert.equal(navigations.length, 0)
+  finishSettings(true); await Promise.resolve(); await Promise.resolve()
+  assert.equal(navigations.length, 0, 'late cleanup navigated after the visible timeout')
+  releaseSettings = async () => true; await app.openCreator()
+  assert.deepEqual(navigations, ['/creator.html']); assert.equal(deadlines.size, 0)
+  const session = {reactive: value => value, shallowRef: value => ({value}), DEFAULT_VOLUME: 70}
+  vm.runInNewContext(fs.readFileSync('src/audio/sessionState.mjs', 'utf8').replace(/^import .*$/gm, '').replace(/^export /gm, '') +
+    '\nglobalThis.api = {registerSettingsOwner, releaseSettingsOwners};', session)
+  let retry = false, waited = 0, late = 0
+  session.api.registerSettingsOwner(async () => { waited++; return retry })
+  assert.equal(await session.api.releaseSettingsOwners(), false)
+  retry = true
+  session.api.registerSettingsOwner(async () => { session.api.registerSettingsOwner(async () => { late++; return true }); return true })
+  assert.equal(await session.api.releaseSettingsOwners(), true)
+  assert.equal(waited, 2); assert.equal(late, 1, 'owner added during release was skipped')
+  assert.equal(await session.api.releaseSettingsOwners(), true); assert.equal(waited, 2)
   console.log('App update safety passed: multiple firmware owners, no audio interruption during flash, failed stop, explicit release, double click')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

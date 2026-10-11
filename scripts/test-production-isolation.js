@@ -11,6 +11,8 @@ assert(!fs.existsSync(path.join(root, 'firmware')), 'beta firmware leaked into t
 assert(!fs.existsSync(path.join(root, '_headers')), 'beta deployment headers leaked into the normal production build')
 assert(!fs.existsSync(path.join(root, '_worker.js')), 'beta telemetry worker leaked into the normal production build')
 assert(!fs.existsSync(path.join(root, 'telemetry.html')), 'beta diagnostic notice leaked into the normal production build')
+assert(!fs.existsSync(path.join(root, 'creator.html')), 'recording experiment leaked into the normal production build')
+assert(!fs.readdirSync(path.join(root, 'js')).some(name => /^creator[.]/.test(name)), 'creator entry leaked into ordinary production')
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8')
 assert(!/rel=["']manifest["']/i.test(html), 'PWA manifest link leaked into the normal production build')

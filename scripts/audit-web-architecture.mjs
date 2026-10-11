@@ -99,12 +99,14 @@ const report = {
 // 11.10.2026 Goal: confirmed cold preset-storage dead end. Senior-reviewed
 // bounded recovery reuses the settings timeout; failure/Retry, late completion,
 // unmount and malformed selection controls. Actual10784; no new file/dependency.
+// 11.10.2026 senior-reviewed same-origin creator entry and retained Settings
+// cleanup barrier: +65 lines, one core, 70 files; all other caps unchanged.
 const limits = {
   eagerDeviceRouteImports: 0,
   sleepCalls: 0,
   unmanagedListenerFiles: 0,
   sourceFiles: 70,
-  sourceLines: 10784,
+  sourceLines: 10849,
   largestProductFileLines: 850
 }
 const violations = [

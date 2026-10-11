@@ -5,6 +5,7 @@ const vm = require('vm')
 const source = fs.readFileSync('src/components/MidiComponents/BiotronDeviceSelector.vue', 'utf8')
 const script = source.match(/<script>([\s\S]*?)<\/script>/)[1]
 const scheduled = new Map()
+const settingsOwners = new Set()
 let timerId = 0
 const context = {
   AbortController,
@@ -18,6 +19,8 @@ const context = {
   MIDI_PROMPT_HINT: 'permission hint (text lives in src/audio/midiAccess.mjs)',
   soundSessionState: {running: false},
   async stopPersistentSound() { return true },
+  registerSettingsOwner(release) { settingsOwners.add(release) },
+  unregisterSettingsOwner(release) { settingsOwners.delete(release) },
   console: { log() {} },
   setTimeout(callback) { scheduled.set(++timerId, callback); return timerId },
   clearTimeout(id) { scheduled.delete(id) },
@@ -166,7 +169,32 @@ async function unmountCancelsPendingOpen() {
   assert.strictEqual(scheduled.size, 0)
   assert.strictEqual(output.closeCalls, 1)
   assert.strictEqual(input.closeCalls, 1)
+  assert.strictEqual(input.openCalls, 0, 'unmounted Settings opened a second port after output settled')
   assert.strictEqual(target.events.length, 0, 'unmounted component emitted a device')
+}
+
+async function navigationWaitsForUnmountedOwnerAndAllowsRetry() {
+  settingsOwners.clear()
+  const closing = deferred()
+  let fail = true
+  const output = port('retained-output', 'Biotron', {close() { this.closeCalls++; return fail ? closing.promise : Promise.resolve() }})
+  const target = instance({selectedDevice: {output}, released: false})
+  target.connectMidi = () => {}
+  component.mounted.call(target)
+  assert.strictEqual(settingsOwners.size, 1, 'Settings owner was not registered')
+  const release = [...settingsOwners][0]
+  component.beforeUnmount.call(target)
+  let settled = false
+  const navigation = release().then(value => { settled = true; return value })
+  await Promise.resolve(); await Promise.resolve()
+  assert.strictEqual(settled, false, 'navigation ignored pending unmounted cleanup')
+  closing.reject(new Error('port busy'))
+  assert.strictEqual(await navigation, false, 'failed close claimed free ownership')
+  assert.strictEqual(settingsOwners.size, 1, 'failed owner was forgotten')
+  assert.strictEqual(target.selectedDevice.output, output)
+  fail = false
+  assert.strictEqual(await release(), true, 'retained owner could not be retried')
+  assert.strictEqual(settingsOwners.size, 0)
 }
 
 async function duplicateDevicesStayDistinct() {
@@ -367,6 +395,7 @@ async function versionTimeoutKeepsLateReplyClosed() {
   await missingDeviceIsActionable()
   await switchCloseFailureDoesNotClaimSuccess()
   await unmountCancelsPendingOpen()
+  await navigationWaitsForUnmountedOwnerAndAllowsRetry()
   await duplicateDevicesStayDistinct()
   await secondaryServicePortIsNotOffered()
   await androidIdenticalCablesChooseCableZeroButTwoUnitsStayAmbiguous()

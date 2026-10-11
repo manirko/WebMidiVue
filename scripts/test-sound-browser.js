@@ -195,6 +195,98 @@ async function verifySettingsFailures(page, origin) {
   console.log(`PASS Settings boundaries/reply failures: ${records.length} cases; native device NOT RUN`)
 }
 
+async function verifyCreatorHandoff(page, origin) {
+  const rows = []
+  const pass = name => { rows.push(name); if (process.env.BIOTRON_TEST_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR, 'creator-handoff.json'), JSON.stringify({status:'RUNNING', rows}, null, 2)) }
+  const openEntry = async () => {
+    await page.getByText('Record sound for a video · Experiment', {exact:true}).click()
+    await page.locator('#creator-action').click()
+  }
+  await openSettingsForTest(page, origin)
+  await page.evaluate(() => { __soundOutput.close = async () => { throw Error('Settings output refused close') } })
+  await openEntry()
+  await page.getByText(/Biotron could not be released/).waitFor()
+  assert.equal(new URL(page.url()).pathname, '/')
+  assert.equal(await page.locator('#creator-action').isEnabled(), true)
+  pass('Settings close refusal preserves page and offers retry')
+  await page.evaluate(() => { __soundOutput.close = async function () { this.connection = 'closed'; return this } })
+  await page.locator('#creator-action').click()
+  await page.waitForURL(origin + '/creator.html')
+  await page.locator('#return').click()
+  await page.waitForURL(origin + '/#/biotron/play?sound=1')
+  pass('retry opens same-origin creator; empty Return restores Play')
+  await openSettingsForTest(page, origin)
+  await page.evaluate(() => { __soundOutput.close = function () { return new Promise(resolve => { window.__finishSettingsClose = () => { this.connection = 'closed'; resolve(this) } }) } })
+  await page.getByRole('link', {name:'Play', exact:true}).click()
+  await page.waitForURL(/#\/biotron\/play/)
+  await openEntry()
+  await page.waitForFunction(() => document.querySelector('#creator-action').disabled)
+  assert.equal(new URL(page.url()).pathname, '/')
+  await page.evaluate(() => __finishSettingsClose())
+  await page.waitForURL(origin + '/creator.html')
+  pass('Settings → Play retains old pending output owner until native close settles')
+  await page.locator('#return').click(); await page.waitForURL(origin + '/#/biotron/play?sound=1')
+  await openSoundHelp(page)
+  await page.getByRole('button', {name:'Listen to example', exact:true}).click()
+  await page.waitForFunction(() => window.__soundContext?.state === 'running')
+  await page.evaluate(() => { const owned = __soundContext, native = owned.close.bind(owned); owned.close = () => new Promise((resolve, reject) => { window.__finishAudioClose = () => native().then(resolve, reject) }) })
+  await openEntry()
+  await page.waitForFunction(() => Boolean(window.__finishAudioClose))
+  assert.equal(new URL(page.url()).pathname, '/')
+  assert.equal(await page.locator('#creator-action').isDisabled(), true)
+  await page.evaluate(() => __finishAudioClose())
+  await page.waitForURL(origin + '/creator.html')
+  pass('example audio close is confirmed before the recording page opens')
+  await page.locator('#record-audio').click()
+  await page.waitForFunction(() => window.__CreatorPrototype?.capture)
+  await page.locator('#example').click(); await page.waitForTimeout(1500)
+  await page.locator('#return').click()
+  await page.waitForFunction(() => __CreatorPrototype.takes.length === 1 && !__CreatorPrototype.capture)
+  assert.equal(page.url(), origin + '/creator.html')
+  assert.match(await page.locator('#status').innerText(), /Save sound before returning/)
+  const bytes = Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer()))))
+  const hash = crypto.createHash('sha256').update(bytes).digest('hex')
+  fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR, 'handoff-take.wav'), bytes)
+  assert.equal(bytes.toString('ascii', 0, 4), 'RIFF')
+  const downloaded = page.waitForEvent('download'); await page.locator('#takes .save').click()
+  const file = await downloaded; await file.saveAs(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR, 'handoff-saved.wav'))
+  assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR, 'handoff-saved.wav'))).digest('hex'), hash)
+  pass('active Return finishes a take and stays for Listen/Save; downloaded bytes match')
+  await page.locator('#return').click(); assert.equal(await page.locator('#leave-confirm').isVisible(), true)
+  await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+  assert.equal(await page.locator('#leave-confirm').isHidden(), true, 'new recording kept a stale leave confirmation')
+  await page.evaluate(() => document.querySelector('#leave-confirm').click())
+  await page.waitForFunction(() => __CreatorPrototype.takes.length === 2 && !__CreatorPrototype.capture)
+  assert.equal(page.url(), origin + '/creator.html', 'stale confirmation discarded the active recording')
+  pass('new take invalidates prior leave confirmation; direct stale action still finishes and stays')
+  await page.locator('#connect').click()
+  await page.waitForFunction(() => !document.querySelector('#release').hidden && !document.querySelector('#record-audio').disabled)
+  await page.evaluate(() => { __soundInput.close = async () => { throw Error('Creator input refused close') } })
+  await page.locator('#return').click(); await page.locator('#leave-confirm').click()
+  await page.getByText('Creator input refused close', {exact:true}).waitFor()
+  assert.equal(page.url(), origin + '/creator.html')
+  assert.equal(await page.locator('#takes .save').first().isVisible(), true)
+  const retained = Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer()))))
+  assert.equal(crypto.createHash('sha256').update(retained).digest('hex'), hash)
+  pass('Return close failure preserves WAV and Save; no silent loss or redirect')
+  await page.evaluate(() => { __soundInput.close = async function () { this.connection = 'closed'; return this } })
+  await page.locator('#leave-confirm').click(); await page.waitForURL(origin + '/#/biotron/play?sound=1')
+  pass('confirmed Return retry releases device and returns to main Play')
+  if (page.context().browser().browserType().name() === 'chromium') {
+    await page.waitForFunction(async () => Boolean(navigator.serviceWorker.controller && await caches.match('/creator.html')))
+    await page.context().setOffline(true)
+    try {
+      await page.goto(origin + '/creator.html', {waitUntil:'domcontentloaded'})
+      await page.getByRole('heading', {name:'Record Biotron sound', exact:true}).waitFor()
+      assert.equal(await page.locator('#creator-action').count(), 0, 'offline creator returned main app fallback')
+      await page.locator('#example').click(); await page.waitForFunction(() => __CreatorPrototype.engine?.ready)
+      await page.locator('#return').click(); await page.waitForURL(origin + '/#/biotron/play?sound=1')
+      pass('Chrome offline creator gets actual creator HTML/chunks, plays example and returns to main')
+    } finally { await page.context().setOffline(false) }
+  }
+  if (process.env.BIOTRON_TEST_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR, 'creator-handoff.json'), JSON.stringify({status:'PASS_SCOPED', rows, wavSha256:hash, scope:'same build/origin and fixture MIDI; no native device/editor acceptance'}, null, 2))
+}
+
 async function verifySettingsActions(page, origin) {
   const records = []
   const pass = name => {
@@ -1267,6 +1359,14 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
       })
     })
     const page = await context.newPage()
+    if (process.argv.includes('--creator-handoff-only')) {
+      assert(process.env.BIOTRON_TEST_EVIDENCE_DIR, 'creator handoff needs evidence directory')
+      fs.mkdirSync(process.env.BIOTRON_TEST_EVIDENCE_DIR, {recursive:true})
+      await verifyCreatorHandoff(page, origin)
+      assert.deepStrictEqual(errors, [])
+      console.log('PASS same-origin creator handoff subset; remaining full sound suite NOT RUN')
+      return
+    }
     if (process.argv.includes('--page-error-capture-fault')) {
       const faultPage = cacheTraceEnabled ? await context.newPage() : page
       await faultPage.goto(`${origin}/#/biotron/play`)
