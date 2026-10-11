@@ -666,8 +666,10 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   await panel().getByText('No experimental cue selected.',{exact:false}).waitFor()
   assert.equal(await page.evaluate(()=>localStorage.getItem('biotron-sound-experiment-v1')),beforeCalibrationOpen,'opening calibration changed the persisted Handpan')
   assert.equal(await page.evaluate(()=>window.__comparisonContexts.length),beforeRoute.contexts,'opening calibration replaced the existing renderer')
-  assert.equal(await page.getByLabel('Limit to 4 notes at once',{exact:true}).count(),0,'Settings duplicated Play quality controls')
-  assert.equal(await page.getByLabel('Keyboard octave',{exact:true}).count(),0,'Settings duplicated Play keyboard controls')
+  for(const name of ['Limit to 4 notes at once','Keyboard octave']){
+   assert.equal(await page.getByLabel(name,{exact:true}).count(),1,'Workspace must retain one shared '+name)
+   assert.equal(await page.locator('.biotron-settings-beta').getByLabel(name,{exact:true}).count(),0,'Settings duplicated '+name)
+  }
   await page.locator('.sound-lab[data-sound="Deep ding"][data-active-voices="1"][data-audio-state="running"]').waitFor({state:'attached'})
   const disclosure=details(page,'Experiments'),retainedCueSelect=await selection().elementHandle()
   await disclosure.locator('summary').click()
