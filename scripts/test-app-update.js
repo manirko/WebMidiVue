@@ -19,8 +19,8 @@ async function main() {
     plugins: ['@babel/plugin-transform-modules-commonjs']}).code
   let stop = async () => true
   let stops = 0, requests = 0, releaseSettings = async () => true
-  const navigations = [], deadlines = new Map()
-  const context = {window: {addEventListener() {}, removeEventListener() {}, location: {assign: url => navigations.push(url)}}, document: {},
+  const navigations = [], deadlines = new Map(), listeners = new Map()
+  const context = {window: {addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name, fn) => { if (listeners.get(name) === fn) listeners.delete(name) }, location: {assign: url => navigations.push(url)}}, document: {},
     setTimeout: fn => { const id = {}; deadlines.set(id, fn); return id }, clearTimeout: id => deadlines.delete(id),
     module: {exports: {}}, exports: {}, require: name => {
     if (name === 'vue') return {defineAsyncComponent: () => ({})}
@@ -102,11 +102,19 @@ async function main() {
   await app.openCreator(); assert.equal(app.creatorOpening, true)
   assert.equal(deadlines.size, 1)
   for (const deadline of deadlines.values()) deadline()
-  await pendingCreator; assert.equal(app.creatorOpening, false); assert.equal(navigations.length, 0)
-  finishSettings(true); await Promise.resolve(); await Promise.resolve()
+  await Promise.resolve(); await Promise.resolve()
+  assert.equal(app.creatorOpening, true, 'Timeout released the native close barrier')
+  assert.match(app.creatorMessage, /still pending/)
+  finishSettings(true); await pendingCreator; assert.equal(app.creatorOpening, false)
   assert.equal(navigations.length, 0, 'late cleanup navigated after the visible timeout')
   releaseSettings = async () => true; await app.openCreator()
   assert.deepEqual(navigations, ['/creator.html']); assert.equal(deadlines.size, 0)
+  navigations.length = 0; releaseSettings = () => new Promise(resolve => { finishSettings = resolve })
+  const hiddenCreator = app.openCreator(); await Promise.resolve(); await Promise.resolve()
+  listeners.get('pagehide')(); finishSettings(true); await hiddenCreator
+  assert.equal(navigations.length, 0, 'Late handoff redirected a restored page')
+  assert.equal(listeners.has('pagehide'), false, 'Handoff leaked its lifecycle listener')
+  releaseSettings = async () => true; await app.openCreator(); assert.deepEqual(navigations, ['/creator.html'])
   const session = {reactive: value => value, shallowRef: value => ({value}), DEFAULT_VOLUME: 70}
   vm.runInNewContext(fs.readFileSync('src/audio/sessionState.mjs', 'utf8').replace(/^import .*$/gm, '').replace(/^export /gm, '') +
     '\nglobalThis.api = {registerSettingsOwner, releaseSettingsOwners};', session)
