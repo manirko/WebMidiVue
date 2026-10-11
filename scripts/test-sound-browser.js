@@ -498,6 +498,8 @@ async function verifySettingsActions(page, origin) {
   assert(state.after.sameNode && state.after.oldConnected && state.after.classes.includes('show'), 'Preset-read completion replaced the open Delete dialog')
   await page.locator('#deleteModel').getByRole('button',{name:'Delete',exact:true}).click()
   await page.waitForFunction(() => ![...document.querySelectorAll('#patch-selector option')].some(option=>option.textContent==='Autonomous settings test'))
+  const sourcePreset = beforeStorage.find(patch => patch.name === 'Fast role'); assert(sourcePreset, 'Original preset missing from storage baseline')
+  assert.deepStrictEqual((await storedPresets()).find(patch => patch.id === sourcePreset.id), sourcePreset, 'Import, Save and Delete changed the original stored preset')
   assert.equal(await page.evaluate(() => window.__soundMidiSent.length),localMarker)
   pass('browser preset deletion changes no device settings')
   const original = await exportPreset()
