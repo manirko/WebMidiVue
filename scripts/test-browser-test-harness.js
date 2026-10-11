@@ -74,6 +74,20 @@ function readHttp(url, options = {}) {
 ;(async () => {
 
   const soundSource = fs.readFileSync(path.join(__dirname, 'test-sound-browser.js'), 'utf8')
+  const traceStart = soundSource.indexOf('function installCacheLifecycleTrace(')
+  const traceEnd = soundSource.indexOf('\nconst soakArgument', traceStart)
+  const calls = [], events = {}, nativePromise = Promise.resolve([])
+  class CacheStorage { keys() {assert.equal(this, caches); calls.push('native'); return nativePromise} }
+  const caches = new CacheStorage()
+  const traceScope = {CacheStorage, location:{href:'http://fixture/'}, window:{caches,
+    __recordCacheTrace(row) {calls.push(row); return Promise.resolve()}, addEventListener(type, callback) {events[type] = callback}}}
+  vm.runInNewContext(soundSource.slice(traceStart, traceEnd) + '\ninstallCacheLifecycleTrace()', traceScope)
+  assert.equal(caches.keys(), nativePromise, 'trace replaced the native Cache promise')
+  assert(calls.includes('native')); assert.equal(calls[0].type, 'cache-call')
+  const reason = Error('native cache failure')
+  events.unhandledrejection({promise:nativePromise, reason})
+  assert.equal(calls.at(-1).operation.operationId, 1, 'trace lost exact native-promise correlation')
+  assert.equal(calls.at(-1).message, reason.message)
   const releaseBegin = soundSource.indexOf("  await denied.getByRole('button', {name: 'Stop & release'}).click()")
   const releaseEnd = soundSource.indexOf('  const permissionHelp =', releaseBegin)
   assert(releaseBegin >= 0 && releaseEnd > releaseBegin)
@@ -109,7 +123,7 @@ function readHttp(url, options = {}) {
         querySelectorAll: selector => selector === '.sound-lab' ? [{dataset: {audioState: 'closed'}}] : [{textContent: 'Start listening', disabled: false}]}
       const error = Error('Original permission fault sentinel'), started = Date.now()
       await vm.runInNewContext('(async()=>{' + soundSource.slice(captureBegin, captureEnd) + '})()',
-        {fs, path, error, browser, browserCall, process: {env: {BIOTRON_TEST_EVIDENCE_DIR: directory}}, window, document, console})
+        {fs, path, error, browser, browserCall, process: {env: {BIOTRON_TEST_EVIDENCE_DIR: directory}}, window, document, navigator:{maxTouchPoints:0}, console})
       const jsonFiles = fs.readdirSync(directory).filter(name => name.endsWith('.json')); assert.equal(jsonFiles.length, 1)
       const report = JSON.parse(fs.readFileSync(path.join(directory, jsonFiles[0])))
       assert.match(report.error, /Original permission fault sentinel/); assert.equal(report.beforeCleanup, true)

@@ -8,6 +8,37 @@ const {devices} = require('playwright-core')
 const {browserConfig, browserCall, launchBrowser, contextOptions, qaOrigin, verifyOnlineIdentity, createStaticServer} = require('./browser-test-harness')
 
 const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
+const cacheTraceEnabled = process.argv.includes('--cache-lifecycle-trace')
+const cacheMainBypass = process.argv.includes('--cache-main-bypass')
+const workerControl = process.argv.find(value => value.startsWith('--service-workers='))?.split('=')[1] || 'allow'
+assert(['allow', 'block'].includes(workerControl), 'service-workers control must be allow or block')
+assert(!cacheMainBypass || cacheTraceEnabled, 'main cache bypass requires diagnostic trace')
+assert(workerControl === 'allow' || cacheTraceEnabled, 'blocked workers require diagnostic trace')
+assert(!process.argv.includes('--cache-startup-only') || cacheTraceEnabled, 'short cache control requires diagnostic trace')
+assert(!cacheTraceEnabled || process.env.BIOTRON_TEST_EVIDENCE_DIR, 'cache trace requires an evidence directory')
+
+// Observe call starts and promise identity; adding a rejection handler would alter this fault.
+function installCacheLifecycleTrace({bypass = false} = {}) {
+  const documentId = `${Date.now()}-${Math.random()}`, operations = new WeakMap()
+  let operationId = 0
+  const emit = row => { void window.__recordCacheTrace({documentId, url: location.href, at: Date.now(), ...row}).catch(() => {}) }
+  for (const [prototype, methods] of [[globalThis.CacheStorage?.prototype, ['keys', 'open', 'match']],
+    [globalThis.Cache?.prototype, ['keys', 'put', 'match']]]) for (const method of methods) {
+    const native = prototype?.[method]
+    if (!native) continue
+    prototype[method] = function (...args) {
+      const row = {type:'cache-call', operationId:++operationId, api:prototype.constructor.name, method, stack:new Error().stack}
+      emit(row)
+      const result = bypass && this === window.caches && method === 'keys' ? Promise.resolve([]) : native.apply(this, args)
+      operations.set(result, row)
+      return result
+    }
+  }
+  window.addEventListener('unhandledrejection', event => emit({type:'unhandledrejection', operation:operations.get(event.promise) || null,
+    name:event.reason?.name, message:event.reason?.message, stack:event.reason?.stack}))
+  for (const type of ['pagehide', 'pageshow', 'playtronica-offline-status']) window.addEventListener(type,
+    event => emit({type, persisted:event.persisted, detail:event.detail}))
+}
 
 const soakArgument = process.argv.find(argument => argument.startsWith('--soak-seconds='))
 const realtimeSoakSeconds = soakArgument ? Number(soakArgument.split('=')[1]) : 0
@@ -167,7 +198,7 @@ async function verifySettingsFailures(page, origin) {
 async function verifySettingsActions(page, origin) {
   const records = []
   const pass = name => {
-    records.push({case: name, status: 'PASS'})
+    records.push({case: name, status: 'PASS', at:Date.now()})
     if (process.env.BIOTRON_TEST_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR,
       'settings-actions.json'), JSON.stringify(records, null, 2))
   }
@@ -210,6 +241,7 @@ async function verifySettingsActions(page, origin) {
     else assert.deepStrictEqual(message, [240,20,13,126,0,247], 'startup recovery sent more than a readback/version query')
   }
   pass('initial preset storage refusal keeps Play reachable; Retry preserves real IndexedDB records and sends no setting writes')
+  if (process.argv.includes('--cache-startup-only')) {console.log('CACHE_DIAGNOSTIC startup path complete;other Settings actions NOT RUN'); return}
   const sections = await openSettingsForTest(page, origin)
   const changeScale = async scale => {
     const marker = await page.evaluate(() => window.__soundMidiSent.length)
@@ -1044,7 +1076,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
       console.log('PASS capability development subset; full audio/MIDI suite NOT RUN')
       return
     }
-    const context = await browser.newContext()
+    const context = await browser.newContext({serviceWorkers: workerControl})
     context.setDefaultTimeout(5000)
     const telemetryEvents = []
     await context.route('**/api/telemetry', route => {
@@ -1203,22 +1235,44 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
       window.__soundOutput = output
       window.__addSoundServicePort = () => access.inputs.set(serviceInput.id, serviceInput)
     })
-    const page = await context.newPage()
     const errors = []
     const pageErrors = []
-    page.on('pageerror', error => {
+    const lifecycle = []
+    const trace = row => {
+      if (lifecycle.length > 2000) return
+      if (lifecycle.length === 2000) {errors.push('Cache trace exceeded its evidence bound'); row = {type:'trace-overflow'}}
+      lifecycle.push(row)
+      fs.mkdirSync(process.env.BIOTRON_TEST_EVIDENCE_DIR, {recursive:true})
+      fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR, 'cache-lifecycle.json'), JSON.stringify(lifecycle, null, 2))
+    }
+    if (cacheTraceEnabled) {
+      console.log(`CACHE_DIAGNOSTIC worker=${workerControl} mainBypass=${cacheMainBypass};not acceptance`)
+      await context.exposeBinding('__recordCacheTrace', ({page, frame}, row) => trace({...row, pageUrl:page.url(), frameUrl:frame.url()}))
+      await context.addInitScript(installCacheLifecycleTrace, {bypass:cacheMainBypass})
+    }
+    context.on('page', tab => {
+      if (cacheTraceEnabled) {
+        tab.on('framenavigated', frame => trace({type:'navigation', at:Date.now(), pageUrl:tab.url(), frameUrl:frame.url()}))
+        tab.on('close', () => trace({type:'page-close', at:Date.now(), pageUrl:tab.url()}))
+      }
+      tab.on('pageerror', error => {
       errors.push(error.message)
-      pageErrors.push({at: new Date().toISOString(), url: page.url(), name: error.name, message: error.message, stack: error.stack})
+      pageErrors.push({at: new Date().toISOString(), url: tab.url(), name: error.name, message: error.message, stack: error.stack})
       const evidence = process.env.BIOTRON_TEST_EVIDENCE_DIR
       if (evidence) {
         fs.mkdirSync(evidence, {recursive: true})
         fs.writeFileSync(path.join(evidence, 'page-errors.json'), JSON.stringify(pageErrors, null, 2))
       }
+      if (cacheTraceEnabled) trace({type:'pageerror', at:Date.now(), pageUrl:tab.url(), name:error.name, message:error.message, stack:error.stack})
+      })
     })
+    const page = await context.newPage()
     if (process.argv.includes('--page-error-capture-fault')) {
-      await page.goto(`${origin}/#/biotron/play`)
-      const failure = page.waitForEvent('pageerror', {timeout: 5000})
-      await page.evaluate(() => setTimeout(() => { throw new Error('Injected page-error capture control') }, 0))
+      const faultPage = cacheTraceEnabled ? await context.newPage() : page
+      await faultPage.goto(`${origin}/#/biotron/play`)
+      if (cacheTraceEnabled) await faultPage.evaluate(async () => {const cache = await caches.open('qa-trace-control'); await cache.keys()})
+      const failure = faultPage.waitForEvent('pageerror', {timeout: 5000})
+      await faultPage.evaluate(() => setTimeout(() => { throw new Error('Injected page-error capture control') }, 0))
       await failure
       assert.deepStrictEqual(errors, [])
     }
