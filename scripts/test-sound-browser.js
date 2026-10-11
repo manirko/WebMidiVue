@@ -1475,7 +1475,11 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     await page.getByRole('link', {name: 'Settings', exact: true}).click()
     await page.getByRole('heading', {name: 'Settings', exact: true}).waitFor()
     assert.strictEqual(new URL(page.url()).hash, '#/biotron')
-    await page.getByText(/Sound stays on while you adjust settings/i).waitFor()
+    assert(await page.locator('.sound-lab').isVisible(), 'Settings hid the shared player')
+    assert.strictEqual(await page.getByRole('button', {name: 'Stop & release', exact: true}).count(), 1,
+      'Settings repeated the player Stop control')
+    assert.strictEqual(await page.getByRole('link', {name: 'Sound & volume', exact: true}).count(), 0,
+      'Embedded Settings retained the old separate-player banner')
     await page.getByText('Settings loaded. Individual changes apply live; presets need Apply preset to Biotron.').waitFor({timeout: 5000})
     const experimentToggle = page.locator('.settings-section > summary').filter({hasText: 'Experiments'})
     await experimentToggle.click()
@@ -1512,7 +1516,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     assert.strictEqual(await page.evaluate(() => window.__soundInput.connection), 'open')
     assert.strictEqual(await page.evaluate(() => window.__hasSoundMidiListener()), true)
     assert.strictEqual(await page.evaluate(() => window.__soundContext.state), 'running')
-    await page.getByRole('link', {name: 'Sound & volume'}).click()
+    await page.getByRole('navigation', {name: 'Biotron tasks'}).getByRole('link', {name: 'Play', exact: true}).click()
     await page.locator('.sound-lab[data-audio-state="running"][data-active-voices="1"]').waitFor()
     assert.strictEqual(await page.getByRole('slider', {name: 'Volume'}).getAttribute('max'), '100')
     assert.strictEqual(await page.evaluate(() => window.__soundInput.connection), 'open')
