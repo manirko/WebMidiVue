@@ -38,6 +38,7 @@ const report = {
   fault, quality, testSourceSha256: hash(fs.readFileSync(__filename)),
   faultScope: fault === 'mute' ? 'Test-only capture worklet substitutes zero PCM; production output is unchanged' :
     fault === 'drop' ? 'Test-only capture omits the second observed block; production output is unchanged' :
+    fault === 'stale-garden' ? 'Test-only readiness latch refers to another window; current Garden must not be certified' :
     fault === 'late-release' ? 'Test-only keyboard Note Off is delayed by 500ms; timing must remain INCONCLUSIVE' : 'No injected capture fault',
   physicalMidi: 'NOT RUN: the synthetic provider never delegates to native MIDI',
 }
@@ -84,7 +85,7 @@ async function cleanup() {
 
 (async () => {
   const {SCORE, analyze, wav} = await import(pathToFileURL(path.join(repo, 'scripts/audio-qa/analyze.mjs')).href)
-  assert(['none', 'mute', 'drop', 'late-release'].includes(fault), 'UI_PERF_FAULT must be none, mute, drop or late-release')
+  assert(['none', 'mute', 'drop', 'late-release', 'stale-garden'].includes(fault), 'Unknown UI_PERF_FAULT')
   assert(['safe', 'standard'].includes(quality), 'UI_PERF_QUALITY must be safe or standard')
   assert(fs.existsSync(path.join(dist, 'service-worker.js')), 'Existing beta dist required; this lane never builds')
   initialDist = snapshot()
@@ -125,7 +126,7 @@ async function cleanup() {
   }
   await context.tracing.start({screenshots: false, snapshots: false, sources: false})
   await context.addInitScript(injectedFault => {
-    const q = window.__uiPerf = {contexts: [], output: null, gesture: null, gardenAt: null,
+    const q = window.__uiPerf = {contexts: [], output: null, gesture: null, gardenAt: null, gardenWindow: null, gardenMessages: 0,
       phase: null, phaseId: 0, fault: injectedFault, midiCalls: [], measurementPhase: 'cold-play',
       intervals: new Set(), blobs: new Set(), longtasksSupported: false}
     localStorage.setItem('playtronica-sound-volume-v1', '70')
@@ -151,11 +152,12 @@ async function cleanup() {
       if (link) {
         q.gesture = {at: performance.now(), href: link.href}
         q.measurementPhase = link.href.endsWith('/biotron/play') ? 'return-play' : 'settings-route'
-        if (q.measurementPhase === 'return-play') q.gardenAt = null
       }
     }, true)
     window.addEventListener('message', event => {
-      if (event.origin === location.origin && event.source === document.querySelector('.garden-visual iframe')?.contentWindow && event.data?.type === 'garden-rendered') q.gardenAt = performance.now()
+      if (event.origin === location.origin && event.source === document.querySelector('.garden-visual iframe')?.contentWindow && event.data?.type === 'garden-rendered') {
+        q.gardenAt = performance.now(); q.gardenWindow = event.source; q.gardenMessages++
+      }
     })
     const key = (event, type) => {
       if (q.phase && event.code === 'KeyH' && q.phase.firstFrame !== null)
@@ -203,7 +205,12 @@ async function cleanup() {
     destination + '/' + phase, distribution(report.routes.filter(row => row.destination === destination && row.phase === phase).map(row => row.latencyMs)),
   ])))
   report.phase = 'garden-renderer'
-  await page.waitForFunction(() => window.__uiPerf.gardenAt !== null, {}, {timeout: report.limits.gardenHandshakeMs})
+  if (fault === 'stale-garden') await page.evaluate(() => {window.__uiPerf.gardenAt = performance.now(); window.__uiPerf.gardenWindow = window})
+  await page.waitForFunction(() => window.__uiPerf.gardenAt !== null &&
+    window.__uiPerf.gardenWindow === document.querySelector('.garden-visual iframe')?.contentWindow,
+  {}, {timeout: report.limits.gardenHandshakeMs})
+  report.gardenReadiness = await page.evaluate(() => ({at: window.__uiPerf.gardenAt,
+    messages: window.__uiPerf.gardenMessages, currentWindowConfirmed: true}))
   report.midiCallsBeforeAudio = await page.evaluate(() => window.__uiPerf.midiCalls)
   report.midiBaseline = report.midiCallsBeforeAudio.length
   assert(report.midiCallsBeforeAudio.every(call => call.route === '#/biotron' && call.phase === 'settings-route'),
