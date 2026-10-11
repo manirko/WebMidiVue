@@ -710,9 +710,9 @@ export default  {
       }
       if (await this.patchChanged() === null) return
       for (const item of commands) this.commands_data[item.name].set_value(Number(item.value))
-      if (await this.saveData() === null) return
       this.forceRerender++;
       this.markPresetPending()
+      await this.saveData()
     },
     validatePresetCommands(commands) {
       if (!Array.isArray(commands) || !commands.length || new Set(commands.map(item => item?.name)).size !== commands.length) throw new Error("Invalid commands")

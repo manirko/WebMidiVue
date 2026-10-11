@@ -353,6 +353,19 @@ assert.equal(pair.sent.length, rangeWrites, 'blank range endpoint must not write
   assert.deepEqual(failureWrites, ['send'], 'retry did not restore the live path')
   assert.deepEqual(failureVerifications, ['verify'])
 
+  const importFailure = storedEdit()
+  importFailure.commands_data.scale = {name:'scale', value:8, min_value:0, max_value:12,
+    set_value(value) {this.value = value}}
+  let importSave = 0
+  importFailure.db = {async updatePatch(id, data) {
+    if (++importSave === 2) throw new Error('Injected import save failure')
+    return {id, data}
+  }}
+  await importFailure.loadDataFromPreset('{"commands":[{"name":"scale","value":6}]}')
+  assert.equal(importFailure.commands_data.scale.value, 6)
+  assert.equal(importFailure.presetPending, true, 'an unsaved imported form was exposed as the live device state')
+  assert.equal(importFailure.settingsState, 'error', 'import pending status hid the storage error')
+
   const a = storedEdit(), records = new Map([[7, {scale: 2}], [9, {scale: 3}]])
   const addresses = []
   a.patches = [{id: 7, saved: false}, {id: 9, saved: false}]
