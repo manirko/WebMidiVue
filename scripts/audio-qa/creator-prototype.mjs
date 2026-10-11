@@ -55,6 +55,9 @@ async function run(action) {
 }
 function requestFinish() { if (busy) finishRequested = true; else void run(finish) }
 async function ready(signal) {
+  const started = generation
+  if (engine?.stopped) await guard(engine.stop(), 'Previous sound release', 10000, signal)
+  if (!pageActive || generation !== started || signal?.aborted) throw new DOMException('Start cancelled. Previous takes are kept.', 'AbortError')
   if (!engine || engine.stopped) engine = createRealtimeElementarySynth({preset: currentSound().preset, volume: +$('volume').value})
   const owned = engine
   try { await guard(owned.resume(), 'Sound resume', 10000, signal); await guard(owned.ensureReady(), 'Sound start', 10000, signal) }
