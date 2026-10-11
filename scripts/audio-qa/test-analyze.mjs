@@ -97,6 +97,13 @@ async function testCreatorPrototype() {
   const errors = []
   try {
     const build = execFileSync('python3', ['-I', 'scripts/build-browser-qa-harness.py', '--output', bench], {encoding: 'utf8', timeout: 30000})
+    if (process.argv.includes('--creator-release-boundary-fault')) {
+      const entry = path.join(bench, 'creator-entry.mjs'), before = fs.readFileSync(entry, 'utf8')
+      const line = 'const pending = input.close(); closingPorts.add(pending)'
+      assert(before.includes(line), 'close-settlement fault target changed')
+      fs.writeFileSync(entry, before.replace(line, 'const pending = input.close(); return pending // injected old normal-release behavior'))
+      report.injectedFault = {kind:'normal close promise is not retained', entrySha256:hash(fs.readFileSync(entry)), scope:'recorder ownership control, not a DSP fault or actual old build'}; save()
+    }
     const bundle = execFileSync(process.execPath, [path.join(bench, 'build.cjs')], {encoding: 'utf8', timeout: 60000})
     fs.writeFileSync(path.join(output, 'build.log'), build + bundle)
     report.inputs = JSON.parse(fs.readFileSync(path.join(bench, 'source-manifest.json'), 'utf8')).generated_from
