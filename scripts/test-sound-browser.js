@@ -204,7 +204,11 @@ async function verifySettingsActions(page, origin) {
   await page.getByRole('button', {name:'Retry saved presets', exact:true}).click()
   await page.getByRole('combobox', {name:'Preset', exact:true}).waitFor({timeout:5000})
   assert.deepStrictEqual(await storedPresets(), beforeStorage, 'startup Retry changed existing presets')
-  assert.deepStrictEqual(await page.evaluate(marker => window.__soundMidiSent.slice(marker).filter(message => message[1] === 20 && message[2] === 13 && message[3] !== 123), storageMarker), [], 'startup recovery wrote device settings')
+  const startupMessages = await page.evaluate(marker => window.__soundMidiSent.slice(marker), storageMarker)
+  for (const message of startupMessages) {
+    if (message[3] === 123) assert.deepStrictEqual([message.length, ...message.slice(0,5), message.at(-1)], [7,240,20,13,123,1,247])
+    else assert.deepStrictEqual(message, [240,20,13,126,0,247], 'startup recovery sent more than a readback/version query')
+  }
   pass('initial preset storage refusal keeps Play reachable; Retry preserves real IndexedDB records and sends no setting writes')
   const sections = await openSettingsForTest(page, origin)
   const changeScale = async scale => {
