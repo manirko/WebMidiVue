@@ -143,7 +143,7 @@ async function testCreatorPrototype() {
     assert(await page.locator('#connect').isDisabled()); assert.match(await page.locator('#connection').innerText(), /MIDI-capable/)
     assert.equal(await page.evaluate(() => __creatorControls.camera), 0); pass('no-device page, truthful MIDI fallback, no permission on load')
     if (process.argv.includes('--creator-lifecycle')) {
-      await verifyCreatorLifecycle({page, report, save, pass, hash})
+      await verifyCreatorLifecycle({page, report, save, pass, hash, fs, output})
       await browserCall(browser, () => page.evaluate(() => __CreatorPrototype.close()), 'creator close')
       assert.deepEqual(errors, []); report.status = 'PASS_LIFECYCLE_SCOPED'; save(); return
     }
@@ -325,7 +325,7 @@ async function testCreatorPrototype() {
   }
 }
 
-async function verifyCreatorLifecycle({page, report, save, pass, hash}) {
+async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, output}) {
   report.lifecycle = {scope: 'Controlled permission/open/page events; actual engine and retained WAV bytes. No native MIDI, BFCache or phone proof.', observations: []}
   const observe = async name => {
     const value = await page.evaluate(() => ({stopDisabled: document.querySelector('#stop').disabled, stopText: document.querySelector('#stop').textContent,
@@ -344,8 +344,8 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash}) {
   await page.evaluate(() => {
     const controls = __creatorControls
     const input = {id: 'lifecycle-biotron', name: 'Biotron controlled lifecycle', state: 'connected',
-      open() { controls.opens = (controls.opens || 0) + 1; if (controls.open === 'pending') return new Promise(resolve => { controls.resolveOpen = () => resolve(input) }); return Promise.resolve(input) },
-      async close() { controls.closes = (controls.closes || 0) + 1; return input }}
+      open() { controls.opens = (controls.opens || 0) + 1; if (controls.open === 'pending') return new Promise((resolve, reject) => { controls.resolveOpen = () => resolve(input); controls.rejectOpen = () => reject(Error('Open rejected')) }); return Promise.resolve(input) },
+      async close() { controls.closes = (controls.closes || 0) + 1; if (controls.closeFailures > 0) { controls.closeFailures--; throw Error('Controlled close failure') }; return input }}
     const access = {inputs: new Map([[input.id, input]])}; Object.defineProperty(access, 'outputs', {get() { throw Error('MIDI output touched') }})
     controls.input = input; controls.access = access
     Object.defineProperty(navigator, 'requestMIDIAccess', {configurable: true, value: options => {
@@ -381,6 +381,39 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash}) {
     await page.locator('#connect').click(); await page.waitForFunction(() => typeof __creatorControls.input.onmidimessage === 'function')
     await page.locator('#release').click(); await page.waitForFunction(() => document.querySelector('#release').hidden)
   }
+  // Resolve runs before abort, but its await continuation runs after abort.
+  await page.evaluate(() => { __creatorControls.permission = 'pending'; __creatorControls.open = 'success' })
+  const opensBeforeRace = await page.evaluate(() => __creatorControls.opens)
+  await page.locator('#connect').click(); await page.waitForFunction(() => document.querySelector('#stop').textContent.includes('Cancel'))
+  await page.evaluate(() => { __creatorControls.resolvePermission(); queueMicrotask(() => document.querySelector('#stop').click()) })
+  await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
+  const raced = await observe('permission/resolve-before-abort-continuation')
+  assert.equal(raced.opens, opensBeforeRace, 'Permission completion cancelled before continuation must not call native input.open')
+  assert.notEqual(raced.listener, 'function'); assert(await page.locator('#release').isHidden())
+  pass('resolve-before-abort microtask boundary rejects native open and listener attachment')
+  for (const outcome of ['reject', 'close-failure', 'timeout']) {
+    await page.evaluate(() => { __creatorControls.permission = 'success'; __creatorControls.open = 'pending' })
+    const opens = await page.evaluate(() => __creatorControls.opens)
+    await page.locator('#connect').click(); await page.waitForFunction(opens => __creatorControls.opens > opens, opens)
+    if (outcome !== 'timeout') await page.locator('#stop').click()
+    await page.waitForFunction(() => !document.querySelector('#record-audio').disabled, null, {timeout: 12000})
+    if (outcome === 'timeout') assert.match(await page.locator('#status').innerText(), /MIDI input timed out/)
+    const closes = await page.evaluate(() => __creatorControls.closes)
+    await page.evaluate(outcome => {
+      if (outcome === 'reject') __creatorControls.rejectOpen()
+      else { __creatorControls.closeFailures = outcome === 'close-failure' ? 1 : 0; __creatorControls.resolveOpen() }
+    }, outcome)
+    if (outcome === 'reject') await page.waitForFunction(() => !document.querySelector('#connect').disabled)
+    else await page.waitForFunction(closes => __creatorControls.closes > closes, closes)
+    if (outcome === 'close-failure') {
+      await page.waitForFunction(() => !document.querySelector('#release').hidden)
+      assert.match(await page.locator('#connection').innerText(), /Controlled close failure.*Try Release/)
+      await page.locator('#release').click(); await page.waitForFunction(() => document.querySelector('#release').hidden)
+    }
+    const after = await observe(`open/${outcome}/late`)
+    assert.notEqual(after.listener, 'function'); assert(await page.locator('#release').isHidden()); assert.equal(await retained(), previousSha)
+    pass(`pending input ${outcome}: late rejection does not resurrect ownership; late close failure has Release retry; timeout closes eventual open`)
+  }
   // A pending grant rejected after cancellation must not overwrite a newer recording.
   await page.evaluate(() => { __creatorControls.permission = 'pending' })
   await page.locator('#connect').click(); await page.waitForFunction(() => document.querySelector('#stop').textContent.includes('Cancel'))
@@ -399,10 +432,27 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash}) {
   assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false)
   pass('active pagehide visibly identifies current-take loss and preserves previous WAV; late rejection cannot overwrite a newer recording')
   await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+  await page.evaluate(() => { __CreatorPrototype.capture.tap.port.postMessage = () => {} })
+  await page.locator('#stop').click()
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted: true})))
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true})))
+  await page.waitForFunction(() => !document.querySelector('#record-audio').disabled, null, {timeout: 8000})
+  const finalizing = await observe('finalization/pagehide/return')
+  assert.match(finalizing.status, /current recording.*not kept/i); assert(!/Cleanup failed/.test(finalizing.status))
+  assert.equal(finalizing.takes, 1); assert.equal(await retained(), previousSha)
+  pass('pagehide during pending finalization blocks late take creation and releases recording nodes once')
+  await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
   await page.locator('#example').click(); await page.waitForTimeout(600); await page.locator('#stop').click()
   await page.waitForFunction(() => __CreatorPrototype.takes.length === 2 && !__CreatorPrototype.capture)
   assert.equal(await retained(), previousSha)
   assert(await page.evaluate(async () => (await __CreatorPrototype.takes[1].file.arrayBuffer()).byteLength > 44))
+  report.lifecycle.wavs = []
+  for (let i = 0; i < 2; i++) {
+    const bytes = Buffer.from(await page.evaluate(async i => Array.from(new Uint8Array(await __CreatorPrototype.takes[i].file.arrayBuffer())), i))
+    fs.writeFileSync(`${output}/lifecycle-${i}.wav`, bytes)
+    report.lifecycle.wavs.push({file: `lifecycle-${i}.wav`, bytes: bytes.length, sha256: hash(bytes)})
+  }
+  save()
   assert.equal(await page.evaluate(() => __creatorControls.camera), 0)
   pass('next recording finishes after cancelled connection and pagehide; camera/microphone/output/SysEx requests remain zero')
 }
