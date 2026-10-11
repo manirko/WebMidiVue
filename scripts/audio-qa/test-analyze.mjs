@@ -155,6 +155,9 @@ async function testCreatorPrototype() {
       assert.equal(await page.evaluate(() => __CreatorPrototype.engine.core._timer), null)
       assert.deepEqual(errors, []); report.status = benchmark ? 'MEASURED_SCOPED' : 'PASS_FIDELITY_SCOPED'; save(); return
     }
+    await verifyCreatorLifecycle({page, report, save, pass, hash, fs, output})
+    await browserCall(browser, () => page.evaluate(() => __CreatorPrototype.close()), 'creator lifecycle close')
+    await page.reload({waitUntil: 'networkidle'}); await page.waitForFunction(() => window.__CreatorPrototype)
     await page.selectOption('#sound', 'tone-glass'); await page.selectOption('#register', '-12'); await page.locator('#volume').fill('61')
     await page.locator('#copy').click()
     const copied = await page.evaluate(() => __creatorControls.copied.at(-1))
