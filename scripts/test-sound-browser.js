@@ -734,7 +734,7 @@ async function verifyCapabilityFallbacks(browser, origin) {
   assert.deepStrictEqual(noAudioErrors, [])
   await noAudioContext.close()
 
-  // No-MIDI profile: local Settings remain available; USB recovery is in the compatibility disclosure.
+  // No-MIDI profile: local Settings and one shared player recovery stay available.
   const iphoneContext = await browser.newContext(contextOptions(devices['iPhone 15'], browser))
   iphoneContext.setDefaultTimeout(5000)
   await iphoneContext.addInitScript(() => {
@@ -746,7 +746,10 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await iphone.goto(`${origin}/#/biotron`, {waitUntil: 'domcontentloaded'})
   await iphone.getByRole('heading', {name: 'Settings'}).waitFor()
   await iphone.getByText(/Local preset — changes stay/).waitFor()
-  await iphone.getByText('Browser & phone compatibility', {exact: true}).click()
+  assert.strictEqual(await iphone.locator('.beta-compatibility').count(), 0,
+    'Settings repeated browser guidance already present in the shared player')
+  assert.strictEqual(await iphone.getByRole('link', {name: 'Web MIDI Browser app details', exact: true}).count(), 1,
+    'Browser recovery must offer one unambiguous app link')
   assert.strictEqual(await iphone.getByRole('link', {name: 'Web MIDI Browser app details', exact: true}).getAttribute('href'), 'https://apps.apple.com/us/app/web-midi-browser/id953846217')
   assert(await iphone.getByRole('button', {name: 'Check saved settings', exact: true}).isDisabled())
   const tempo = iphone.getByRole('spinbutton', {name: '🌱 The beat value', exact: true})

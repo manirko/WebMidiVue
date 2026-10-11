@@ -96,7 +96,7 @@
           </div>
           <p role="status" class="mt-2 mb-0">{{ feedbackMessage || 'Your text stays on this page. Copy it to send wherever you prefer.' }}</p>
         </form>
-        <details class="beta-compatibility">
+        <details v-if="!biotronSoundRoute" class="beta-compatibility">
           <summary>Browser &amp; phone compatibility</summary>
           <CompatibilityGate :route="$route" advisory><p>This browser can request device access. Connect USB with a data cable, then choose Start listening on Play.</p></CompatibilityGate>
           <a href="/midi-access.html" target="_blank" rel="noopener">Connection and permission steps</a>

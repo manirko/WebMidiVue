@@ -240,13 +240,14 @@ async function auditProfile(browser, origin, profile) {
   }
 
   if (!profile.midi) {
-    await page.getByText('Browser & phone compatibility', {exact: true}).click()
-    const notice = page.locator('.beta-compatibility .compatibility-notice')
+    assert.equal(await page.locator('.beta-compatibility').count(), 0,
+      `${profile.name}: Settings repeats the player browser guidance`)
+    const notice = page.locator('.sound-lab .compatibility-notice')
+    assert.equal(await notice.count(), 1, `${profile.name}: Settings needs one browser recovery`)
     await notice.getByRole('heading', {name: 'This browser can play examples.'}).waitFor()
     await notice.getByRole('button', {name: 'Copy page link', exact: true}).click()
     assert.equal(await page.evaluate(() => window.__copiedText), page.url())
     await auditExpanded('Settings browser help')
-    await page.getByText('Browser & phone compatibility', {exact: true}).click()
   }
 
   const hintCount = await auditHints(page, profile)
