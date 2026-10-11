@@ -321,6 +321,7 @@ async function verifySettingsActions(page, origin) {
   }, {operation, ids, data: beforeStored})
   try {
     const [a, b] = await presetRecords(page, 'seed')
+    await page.reload()
     await openSettingsForTest(page, origin)
     const selector = tab => tab.getByRole('combobox', {name:'Preset', exact:true})
     await selector(page).selectOption(String(a))
