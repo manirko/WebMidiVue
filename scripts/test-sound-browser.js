@@ -473,6 +473,29 @@ async function verifyGardenStates(page, origin) {
   await page.locator('.sound-lab[data-reveal-stage="settling"]').waitFor()
   await page.getByRole('button', {name: 'Stop & release', exact: true}).click()
   await state('waiting').waitFor()
+  // A shared player also exposes Start from Settings. Keep its readback quiet,
+  // then restore the existing sensor watch on Play without a second startup.
+  await page.getByRole('navigation', {name: 'Biotron tasks'}).getByRole('link', {name: 'Settings', exact: true}).click()
+  await page.getByRole('heading', {name: 'Settings', level: 2, exact: true}).waitFor()
+  const beforeSettingsStart = await page.evaluate(() => window.__soundMidiSent.length)
+  await page.getByRole('button', {name: 'Start listening', exact: true}).click()
+  await page.locator('.sound-lab[data-reveal-stage="settling"]').waitFor()
+  await page.evaluate(() => {
+    const nonce = window.__soundMidiSent.filter(message => message[3] === 125).at(-1)[4]
+    window.__emitSoundMidi([0xf0, 0x0b, 125, nonce, 3, 0xf7])
+  })
+  await state('ready').waitFor()
+  const settingsMessages = await page.evaluate(at => window.__soundMidiSent.slice(at), beforeSettingsStart)
+  assert(settingsMessages.some(message => message[3] === 125 && message[5] === 1), 'Settings Start did not use existing nonce calibration')
+  assert(!settingsMessages.some(message => message[3] === 125 && message[5] === 5), 'Settings Start introduced periodic sensor queries')
+  await page.getByRole('navigation', {name: 'Biotron tasks'}).getByRole('link', {name: 'Play', exact: true}).click()
+  await page.waitForFunction(at => window.__soundMidiSent.slice(at).some(message => message[3] === 125 && message[5] === 5), beforeSettingsStart)
+  await page.getByRole('button', {name: 'Stop & release', exact: true}).click()
+  await page.locator('.sound-lab[data-audio-state="closed"][data-active-voices="0"]').waitFor()
+  if (evidence) fs.writeFileSync(path.join(evidence, 'settings-first-start.json'), JSON.stringify({
+    startInSettingsReady: true, sensorWatchAbsentInSettings: true, sensorWatchResumedOnPlay: true, stopClosed: true,
+    scope: 'Actual shared UI/audio with synthetic MIDI only; physical readback/concurrency NOT RUN'
+  }, null, 2))
   console.log(`PASS garden states: trusted click→feedback ${milliseconds.toFixed(1)}ms, deferred connect/calibration/ready/pause/resume/disconnect/Stop/reduced motion; synthetic MIDI only`)
 }
 
