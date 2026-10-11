@@ -39,7 +39,7 @@
     <div class="m-2 content ">
       <main :class="{'route-stage': betaBuild && !firstPlay, 'route-stage--compact': betaBuild && firstPlay}">
         <CompatibilityGate :route="$route">
-          <DeviceTaskNav v-if="betaBuild && biotronSoundRoute" class="workspace-nav" device-name="Biotron"
+          <DeviceTaskNav v-if="betaBuild && biotronSoundRoute" class="workspace-nav" :inert="creatorOpening" device-name="Biotron"
             :active-task="$route.path === '/biotron' ? 'settings' : 'play'" play-route="/biotron/play" settings-route="/biotron" />
           <details v-if="betaBuild && biotronSoundRoute" class="beta-experiment">
             <summary>Record sound for a video · Experiment</summary>
@@ -49,8 +49,8 @@
           </details>
           <router-view v-slot="{ Component }">
             <!-- One Biotron player stays mounted while its settings change. -->
-            <SoundLab v-if="betaBuild && biotronSoundRoute" mode="reveal" profile-id="biotron" />
-            <component v-if="!firstPlay" :is="Component" />
+            <SoundLab v-if="betaBuild && biotronSoundRoute" mode="reveal" profile-id="biotron" :inert="creatorOpening" />
+            <div v-if="!firstPlay" :inert="creatorOpening"><component :is="Component" /></div>
           </router-view>
         </CompatibilityGate>
       </main>

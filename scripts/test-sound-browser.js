@@ -103,7 +103,14 @@ function writeSoakEvidence(status, phase, report = latestRealtimeSoak, error = n
   }
 }
 
+const telemetryEvents = []
 const server = createStaticServer(root)
+server.on('request', request => {
+  if (request.url !== '/api/telemetry' || request.method !== 'POST') return
+  let body = ''
+  request.on('data', chunk => { if (body.length < 32768) body += chunk })
+  request.on('end', () => { try { telemetryEvents.push(JSON.parse(body)) } catch { telemetryEvents.push({invalidPayload: true}) } })
+})
 
 async function openSoundHelp(page) {
   const summary = page.getByText('No sound? · Help', {exact: true})
@@ -219,9 +226,14 @@ async function verifyCreatorHandoff(page, origin) {
   await page.evaluate(() => { __soundOutput.close = function () { return new Promise(resolve => { window.__finishSettingsClose = () => { this.connection = 'closed'; resolve(this) } }) } })
   await page.getByRole('link', {name:'Play', exact:true}).click()
   await page.waitForURL(/#\/biotron\/play/)
+  await page.locator('.sound-palette > summary').click()
   await openEntry()
   await page.waitForFunction(() => document.querySelector('#creator-action').disabled)
   assert.equal(new URL(page.url()).pathname, '/')
+  let restartSucceeded = false
+  try { await page.getByRole('button', {name:'Listen to example', exact:true}).click({timeout:750}); restartSucceeded = true }
+  catch (error) { if (error.name !== 'TimeoutError') throw error }
+  assert.equal(restartSucceeded, false, 'Example restarted while previous Settings owner was being released')
   await page.evaluate(() => __finishSettingsClose())
   await page.waitForURL(origin + '/creator.html')
   pass('Settings → Play retains old pending output owner until native close settles')
@@ -269,7 +281,27 @@ async function verifyCreatorHandoff(page, origin) {
   assert.equal(crypto.createHash('sha256').update(retained).digest('hex'), hash)
   pass('Return close failure preserves WAV and Save; no silent loss or redirect')
   await page.evaluate(() => { __soundInput.close = async function () { this.connection = 'closed'; return this } })
-  await page.locator('#leave-confirm').click(); await page.waitForURL(origin + '/#/biotron/play?sound=1')
+  await page.evaluate(() => { const owned = __CreatorPrototype.engine; window.__previousReturnEngine = owned; window.__nativeReturnClose = owned.context.close.bind(owned.context); owned.context.close = async () => { throw Error('Injected sound close refusal') } })
+  await page.locator('#leave-confirm').click()
+  await page.getByText('Injected sound close refusal', {exact:true}).waitFor()
+  await page.locator('#record-audio').click()
+  await page.waitForFunction(() => __CreatorPrototype.capture || !document.querySelector('#record-audio').disabled)
+  assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false, 'Record replaced the stopped engine before its old audio context was released')
+  assert.equal(await page.evaluate(() => __CreatorPrototype.engine === __previousReturnEngine), true)
+  await page.evaluate(() => { __previousReturnEngine.context.close = __nativeReturnClose })
+  await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+  assert.equal(await page.evaluate(() => __previousReturnEngine.context.state), 'closed')
+  await page.locator('#stop').click(); await page.waitForFunction(() => !__CreatorPrototype.capture && !document.querySelector('#record-audio').disabled)
+  pass('failed Return sound close retains old engine owner; Record releases it before replacement and keeps WAV')
+  await page.evaluate(() => { const owned = __CreatorPrototype.engine, native = owned.context.close.bind(owned.context); owned.context.close = () => new Promise((resolve, reject) => { window.__finishCreatorReturn = () => native().then(resolve, reject) }) })
+  await page.locator('#return').click(); await page.locator('#leave-confirm').click()
+  await page.waitForFunction(() => Boolean(window.__finishCreatorReturn))
+  await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted:true})); window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted:true})); __finishCreatorReturn() })
+  await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
+  assert.equal(page.url(), origin + '/creator.html', 'Old Return redirected the restored page after pagehide')
+  assert.equal(crypto.createHash('sha256').update(Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer()))))).digest('hex'), hash)
+  pass('pending Return cannot redirect after pagehide/pageshow; previous WAV stays byte-identical')
+  await page.locator('#return').click(); await page.locator('#leave-confirm').click(); await page.waitForURL(origin + '/#/biotron/play?sound=1')
   pass('confirmed Return retry releases device and returns to main Play')
   if (page.context().browser().browserType().name() === 'chromium') {
     await page.waitForFunction(async () => Boolean(navigator.serviceWorker.controller && await caches.match('/creator.html')))
@@ -1169,7 +1201,6 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     }
     const context = await browser.newContext({serviceWorkers: workerControl})
     context.setDefaultTimeout(5000)
-    const telemetryEvents = []
     await context.route('**/api/telemetry', route => {
       telemetryEvents.push(JSON.parse(route.request().postData()))
       return route.fulfill({status: 202, contentType: 'application/json', body: '{"accepted":true}'})
@@ -1855,6 +1886,8 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     const disconnectedFeedback = page.getByRole('link', {name: 'Not yet — WhatsApp'})
     assert((await disconnectedFeedback.getAttribute('href')).includes('Reached%3A%20Biotron%20disconnected%20before%20first%20sound'))
     await verifyCapabilityFallbacks(browser, origin)
+    if (process.env.BIOTRON_TEST_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR, 'telemetry-events.json'), JSON.stringify(telemetryEvents, null, 2))
+    assert(!telemetryEvents.some(event => event.invalidPayload), 'Telemetry receiver got malformed JSON')
     assert(telemetryEvents.some(event => event.event_name === 'session.started' && event.service_name === 'biotron'))
     assert(telemetryEvents.every(event => !('raw_midi' in event) && !('device_name' in event)))
     await verifyGardenStates(page, origin)
