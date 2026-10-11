@@ -81,7 +81,7 @@ console.log('PASS: measured CPU delta, valid zero; changed/duplicate processes, 
 // Reuse the existing capture UI and production engine. This flag replaces the
 // manual three-button check; it does not introduce another audio renderer.
 if (process.argv.includes('--browser') || process.argv.includes('--creator-recording')) await testRealtimeCapture()
-if (['--creator-prototype', '--creator-lifecycle', '--creator-benchmark', '--creator-fidelity', '--creator-fidelity-fault'].some(flag => process.argv.includes(flag))) await testCreatorPrototype()
+if (['--creator-prototype', '--creator-lifecycle', '--creator-cold-native', '--creator-benchmark', '--creator-fidelity', '--creator-fidelity-fault'].some(flag => process.argv.includes(flag))) await testCreatorPrototype()
 
 async function testCreatorPrototype() {
   const fs = await import('node:fs'), path = await import('node:path'), os = await import('node:os'), crypto = await import('node:crypto')
@@ -97,6 +97,34 @@ async function testCreatorPrototype() {
   const errors = []
   try {
     const build = execFileSync('python3', ['-I', 'scripts/build-browser-qa-harness.py', '--output', bench], {encoding: 'utf8', timeout: 30000})
+    const coldNative = process.argv.includes('--creator-cold-native')
+    if (coldNative) {
+      const entry = path.join(bench, 'creator-entry.mjs'), before = fs.readFileSync(entry, 'utf8')
+      const target = '  capture = session\n  tap.port.onmessage = event => {'
+      assert(before.includes(target), 'native cold observer target changed')
+      const observe = `  capture = session
+  const log = globalThis.__creatorNativeEvents ||= [], context = engine.context
+  const remember = (type, extra = {}) => { if (log.length < 100) log.push({type, at: performance.now(), time: context.currentTime, state: context.state, ...extra}) }
+  remember('attached')
+  context.addEventListener('statechange', () => remember('statechange'))
+  tap.addEventListener('processorerror', () => remember('processorerror', {node: 'recorder'}))
+  engine.node.addEventListener('processorerror', () => remember('processorerror', {node: 'synth'}))
+  let firstBlock = true
+  tap.port.addEventListener('message', event => {
+    if (firstBlock && event.data.pcm) { firstBlock = false; remember('first-pcm', {frame: event.data.frame, samples: event.data.pcm.length}) }
+    if (event.data.done) remember('done')
+  })
+  tap.port.onmessage = event => {`
+      let derived = before.replace(target, observe)
+      if (process.argv.includes('--creator-cold-processor-fault')) {
+        const process = 'process(inputs){const a=inputs[0]?.[0];'
+        assert(derived.includes(process), 'native processor fault target changed')
+        derived = derived.replace(process, "process(inputs){throw Error('Injected cold recorder processor failure');const a=inputs[0]?.[0];")
+      }
+      fs.writeFileSync(entry, derived)
+      report.coldNative = {scope: 'Native listeners on actual nodes; generated recorder-only observation changes timing; production source/core unchanged. No extra awaits or warmup before Stop.',
+        processorFaultInjected: process.argv.includes('--creator-cold-processor-fault'), originalEntrySha256: hash(before), derivedEntrySha256: hash(derived)}; save()
+    }
     if (process.argv.includes('--creator-release-boundary-fault')) {
       const entry = path.join(bench, 'creator-entry.mjs'), before = fs.readFileSync(entry, 'utf8')
       const line = 'const pending = input.close(); closingPorts.add(pending)'
@@ -149,6 +177,12 @@ async function testCreatorPrototype() {
     pass('audio-only creator page: no video, microphone or camera controls')
     assert(await page.locator('#connect').isDisabled()); assert.match(await page.locator('#connection').innerText(), /MIDI-capable/)
     assert.equal(await page.evaluate(() => __creatorControls.camera), 0); pass('no-device page, truthful MIDI fallback, no permission on load')
+    if (coldNative) {
+      await verifyCreatorLifecycle({page, report, save, pass, hash, fs, output, coldOnly: true})
+      await browserCall(browser, () => page.evaluate(() => __CreatorPrototype.close()), 'creator cold close')
+      report.coldNative.eventsAfterClose = await page.evaluate(() => __creatorNativeEvents)
+      assert.deepEqual(errors, []); report.status = 'PASS_COLD_OBSERVED'; save(); return
+    }
     if (process.argv.includes('--creator-lifecycle')) {
       await verifyCreatorLifecycle({page, report, save, pass, hash, fs, output})
       await browserCall(browser, () => page.evaluate(() => __CreatorPrototype.close()), 'creator close')
@@ -330,7 +364,8 @@ async function testCreatorPrototype() {
         visibility: document.visibilityState, focus: document.hasFocus(), status: document.querySelector('#status')?.textContent,
         context: __CreatorPrototype.engine?.context.state, time: __CreatorPrototype.engine?.context.currentTime,
         ready: __CreatorPrototype.engine?.ready, stopped: __CreatorPrototype.engine?.stopped,
-        blocks: __CreatorPrototype.capture?.blocks.length ?? null, takes: __CreatorPrototype.takes.length
+        blocks: __CreatorPrototype.capture?.blocks.length ?? null, takes: __CreatorPrototype.takes.length,
+        nativeEvents: window.__creatorNativeEvents ?? null
       })), 'creator first-fault state', 1500).catch(stateError => ({error: String(stateError)})); save()
     }
     if (page) await page.screenshot({path: path.join(output, 'first-fault.png'), timeout: 2000}).catch(() => {})
@@ -343,7 +378,7 @@ async function testCreatorPrototype() {
   }
 }
 
-async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, output}) {
+async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, output, coldOnly = false}) {
   report.lifecycle = {scope: 'Controlled permission/open/page events; actual engine and retained WAV bytes. No native MIDI, BFCache or phone proof.', observations: []}
   const observe = async name => {
     const value = await page.evaluate(() => ({stopDisabled: document.querySelector('#stop').disabled, stopText: document.querySelector('#stop').textContent,
@@ -357,10 +392,20 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
     report.lifecycle.observations.push({name, value}); save(); return value
   }
   await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
-  await observe('seed/record-started')
+  if (!coldOnly) await observe('seed/record-started')
   await page.locator('#example').click(); await page.waitForTimeout(900)
-  await observe('seed/before-stop'); await page.locator('#stop').click()
+  if (!coldOnly) await observe('seed/before-stop')
+  await page.locator('#stop').click()
   await page.waitForFunction(() => __CreatorPrototype.takes.length === 1 && !__CreatorPrototype.capture)
+  if (coldOnly) {
+    report.coldNative.events = await page.evaluate(() => __creatorNativeEvents)
+    const file = Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer()))))
+    fs.writeFileSync(path.join(output, 'cold-take.wav'), file); report.coldNative.wavSha256 = hash(file); save()
+    assert(file.length > 44, 'Cold recording must keep PCM, not an empty WAV')
+    assert(report.coldNative.events.some(event => event.type === 'first-pcm'))
+    assert(!report.coldNative.events.some(event => event.type === 'processorerror'))
+    await observe('seed/after-stop'); pass('cold Record→Example900ms→Stop retains actual PCM with native event observations'); return
+  }
   await page.locator('#example').click()
   const retained = async () => hash(Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer())))))
   const previousSha = await retained(); report.lifecycle.previousWavSha256 = previousSha; save()
