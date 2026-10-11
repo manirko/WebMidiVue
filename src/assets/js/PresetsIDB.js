@@ -123,13 +123,6 @@ export class Db {
         });
     }
 
-    createNoEditablePatch(data, name) {
-        return this._transaction("readwrite", (store, setResult) => {
-            const request = store.add({name, editable: false, saved: true, data: toRaw(data)});
-            request.onsuccess = () => setResult(request.result);
-        });
-    }
-
     getPatch(id) {
         return this._transaction("readonly", (store, setResult) => {
             const request = id == null ? store.getAll() : store.get(this._key(id));
@@ -155,13 +148,15 @@ export class Db {
             const key = this._key(id);
             const request = store.get(key);
             request.onsuccess = () => {
-                if (!request.result) {
-                    fail(new Error(`Preset ${key} does not exist`));
-                    return;
-                }
-                const patch = change(request.result);
-                const put = store.put(patch);
-                put.onsuccess = () => setResult(patch);
+                try {
+                    if (!request.result) {
+                        fail(new Error(`Preset ${key} does not exist`));
+                        return;
+                    }
+                    const patch = change(request.result);
+                    const put = store.put(patch);
+                    put.onsuccess = () => setResult(patch);
+                } catch (error) { fail(error); }
             };
         });
     }
@@ -180,12 +175,14 @@ export class Db {
             const key = this._key(id);
             const request = store.get(key);
             request.onsuccess = () => {
-                if (!request.result) {
-                    fail(new Error(`Preset ${key} does not exist`));
-                    return;
-                }
-                const deletion = store.delete(key);
-                deletion.onsuccess = () => setResult(key);
+                try {
+                    if (!request.result) {
+                        fail(new Error(`Preset ${key} does not exist`));
+                        return;
+                    }
+                    const deletion = store.delete(key);
+                    deletion.onsuccess = () => setResult(key);
+                } catch (error) { fail(error); }
             };
         });
     }

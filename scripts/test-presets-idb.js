@@ -34,6 +34,8 @@ const server = http.createServer((request, response) => {
   })
   try {
     const page = await browser.newPage()
+    const pageErrors = []
+    page.on('pageerror', error => pageErrors.push(error.message))
     await page.goto(`http://127.0.0.1:${server.address().port}/`)
     await page.addScriptTag({url: '/bundle.js'})
     const result = await page.evaluate(async () => {
@@ -123,6 +125,18 @@ const server = http.createServer((request, response) => {
       }
       check(status.length === 1 && !status[0].ok, 'put success then abort reported Saved')
       check((await db.getPatch(id)).name === 'Stored in browser', 'aborted save changed record')
+      IDBObjectStore.prototype.put = function () { throw new DOMException('quota', 'QuotaExceededError') }
+      try {
+        await rejects(() => db.updatePatch(id, {note: 99}), 'synchronous update failure')
+        await rejects(() => db.savePatch(id, 'Must not appear'), 'synchronous rename failure')
+      } finally { IDBObjectStore.prototype.put = originalPut }
+      check((await db.getPatch(id)).data.note === 61, 'failed update changed the record')
+      check((await db.getPatch(id)).name === 'Stored in browser', 'failed rename changed the record')
+      const originalDelete = IDBObjectStore.prototype.delete
+      IDBObjectStore.prototype.delete = function () { throw new DOMException('closed', 'InvalidStateError') }
+      try { await rejects(() => db.deletePatch(id), 'synchronous delete failure') }
+      finally { IDBObjectStore.prototype.delete = originalDelete }
+      check(Boolean(await db.getPatch(id)), 'failed delete lost the record')
       await rejects(() => db.updatePatch(999999, {}), 'missing update')
       await rejects(() => db.savePatch(999999, 'Missing'), 'missing save')
       await rejects(() => db.deletePatch(999999), 'missing delete')
@@ -189,6 +203,7 @@ const server = http.createServer((request, response) => {
       check((await db.getPatch()).find(patch => patch.id === fast.id).data === null, 'damaged locked preset broke listing or was silently replaced')
       check((await Db.prototype.getPatch.call(db, fast.id)).data === null, 'reading a damaged preset changed storage')
     })
+    assert.deepEqual(pageErrors, [], 'handled storage failures escaped as page errors')
     console.log('Preset IndexedDB regression passed:', JSON.stringify(cases))
   } finally {
     await browser.close()
