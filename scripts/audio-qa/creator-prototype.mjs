@@ -27,6 +27,7 @@ const guard = (promise, label, ms = 10000, signal) => new Promise((resolve, reje
 function update() {
   for (const id of ['sound', 'register', 'record-audio', 'connect']) $(id).disabled = busy || Boolean(capture)
   $('connect').disabled ||= opening.size > 0
+  $('connect').textContent = opening.size ? 'Waiting for previous connection' : 'Connect Biotron'
   $('repeat').disabled = busy || !lastPerformance.length
   $('stop').disabled = !startAbort && (!capture || busy)
   $('stop').textContent = startAbort ? 'Cancel start' : 'Stop recording'
@@ -121,6 +122,7 @@ async function finishAndRelease() {
 }
 $('connect').onclick = () => run(async () => {
   const controller = new AbortController(); startAbort = controller; const signal = controller.signal; update()
+  status('Connecting Biotron. Cancel start stops this page waiting; the browser may still show its permission prompt.')
   try {
     await ready(signal)
     signal.throwIfAborted()
@@ -134,13 +136,16 @@ $('connect').onclick = () => run(async () => {
       // Native open cannot be aborted. Keep reconnect disabled until its late close.
       void Promise.resolve(pending).then(async () => {
         if (!signal.aborted) return
+        let closing
         try {
-          await guard(input.close(), 'Cancelled MIDI release')
+          closing = input.close(); await guard(closing, 'Cancelled MIDI release')
           inputs = inputs.filter(item => item !== input); if (!inputs.length && midi === access) midi = null
         } catch (error) {
           if (!inputs.includes(input)) inputs.push(input)
           midi ||= access; $('connection').textContent = error.message + '. Try Release Biotron.'
         }
+        // A guard timeout does not cancel native close; reconnect must still wait.
+        if (closing) await Promise.resolve(closing).catch(() => {})
       }, () => {}).finally(() => { opening.delete(input); update() })
       await guard(pending, 'MIDI input', 10000, signal)
       signal.throwIfAborted()
