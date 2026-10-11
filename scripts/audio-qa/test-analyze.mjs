@@ -400,7 +400,7 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
   if (coldOnly) {
     report.coldNative.events = await page.evaluate(() => __creatorNativeEvents)
     const file = Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer()))))
-    fs.writeFileSync(path.join(output, 'cold-take.wav'), file); report.coldNative.wavSha256 = hash(file); save()
+    fs.writeFileSync(`${output}/cold-take.wav`, file); report.coldNative.wavSha256 = hash(file); save()
     assert(file.length > 44, 'Cold recording must keep PCM, not an empty WAV')
     assert(report.coldNative.events.some(event => event.type === 'first-pcm'))
     assert(!report.coldNative.events.some(event => event.type === 'processorerror'))
