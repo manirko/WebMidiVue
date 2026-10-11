@@ -1,5 +1,5 @@
 <template>
-  <div :class="{'beta-shell': betaBuild, 'biotron-workspace': betaBuild && biotronSoundRoute}">
+  <div :class="{'beta-shell': betaBuild, 'biotron-workspace': betaBuild}">
   <img src="/Logo-Black-280.webp" alt="Playtronica logo" width="280" height="199" loading="eager" decoding="async" class="small--hide image-element" itemprop="logo">
 
   <header v-if="!firstPlay && !betaBuild" class="d-flex justify-content-center">
