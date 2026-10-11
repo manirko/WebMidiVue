@@ -1,6 +1,7 @@
 const assert = require('assert')
 const fs = require('fs')
 const vm = require('vm')
+let presetProvider = () => ({})
 
 const source = fs.readFileSync(process.env.BIOTRON_SETTINGS_CONTROL_FILE || 'src/components/BiotronPage/BiotronPageUpdated.vue', 'utf8')
 const script = source.match(/<script>([\s\S]*?)<\/script>/)[1]
@@ -12,7 +13,9 @@ const context = {
   soundSessionState: {running: false},
   recordBiotronEvent() {},
   BiotronCommandsData: [],
-  BiotronDb: class {},
+  BiotronDb: class {constructor() {Object.assign(this, presetProvider())}},
+  getSoundController: () => null,
+  updateSoundSession() {},
 }
 for (const name of [
   'DeviceTaskNav', 'DiagnosticCopy', 'BootstrapCollapse', 'LoaderComponent', 'UpdateFirmwareComponent',
@@ -22,7 +25,7 @@ for (const name of [
 const connectionSource = fs.readFileSync('src/biotron/settingsConnection.mjs', 'utf8')
   .replace('export function createSettingsConnectionMethods', 'function createSettingsConnectionMethods') +
   '\nmodule.exports = createSettingsConnectionMethods'
-const connectionContext = {module: {exports: {}}}
+const connectionContext = {module: {exports: {}}, setTimeout, clearTimeout}
 vm.runInNewContext(connectionSource, connectionContext)
 context.createSettingsConnectionMethods = connectionContext.module.exports
 context.settingsVectorFromCommands = () => []
@@ -137,6 +140,7 @@ assert.equal(pair.sent.length, rangeWrites, 'blank range endpoint must not write
   assert.equal(presetChanges, 2)
   const storedData = new Map()
   context.localStorage = {getItem: key => storedData.get(key), setItem: (key, value) => storedData.set(key, value)}
+  connectionContext.localStorage = context.localStorage
   importing.id = 'stored-preset-fixture'
   importing.patch_id = 9
   storedData.set(importing.id, '9')
@@ -395,5 +399,88 @@ assert.equal(pair.sent.length, rangeWrites, 'blank range endpoint must not write
   assert.deepEqual(legacyCalls, [[240,11,16,127,247], ['scale',11], ['wait',100],
     ['lightBpm',11], ['wait',100], [240,11,126,247], ['wait',100], ['plantBpm',11]],
     'simplification changed the legacy firmware command order')
-  console.log('Biotron Settings initial-read, retry, stale gestures, real autosave failure/retry, preset addressing/fork and legacy order: PASS')
+  { // Cold storage has independent pending and unmount boundaries.
+  const stored = {id:9, name:'My preset', editable:true, saved:true, data:{scale:5}}
+  const initialPage = (device = null) => {
+    const state = Object.assign(page(), component.data())
+    state.betaBuild = true; state.id = 'preset-startup-fixture'; state.device = device
+    state.commands_data = {scale:{name:'scale', value:1, min_value:0, max_value:12, set_value(value) {this.value = value}}}
+    state.readbacks = 0
+    state.loadPersistedSettings = async output => {assert.equal(output, state.device); state.readbacks++; state.settingsSnapshotKnown = true}
+    storedData.set(state.id, '9')
+    return state
+  }
+  let constructions = 0, startupFailure = 'ready'
+  presetProvider = () => {
+    constructions++
+    return {ready: startupFailure === 'ready' ? Promise.reject(Error('Injected storage open failure')) : Promise.resolve(),
+      async getPatch(id) {if ((startupFailure === 'list' && id === undefined) || (startupFailure === 'selected' && id === 9)) throw Error('Injected preset list failure'); return id === undefined ? [stored] : stored}}
+  }
+  for (const kind of ['ready', 'list', 'selected']) {
+    startupFailure = kind
+    const state = initialPage({id:'cold-device'})
+    await assert.doesNotReject(() => component.created.call(state), 'initial preset storage failure escaped instead of offering recovery')
+    assert.equal(state.page_is_inited, false); assert.equal(state.readbacks, 0)
+    assert.match(state.presetStorageError, /saved presets/i)
+    assert.equal(state.presetStoragePending, false)
+    assert.equal(state.commands_data.scale.value, 1)
+    startupFailure = ''
+    await state.initPresetStorage()
+    assert.equal(state.page_is_inited, true); assert.equal(state.patch_id, 9)
+    assert.equal(state.commands_data.scale.value, 5); assert.equal(state.readbacks, 1)
+    assert.equal(state.presetStorageError, '')
+  }
+  const deferred = () => {let resolve, reject; const promise = new Promise((yes, no) => {resolve = yes; reject = no}); return {promise, resolve, reject}}
+  const malformed = initialPage()
+  presetProvider = () => ({ready:Promise.resolve(), async getPatch(id) {return id === undefined ? [stored] : {...stored, data:{unknown:1}}}})
+  await component.created.call(malformed)
+  assert.equal(malformed.page_is_inited, true, 'invalid selected preset hid the usable preset list')
+  assert.match(malformed.settingsMessage, /Choose another preset/)
+  assert.equal(malformed.commands_data.scale.value, 1)
+  presetProvider = () => ({ready:Promise.resolve(), async getPatch(id) {return id === undefined ? [stored] : stored}})
+  malformed.db = new context.BiotronDb()
+  assert.equal(await malformed.loadData(), true)
+  assert.equal(malformed.commands_data.scale.value, 5)
+  for (const phase of ['ready', 'list', 'selected', 'fallback', 'rejected']) {
+    const pending = deferred(), reached = deferred()
+    presetProvider = () => {
+      constructions++
+      if (phase === 'ready') reached.resolve()
+      return {ready: phase === 'ready' ? pending.promise : Promise.resolve(), async getPatch(id) {
+        if (phase === 'fallback' && id === 9) return null
+        if ((phase === 'list' && id === undefined) || (['selected', 'rejected'].includes(phase) && id === 9) || (phase === 'fallback' && id === 1)) {reached.resolve(); return pending.promise}
+        return id === undefined ? [stored] : stored
+      }}
+    }
+    const state = initialPage(), opening = component.created.call(state)
+    await reached.promise
+    const calls = constructions
+    await state.initPresetStorage()
+    assert.equal(constructions, calls, 'Retry overlapped a pending initial load')
+    component.beforeUnmount.call(state)
+    const afterUnmount = {value:state.commands_data.scale.value, patch:state.patch_id, error:state.presetStorageError}
+    if (phase === 'rejected') pending.reject(Error('Late storage rejection'))
+    else pending.resolve(phase === 'list' ? [stored] : stored)
+    await opening
+    assert.equal(state.page_is_inited, false, 'late initial load exposed unmounted controls')
+    assert.deepEqual({value:state.commands_data.scale.value, patch:state.patch_id, error:state.presetStorageError}, afterUnmount)
+    assert.equal(state.readbacks, 0)
+  }
+  const pending = deferred()
+  presetProvider = () => ({ready:pending.promise, async getPatch(id) {return id === undefined ? [stored] : stored}})
+  const timed = initialPage()
+  let deadline
+  connectionContext.setTimeout = (callback, ms) => {assert.equal(ms, 5000); deadline = callback; return 1}
+  connectionContext.clearTimeout = () => {}
+  const opening = component.created.call(timed)
+  deadline(); await opening
+  assert.match(timed.presetStorageError, /saved presets/i); assert.equal(timed.presetStoragePending, false)
+  connectionContext.setTimeout = setTimeout; connectionContext.clearTimeout = clearTimeout
+  presetProvider = () => ({ready:Promise.resolve(), async getPatch(id) {return id === undefined ? [stored] : stored}})
+  await timed.initPresetStorage()
+  pending.resolve(); await Promise.resolve(); await Promise.resolve()
+  assert.equal(timed.page_is_inited, true); assert.equal(timed.commands_data.scale.value, 5)
+  assert.equal(timed.presetStorageError, '', 'old timed-out completion replaced the successful Retry')
+  }
+  console.log('Biotron Settings initial-read, retry, stale gestures, real autosave failure/retry, preset addressing/fork, legacy order and startup storage recovery: PASS')
 })().catch(error => { console.error(error); process.exitCode = 1 })

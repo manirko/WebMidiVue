@@ -71,6 +71,11 @@
         </GroupOfCommands>
       </template>
     </BootstrapCollapse>
+    <div v-if="!page_is_inited" class="settings-feedback" :class="{'settings-feedback--error': presetStorageError}" role="status">
+      <span>{{ presetStorageError || 'Opening saved presets…' }}</span>
+      <button v-if="presetStorageError" type="button" class="btn btn-outline-primary btn-sm" :disabled="presetStoragePending" @click="initPresetStorage">Retry saved presets</button>
+      <router-link to="/biotron/play">Go to Play</router-link>
+    </div>
     <template v-if="!betaBuild || settingsReady || (page_is_inited && !device)">
     <p v-if="betaBuild && !device" role="status">Local preset — changes stay in this browser. Connect Biotron, then choose Apply preset to Biotron.</p>
     <section :class="{'beta-preset-card': betaBuild}" :inert="betaBuild && is_loading" aria-label="Preset and saved settings">
@@ -397,7 +402,7 @@
       </template>
     </BootstrapCollapse>
 
-  </div></template><p v-else class="alert alert-light mx-2" role="status">{{ device ? (settingsState === 'error' ? settingsMessage : 'Reading your Biotron settings… Controls unlock when it answers.') : 'Connect Biotron to unlock its settings. Nothing changes until you choose a device.' }}</p>
+  </div></template><p v-else-if="page_is_inited" class="alert alert-light mx-2" role="status">{{ device ? (settingsState === 'error' ? settingsMessage : 'Reading your Biotron settings… Controls unlock when it answers.') : 'Connect Biotron to unlock its settings. Nothing changes until you choose a device.' }}</p>
   </div>
 </template>
 
@@ -476,7 +481,7 @@ export default  {
   },
   watch: {settingsState(state, previous) { if (this.betaBuild) recordSettingsState(state, previous, this.firmwareVersion) }},
   methods: {
-    ...createSettingsConnectionMethods({settingsVectorFromCommands, settingsVectorsEqual, savedSettingsMessage}),
+    ...createSettingsConnectionMethods({BiotronDb, settingsVectorFromCommands, settingsVectorsEqual, savedSettingsMessage}),
     settingsDiagnosticPacket() { return buildSettingsDiagnostic(this, process.env.VUE_APP_BUILD_ID || "local-build") },
     async handleDeviceChanged(device) {
       this.clearLiveVerification()
@@ -674,18 +679,22 @@ export default  {
       }
       return saved
     },
-
-    async loadData() {
-      let commands
+    async loadData(initId) {
+      let commands, reading = true
       try {
         let preset = await this.db.getPatch(this.patch_id)
+        if (initId !== undefined && initId !== this.presetInitId) return false
         if (!preset) {
           this.patch_id = 1
           localStorage.setItem(this.id, 1)
           preset = await this.db.getPatch(1)
         }
+        if (initId !== undefined && initId !== this.presetInitId) return false
+        reading = false
         commands = this.validatePresetCommands(Object.entries(preset.data).map(([name, value]) => ({name, value})))
       } catch {
+        if (initId !== undefined && initId !== this.presetInitId) return false
+        if (initId !== undefined && reading) throw new Error("Saved preset read failed.")
         this.settingsState = "error"
         this.settingsMessage = "Could not load saved preset. Choose another preset."
         return false
@@ -766,6 +775,7 @@ export default  {
       betaBuild: process.env.VUE_APP_BIOTRON_PWA_BETA === 'true',
       firmwareTestEnabled: process.env.VUE_APP_BIOTRON_FIRMWARE_TEST_ENABLED === 'true',
       page_is_inited: false,
+      presetStoragePending: false, presetStorageError: "", presetInitId: 0,
       scales: ["Major", "Minor", "Chrom", "Dorian", "Mixolydian",
         "Lydian", "Wholetone", "Minblues", "Majblues", "Minpen",
         "Majpen", "Diminished", "Hirajōshi"],
@@ -798,18 +808,7 @@ export default  {
       commands_data: Object.fromEntries(BiotronCommandsData),
     }
   },
-  async created() {
-    if (!localStorage.getItem(this.id)) {
-      localStorage.setItem(this.id, "1")
-    }
-    this.patch_id = parseInt(localStorage.getItem(this.id))
-    this.db = new BiotronDb();
-    await this.db.ready;
-    this.patches = await this.db.getPatch();
-    await this.loadData()
-    this.page_is_inited = true
-    if (this.betaBuild && this.device) await this.loadPersistedSettings(this.device)
-  },
+  created() { return this.initPresetStorage() },
   mounted() {
     this.listenerScope = createListenerScope()
     if (!this.betaBuild) this.listenerScope.on(document, 'keyup', event => {
@@ -841,6 +840,7 @@ export default  {
     this.clearLiveVerification()
     if (!['settling', 'calibrating'].includes(getSoundController()?.revealStage)) updateSoundSession({calibrating: false})
     this.settingsLoadId++
+    this.presetInitId++
     this.device = null
     this.listenerScope?.clear()
   }

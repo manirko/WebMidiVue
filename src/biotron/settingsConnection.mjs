@@ -1,7 +1,34 @@
 // Owns the bounded Biotron settings read and the delayed saved-copy check.
-export function createSettingsConnectionMethods({settingsVectorFromCommands,
+export function createSettingsConnectionMethods({BiotronDb, settingsVectorFromCommands,
   settingsVectorsEqual, savedSettingsMessage}) {
   return {
+    async initPresetStorage() {
+      if (this.presetStoragePending || this.page_is_inited) return
+      const initId = ++this.presetInitId
+      this.presetStoragePending = true
+      this.presetStorageError = ""
+      try {
+        const patchId = localStorage.getItem(this.id) || "1"
+        if (!localStorage.getItem(this.id)) localStorage.setItem(this.id, patchId)
+        const db = new BiotronDb()
+        await this.settingsRequestWithin(async () => {
+          await db.ready
+          if (initId !== this.presetInitId) return
+          const patches = await db.getPatch()
+          if (initId !== this.presetInitId) return
+          this.db = db
+          this.patches = patches
+          this.patch_id = parseInt(patchId)
+          await this.loadData(initId)
+          if (initId === this.presetInitId) this.page_is_inited = true
+        }, 5000)
+        if (initId === this.presetInitId && this.page_is_inited && this.betaBuild && this.device) await this.loadPersistedSettings(this.device)
+      } catch {
+        if (initId === this.presetInitId) this.presetStorageError = "Saved presets could not be opened. Retry; existing presets are kept."
+      } finally {
+        if (initId === this.presetInitId) {this.presetStoragePending = false; this.presetInitId++}
+      }
+    },
     markPresetPending() {
       if (!this.betaBuild) return
       this.clearLiveVerification()
@@ -15,7 +42,7 @@ export function createSettingsConnectionMethods({settingsVectorFromCommands,
       for (let attempt = 0; attempt < attempts; attempt++) {
         if (this.device !== device) throw new Error("Biotron changed.")
         try {
-          return await this.requestPersistedSettingsWithin(3500)
+          return await this.settingsRequestWithin(() => this.$refs.deviceSelector.requestPersistedSettings(), 3500)
         } catch (error) {
           lastError = error
           if (error?.name === "AbortError") throw error
@@ -24,11 +51,11 @@ export function createSettingsConnectionMethods({settingsVectorFromCommands,
       }
       throw lastError
     },
-    async requestPersistedSettingsWithin(timeoutMs) {
+    async settingsRequestWithin(request, timeoutMs) {
       let timeout
       try {
         return await Promise.race([
-          this.$refs.deviceSelector.requestPersistedSettings(),
+          Promise.resolve().then(request),
           new Promise((resolve, reject) => {
             timeout = setTimeout(() => reject(new Error("Saved settings check timed out.")), timeoutMs)
           })

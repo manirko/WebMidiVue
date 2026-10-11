@@ -96,12 +96,15 @@ const report = {
 // no engine/dependency/lifecycle change. Keep all other safety caps.
 // 11.10.2026: storage failure/tab-local selection repair and duplicate selector
 // lookup removal: ratchet total source back down to10759; other caps unchanged.
+// 11.10.2026 Goal: confirmed cold preset-storage dead end. Senior-reviewed
+// bounded recovery reuses the settings timeout; failure/Retry, late completion,
+// unmount and malformed selection controls. Actual10784; no new file/dependency.
 const limits = {
   eagerDeviceRouteImports: 0,
   sleepCalls: 0,
   unmanagedListenerFiles: 0,
   sourceFiles: 70,
-  sourceLines: 10759,
+  sourceLines: 10784,
   largestProductFileLines: 850
 }
 const violations = [

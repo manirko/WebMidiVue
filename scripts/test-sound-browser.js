@@ -165,13 +165,48 @@ async function verifySettingsFailures(page, origin) {
 }
 
 async function verifySettingsActions(page, origin) {
-  const sections = await openSettingsForTest(page, origin)
   const records = []
   const pass = name => {
     records.push({case: name, status: 'PASS'})
     if (process.env.BIOTRON_TEST_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR,
       'settings-actions.json'), JSON.stringify(records, null, 2))
   }
+  await page.goto(`${origin}/#/biotron`)
+  await page.getByRole('combobox', {name:'Preset', exact:true}).waitFor()
+  const storedPresets = async () => page.evaluate(async () => {
+    const db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('BiotronDB', 10)
+      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error)
+    })
+    try { return await new Promise((resolve, reject) => {
+      const request = db.transaction('Biotron_Patches').objectStore('Biotron_Patches').getAll()
+      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error)
+    }) } finally { db.close() }
+  })
+  const beforeStorage = await storedPresets(), storageMarker = await page.evaluate(() => window.__soundMidiSent.length)
+  await page.evaluate(() => {
+    const open = indexedDB.open.bind(indexedDB)
+    indexedDB.open = function (name, ...args) {
+      if (name === 'BiotronDB') throw new DOMException('Injected preset storage refusal', 'SecurityError')
+      return open(name, ...args)
+    }
+    window.__restorePresetStorage = () => { indexedDB.open = open }
+  })
+  await page.getByRole('link', {name:'Play', exact:true}).click()
+  await page.getByRole('link', {name:'Settings', exact:true}).first().click()
+  await page.getByRole('button', {name:'Retry saved presets', exact:true}).waitFor({timeout:5000})
+  assert.equal(await page.getByRole('combobox', {name:'Preset', exact:true}).count(), 0, 'storage failure exposed unavailable presets')
+  await page.getByRole('link', {name:'Go to Play', exact:true}).click()
+  await page.getByRole('button', {name:'Start listening', exact:true}).waitFor()
+  await page.getByRole('link', {name:'Settings', exact:true}).first().click()
+  await page.getByRole('button', {name:'Retry saved presets', exact:true}).waitFor({timeout:5000})
+  await page.evaluate(() => window.__restorePresetStorage())
+  await page.getByRole('button', {name:'Retry saved presets', exact:true}).click()
+  await page.getByRole('combobox', {name:'Preset', exact:true}).waitFor({timeout:5000})
+  assert.deepStrictEqual(await storedPresets(), beforeStorage, 'startup Retry changed existing presets')
+  assert.deepStrictEqual(await page.evaluate(marker => window.__soundMidiSent.slice(marker).filter(message => message[1] === 20 && message[2] === 13 && message[3] !== 123), storageMarker), [], 'startup recovery wrote device settings')
+  pass('initial preset storage refusal keeps Play reachable; Retry preserves real IndexedDB records and sends no setting writes')
+  const sections = await openSettingsForTest(page, origin)
   const changeScale = async scale => {
     const marker = await page.evaluate(() => window.__soundMidiSent.length)
     await sections['Plant sensor'].getByRole('combobox', {name: '🎼 Scale', exact: true}).selectOption(String(scale))
