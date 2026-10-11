@@ -94,12 +94,14 @@ const report = {
 // 11.10.2026: requested visible workspace revision after human rejection of
 // the modest ca UI. +23 presentation lines and existing-control relocation; 70 files,
 // no engine/dependency/lifecycle change. Keep all other safety caps.
+// 11.10.2026: storage failure/tab-local selection repair and duplicate selector
+// lookup removal: ratchet total source back down to10759; other caps unchanged.
 const limits = {
   eagerDeviceRouteImports: 0,
   sleepCalls: 0,
   unmanagedListenerFiles: 0,
   sourceFiles: 70,
-  sourceLines: 10781,
+  sourceLines: 10759,
   largestProductFileLines: 850
 }
 const violations = [
