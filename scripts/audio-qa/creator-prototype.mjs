@@ -142,7 +142,7 @@ $('connect').onclick = () => run(async () => {
           inputs = inputs.filter(item => item !== input); if (!inputs.length && midi === access) midi = null
         } catch (error) {
           if (!inputs.includes(input)) inputs.push(input)
-          midi ||= access; $('connection').textContent = error.message + '. Try Release Biotron.'
+          midi ||= access; $('connection').textContent = error.message + '. Try Release Biotron.'; update()
         }
         // A guard timeout does not cancel native close; reconnect must still wait.
         if (closing) await Promise.resolve(closing).catch(() => {})
