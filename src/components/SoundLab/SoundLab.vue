@@ -1,6 +1,6 @@
 <template>
   <section
-    class="sound-lab"
+    class="sound-lab" :class="{'sound-lab--biotron': revealMode && revealProfile.id === 'biotron'}"
     v-show="controlsVisible"
     :data-audio-state="audioState"
     :data-active-voices="voiceCount"
@@ -26,13 +26,16 @@
         :settings-route="revealProfile.settingsRoute"
       />
       <header class="sound-lab__intro sound-lab__intro--reveal">
-        <small>{{ revealProfile.eyebrow }}</small>
+        <small v-if="revealProfile.id !== 'biotron'">{{ revealProfile.eyebrow }}</small>
         <h1 tabindex="-1">{{ revealProfile.title }}</h1>
         <p>{{ revealProfile.promise }}</p>
       </header>
 
       <section class="sound-lab__reveal" aria-labelledby="device-reveal-title">
-        <GardenVisual ref="garden" :stage="visualStage" />
+        <div class="sound-lab__instrument">
+          <GardenVisual ref="garden" :stage="visualStage" />
+          <small class="garden-credit">Visual adapted from <a href="https://dasprinzip.com/tinker/day41/" target="_blank" rel="noopener">Garden Anomaly · Frank Reitberger</a>. Volume adapted from <a href="https://reactbits.dev/micro/wake-slider" target="_blank" rel="noopener">React Bits · David Haz</a>.</small>
+        </div>
         <div class="sound-lab__reveal-copy">
           <small v-if="recognizedInput && revealStage !== 'intro'" class="sound-lab__recognized" :title="recognizedInput">Device connected</small>
           <h2 id="device-reveal-title" aria-live="polite">{{ revealHeading }}</h2>
@@ -76,18 +79,18 @@
             <DiagnosticCopy class="sound-lab__diagnostic" :packet="playDiagnosticPacket" />
             <div v-if="firstSoundOutcome && $route.meta.firstPlay" class="sound-lab__task-feedback"><h3>Can you hear the notes?</h3><div class="sound-lab__reveal-actions"><a :href="firstSoundFeedbackUrl('helped')" @click="recordFirstSound('heard')" class="btn btn-outline-dark" target="_blank" rel="noopener">Yes — WhatsApp</a><a :href="firstSoundFeedbackUrl('not_yet')" @click="recordFirstSound('not_heard')" class="btn btn-outline-dark" target="_blank" rel="noopener">Not yet — WhatsApp</a></div><small>Opens a draft with the version and stop point. Send it to share.</small></div>
           </details>
+          <details v-if="revealProfile.id === 'biotron'" class="sound-palette" :open="$route.query.sound === '1'" @toggle="paletteVisited ||= $event.target.open">
+            <summary><span>Sound</span><small>{{ selectedSound.name }}</small></summary>
+            <AudioCompare v-if="paletteVisited" />
+          </details>
+          <label v-if="revealProfile.id === 'biotron'" class="sound-lab__quality">
+            <input type="checkbox" aria-label="Limit to 4 notes at once" aria-describedby="sound-quality-help" :checked="lowCpu" @change="changeQuality" :disabled="starting || releaseBlocked"> Limit to 4 notes at once
+            <small id="sound-quality-help">Use if sound breaks up: less work for your device, no simulated room reflections. Switching stops sound.</small>
+          </label>
+          <KeyboardControls v-if="revealProfile.id === 'biotron'" />
         </div>
       </section>
-      <small class="garden-credit">Visual adapted from <a href="https://dasprinzip.com/tinker/day41/" target="_blank" rel="noopener">Garden Anomaly · Frank Reitberger</a>. Volume adapted from <a href="https://reactbits.dev/micro/wake-slider" target="_blank" rel="noopener">React Bits · David Haz</a>.</small>
 
-      <details v-if="revealProfile.id === 'biotron'" class="sound-palette" :open="$route.query.sound === '1'" @toggle="paletteVisited ||= $event.target.open">
-        <summary><span>Sound</span><small>{{ selectedSound.name }}</small></summary>
-        <AudioCompare v-if="paletteVisited" />
-      </details>
-      <label v-if="revealProfile.id === 'biotron'" class="sound-lab__quality">
-        <input type="checkbox" aria-label="Limit to 4 notes at once" aria-describedby="sound-quality-help" :checked="lowCpu" @change="changeQuality" :disabled="starting || releaseBlocked"> Limit to 4 notes at once
-        <small id="sound-quality-help">Use if sound breaks up: less work for your device, no simulated room reflections. Switching stops sound.</small>
-      </label>
       <section v-if="revealProfile.id !== 'biotron' && revealStage === 'revealed'" class="sound-lab__after-reveal" :aria-label="`Continue with ${revealProfile.productName}`">
         <button type="button" class="btn btn-primary" @click="revealExpanded = !revealExpanded">
           {{ revealExpanded ? 'Hide sounds' : 'Choose a sound' }}
@@ -185,7 +188,7 @@
       </div>
     </section>
     </template>
-    <KeyboardControls />
+    <KeyboardControls v-if="!revealMode || revealProfile.id !== 'biotron'" />
     </template>
   </section>
 </template>
@@ -665,6 +668,17 @@ export default {
 .sound-lab { width: min(900px, 100%); margin: 0 auto; padding: 1.5rem 0 4rem; text-align: left; color: #17171a; }
 .sound-lab__intro { max-width: 650px; margin-bottom: 2rem; }
 .sound-lab__intro--reveal { margin: 2.25rem auto 1.5rem; text-align: center; }
+.sound-lab--biotron { width:100%; padding:1rem 0 2rem; }
+.sound-lab--biotron .sound-lab__intro { max-width:none; margin:0 0 2rem; text-align:left; }
+.sound-lab--biotron .sound-lab__reveal { max-width:none; padding:0; border:0; background:transparent; grid-template-columns:minmax(0,1.4fr) minmax(300px,1fr); gap:clamp(2rem,5vw,4rem); }
+.sound-lab--biotron .sound-lab__instrument { align-self:start; min-width:0; }
+.sound-lab--biotron :deep(.garden-visual:not(.garden-visual--expanded)) { width:100%; max-width:560px; }
+.sound-lab--biotron :deep(.garden-visual:not(.garden-visual--expanded) iframe) { inset:0; width:100%; height:100%; }
+.sound-lab--biotron .sound-lab__reveal-copy { min-width:0; padding-top:.5rem; }
+.sound-lab--biotron .sound-palette { margin:1.25rem 0 0; padding:1rem 0; border:0; border-top:1px solid var(--beta-line); border-radius:0; background:transparent; }
+.sound-lab--biotron .sound-lab__quality { display:flex; padding:0; font-size:var(--ui-text-small); }
+.sound-lab--biotron .sound-lab__quality small { flex-basis:100%; color:#625e58; }
+@media(max-width:760px) { .sound-lab--biotron .sound-lab__reveal { grid-template-columns:1fr; gap:1rem; text-align:left; } .sound-lab--biotron :deep(.garden-visual:not(.garden-visual--expanded)) { width:min(100%,320px); } .sound-lab--biotron .sound-lab__reveal-actions { justify-content:flex-start; } }
 .sound-lab__intro small { color: #6b6761; font-size: var(--ui-text-small); }
 .sound-lab__intro h1 { margin: .35rem 0; scroll-margin-top: 72px; font-size: var(--ui-text-hero); line-height: 1.1; letter-spacing: -.035em; }
 .sound-lab__intro p, .sound-lab__midi p { color: #625e58; line-height: 1.5; }
@@ -697,10 +711,9 @@ export default {
 .sound-lab__recognized { color: #4d427e; font-weight: 700; }
 .sound-lab__reveal-actions, .sound-lab__after-reveal { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
 .sound-lab__status--reveal { display: block; margin-top: .75rem; padding-left: 0; }
-.sound-lab__after-reveal { max-width: 760px; margin: 1rem auto 0; }
+.sound-lab__after-reveal { max-width: 760px; margin: 1rem auto 0; padding-inline:var(--beta-card-inset,24px); }
 .sound-lab__reveal-variants { display: flex; flex-basis: 100%; flex-wrap: wrap; gap: .5rem; padding-top: .5rem; }
 .sound-lab__task-feedback { max-width:760px; margin:1rem auto 0!important; padding:var(--beta-card-inset,24px); }
-.sound-lab__after-reveal { padding-inline:var(--beta-card-inset,24px); }
 .sound-lab__task-feedback small { color:#625e58; }
 .sound-lab__midi { display: flex; justify-content: space-between; gap: 1.5rem; align-items: center; border-top: 1px solid #d6d1c8; padding-top: 1.5rem; }
 .sound-lab__midi p { margin: .3rem 0 0; }

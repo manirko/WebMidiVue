@@ -1,5 +1,5 @@
 <template>
-  <div :class="{'beta-shell': betaBuild}">
+  <div :class="{'beta-shell': betaBuild, 'biotron-workspace': betaBuild && biotronSoundRoute}">
   <img src="/Logo-Black-280.webp" alt="Playtronica logo" width="280" height="199" loading="eager" decoding="async" class="small--hide image-element" itemprop="logo">
 
   <header v-if="!firstPlay && !betaBuild" class="d-flex justify-content-center">
@@ -345,7 +345,6 @@ export default {
 .offline-status--preparing { color:#664d03; background:#fff3cd; border-color:#ffecb5; }
 .offline-status--error { color:#842029; background:#f8d7da; border-color:#f5c2c7; }
 .beta-feedback { width:min(760px,100%); padding:clamp(1.2rem,4vw,2rem); border:1px solid var(--beta-line); border-radius:var(--ui-radius); background:var(--beta-surface); }
-.beta-feedback__eyebrow { display:block; margin-bottom:.45rem; color:var(--beta-accent); font-size:var(--beta-text-small); font-weight:650; }
 .beta-compatibility { margin-top:1rem; padding-top:1rem; border-top:1px solid var(--beta-line); color:var(--beta-muted); }
 .beta-compatibility summary { min-height:44px; padding:.65rem 0; color:var(--beta-ink); font-weight:700; cursor:pointer; }
 .beta-compatibility ul { margin:.4rem 0 .6rem; padding-left:1.25rem; }
@@ -368,6 +367,18 @@ input:checked + .slider:before { transform:translateX(26px); }
 .route-stage { min-height:100vh; }
 .route-stage--compact { min-height:0; }
 .workspace-nav { position:sticky; top:0; z-index:2; }
+.biotron-workspace { --ui-accent:#292e28; --beta-line:#d9ddd5; --ui-radius:.4rem; --ui-text-hero:clamp(2.25rem,4.5vw,3.5rem); background:#edf0e9; }
+.biotron-workspace > .image-element { display:none; }
+.biotron-workspace .beta-meta { justify-content:flex-start; width:min(1120px,calc(100% - 48px)); margin:.5rem auto; }
+.biotron-workspace .content { width:min(1168px,100%); padding:24px; background:#fff; }
+.biotron-workspace .workspace-nav { width:100%; min-height:60px; margin-bottom:1.5rem; padding:.5rem 0; border-bottom:1px solid var(--beta-line); }
+.biotron-workspace .device-task-nav__device { padding:0; font-size:1.25rem; }
+.biotron-workspace .device-task-nav__link--active { color:var(--ui-ink); background:#e8ece3; }
+.biotron-workspace .settings-hero { text-align:left; padding-top:2rem; border-top:1px solid var(--beta-line); }
+.biotron-workspace .settings-hero__intro { margin:.65rem 0 0; }
+.biotron-workspace .beta-connect-card,.biotron-workspace .beta-preset-card { border:0; border-radius:0; padding:1.5rem 0; box-shadow:none; border-bottom:1px solid var(--beta-line); }
+.biotron-workspace .toggle-label { border-radius:.4rem; }
+@media(max-width:640px) { .biotron-workspace .content { padding:16px; } .biotron-workspace .beta-meta { width:calc(100% - 32px); } }
 .bottom-panel { min-height:60px; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; border-top:1px solid rgba(27,31,40,.1); }
 .feedback-actions,.beta-footer nav { display:flex; flex-wrap:wrap; gap:.5rem 1rem; }
 .beta-footer { width:100%; max-width:760px; padding:1rem; font-size:var(--ui-text-small); }

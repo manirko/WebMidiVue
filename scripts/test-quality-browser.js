@@ -48,7 +48,7 @@ async function readQuality(page) {
     const smallPrimaryTargets = [...document.querySelectorAll(
       '[aria-label="Biotron tasks"] a, .beta-feedback__action, ' +
       'details.settings-section > summary, .sound-palette > summary, ' +
-      '.audio-compare button, .computer-keys button, .computer-keys select, ' +
+      '.audio-compare button, .computer-keys button, .computer-keys select, .computer-keys summary, ' +
       '.compatibility-notice__actions .btn, .sound-lab__controls button'
     )]
       .filter(visible)
@@ -201,6 +201,18 @@ async function auditProfile(browser, origin, profile) {
   assert.equal(await page.getByRole('heading', {level: 1}).count(), 1, `${profile.name}: competing page titles`)
   assert.equal(await page.getByRole('heading', {name: 'Settings', level: 2}).count(), 1,
     `${profile.name}: settings must be a section of the shared workspace`)
+
+  const workspace = await page.evaluate(() => {
+    const panel = document.querySelector('.sound-lab__reveal-copy')
+    const palette = document.querySelector('.sound-palette')
+    const visual = document.querySelector('.sound-lab__reveal .garden-visual')
+    return {soundInPanel: panel.contains(palette), keyboardInPanel: panel.contains(document.querySelector('.computer-keys')),
+      viewport: innerWidth, visual: visual.getBoundingClientRect().toJSON(), panel: panel.getBoundingClientRect().toJSON()}
+  })
+  fs.writeFileSync(path.join(artifacts, `${profile.name}-workspace.json`), JSON.stringify(workspace, null, 2))
+  assert(workspace.soundInPanel && workspace.keyboardInPanel, `${profile.name}: sound and keyboard remain detached from the player panel`)
+  if (workspace.viewport >= 960) assert(workspace.visual.width >= 380 && workspace.panel.left >= workspace.visual.right,
+    `${profile.name}: desktop visual and controls do not form the intended two-column workspace`)
 
   const result = await readQuality(page)
   fs.writeFileSync(path.join(artifacts, `${profile.name}-initial-quality.json`), JSON.stringify(result, null, 2))

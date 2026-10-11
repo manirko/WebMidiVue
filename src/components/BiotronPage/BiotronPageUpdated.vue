@@ -9,7 +9,7 @@
         settings-route="/biotron"
     />
     <header :class="{'settings-hero': betaBuild}">
-      <component :is="embedded ? 'h2' : 'h1'" :tabindex="embedded ? -1 : null" class="text-center">{{ betaBuild ? 'Settings' : 'Biotron settings' }}</component>
+      <component :is="embedded ? 'h2' : 'h1'" :tabindex="embedded ? -1 : null" :class="{'text-center': !betaBuild}">{{ betaBuild ? 'Settings' : 'Biotron settings' }}</component>
       <p v-if="betaBuild" class="settings-hero__intro">Change settings in this browser. Connect Biotron to change settings on the device.</p>
     </header>
     <div v-if="betaBuild && !embedded && (soundPlayer?.engine || soundPlayer?.midi || soundPlayer?.starting || soundPlayer?.releaseBlocked)" class="alert py-2" :class="soundPlayer?.releaseBlocked ? 'alert-warning' : 'alert-success'" role="status">

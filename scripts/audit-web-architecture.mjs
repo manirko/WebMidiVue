@@ -91,12 +91,15 @@ const report = {
 // Caption duplication removed: visual text/state/hint data deleted; one sidebar heading.
 // Net +74 lines from10688: status1 now reuses the existing calibration animation.
 // No additional source file or dependency.
+// 11.10.2026: requested visible workspace revision after human rejection of
+// the modest ca UI. +19 CSS rules and existing-control relocation; 70 files,
+// no engine/dependency/lifecycle change. Keep all other safety caps.
 const limits = {
   eagerDeviceRouteImports: 0,
   sleepCalls: 0,
   unmanagedListenerFiles: 0,
   sourceFiles: 70,
-  sourceLines: 10762,
+  sourceLines: 10781,
   largestProductFileLines: 850
 }
 const violations = [
