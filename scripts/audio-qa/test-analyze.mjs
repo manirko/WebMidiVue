@@ -513,6 +513,7 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
     await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
     await page.locator('#example').click()
     await page.waitForFunction(() => __CreatorPrototype.capture.blocks.some(block => block.pcm.some(value => Math.abs(value) > .001)))
+    await page.waitForTimeout(900) // Existing music analyzer needs a full fixture window, not the first envelope sample.
     await page.locator('#example').click()
     await page.evaluate(async boundary => {
       const engine = __CreatorPrototype.engine, session = __CreatorPrototype.capture
