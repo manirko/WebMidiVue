@@ -431,6 +431,56 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
   await page.locator('#example').click()
   const retained = async () => hash(Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer())))))
   const previousSha = await retained(); report.lifecycle.previousWavSha256 = previousSha; save()
+  for (const boundary of ['ready-running', 'ready-closed', 'ready-no-ack', 'ready-pagehide']) {
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+    await page.locator('#example').click()
+    await page.waitForFunction(() => __CreatorPrototype.capture.blocks.some(block => block.pcm.some(value => Math.abs(value) > .001)))
+    await page.locator('#example').click()
+    await page.evaluate(async boundary => {
+      const engine = __CreatorPrototype.engine, session = __CreatorPrototype.capture
+      __creatorControls.readyErrorOwner = engine; __creatorControls.readyErrorSession = session
+      engine.ensureReady = () => Promise.reject(Error('Controlled ready failure during capture'))
+      if (boundary === 'ready-closed') await engine.context.close()
+      if (['ready-no-ack', 'ready-pagehide'].includes(boundary)) {
+        const post = session.tap.port.postMessage.bind(session.tap.port)
+        session.tap.port.postMessage = value => { if (value === 'stop') __creatorControls.readyStopRequested = true; else post(value) }
+      }
+    }, boundary)
+    await page.locator('#example').click()
+    if (boundary === 'ready-pagehide') {
+      await page.waitForFunction(() => __creatorControls.readyStopRequested)
+      await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted: true})); window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true})) })
+      await page.waitForFunction(() => document.querySelector('#status').textContent.startsWith('Returned.') && !document.querySelector('#record-audio').disabled)
+    } else {
+      await page.waitForFunction(() => /Controlled ready failure|closed AudioContext/.test(document.querySelector('#status').textContent))
+    }
+    const observation = await observe(`capture/${boundary}/failure`)
+    assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false, 'Ready failure must finalize or explicitly discard its owned capture before closing sound')
+    assert(await page.locator('#stop').isDisabled()); assert(await page.locator('#record-audio').isEnabled())
+    assert.equal(await retained(), previousSha)
+    assert.equal(await page.evaluate(() => __creatorControls.readyErrorOwner.context.state), 'closed')
+    assert.equal(await page.evaluate(() => __creatorControls.readyErrorSession.tap.port.onmessage), null)
+    if (boundary === 'ready-running') {
+      assert.match(observation.status, /Current take kept/); assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 2)
+      const file = Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes.at(-1).file.arrayBuffer()))))
+      fs.writeFileSync(`${output}/ready-failure-kept.wav`, file); report.lifecycle.readyFailureWavSha256 = hash(file); save()
+      const pcm = Float32Array.from({length: (file.length - 44) / 4}, (_, i) => file.readFloatLE(44 + i * 4))
+      assert.equal(file.toString('ascii', 0, 4), 'RIFF'); assert.equal(file.readUInt32LE(40), file.length - 44)
+      assert(creatorFixtureMetrics(pcm, file.readUInt32LE(24)).music > .001)
+      await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
+    } else {
+      assert.match(observation.status, boundary === 'ready-pagehide' ? /current recording was not kept/ : /Current take was not saved/)
+      assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 1)
+    }
+    pass(`${boundary}: ready failure keeps the prior WAV, clears capture, and reports the current take outcome`)
+    await page.evaluate(() => { __creatorControls.readyStopRequested = false })
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+    await page.locator('#example').click(); await page.waitForTimeout(900); await page.locator('#stop').click()
+    await page.waitForFunction(() => __CreatorPrototype.takes.length === 2 && !__CreatorPrototype.capture)
+    assert.equal(await retained(), previousSha)
+    await page.locator('#example').click(); await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
+    pass(`${boundary}: a subsequent Record/Example/Stop works after actual sound release`)
+  }
   for (const boundary of ['ready-cached', 'recorder-module']) {
     if (boundary === 'recorder-module') {
       await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted: true})))
