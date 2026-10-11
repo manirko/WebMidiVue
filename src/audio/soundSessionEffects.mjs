@@ -224,7 +224,9 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
       }
     },
     watchPlantSignal() {
+      // Keep Settings readback free of periodic sensor queries.
       if (this.revealMode && this.revealProfile.id === 'biotron' && this.controlsVisible &&
+          this.$route?.meta?.firstPlay &&
           !this.keyboardOn && !this.examplePlaying && !document.hidden && this.audioState === 'running' &&
           ['ready', 'revealed'].includes(this.revealStage)) this.midi?.startPlantSignalWatch()
     },

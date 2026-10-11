@@ -43,6 +43,7 @@ function fixture() {
     async connect() { calls.connect++ },
     async sendToPairedOutput() { calls.sysex++ }}
   const target = {engine, midi, audioState: 'running', volume: 65, controlsVisible: true,
+    $route: {meta: {firstPlay: true}},
     revealMode: true, firstSoundOutcome: 'helped', starting: false, permissionAttemptId: 0,
     releaseBlocked: false, resumeAttemptId: 0, resumeOutcome: 'not_attempted',
     revealStage: 'revealed', revealCalibrationNonce: 7, explicitCalibration: false,
@@ -50,7 +51,7 @@ function fixture() {
   for (const [name, method] of Object.entries(context.module.exports.methods)) target[name] = method.bind(target)
   target.resetVoiceUi = () => {}
   target.releaseHeldKeyboard = () => {}
-  return {target, context, session, calls, events}
+  return {target, context, session, calls, events, component: context.module.exports}
 }
 
 test('keyboard Start waits for release; keyboard Stop remains usable during startup', () => {
@@ -65,7 +66,7 @@ test('keyboard Start waits for release; keyboard Stop remains usable during star
 })
 
 test('plant status reads are limited to foreground Biotron MIDI play, never keyboard/examples/settings', () => {
-  for (const patch of [{}, {controlsVisible: false}, {keyboardOn: true}, {examplePlaying: true},
+  for (const patch of [{}, {$route: {meta: {firstPlay: false}}}, {controlsVisible: false}, {keyboardOn: true}, {examplePlaying: true},
     {revealMode: false}, {revealProfile: {id: 'touchme'}}, {revealStage: 'settling'}, {audioState: 'suspended'}]) {
     const {target, calls} = fixture()
     Object.assign(target, patch); target.watchPlantSignal()
@@ -73,6 +74,13 @@ test('plant status reads are limited to foreground Biotron MIDI play, never keyb
   }
   const {target, context, calls} = fixture()
   context.document.hidden = true; target.watchPlantSignal(); assert.equal(calls.signalStart, 0)
+  const route = fixture()
+  route.target.$route.meta.firstPlay = false
+  route.component.watch['$route.meta.firstPlay'].call(route.target, false)
+  assert.equal(route.calls.signalStop, 1, 'Opening Settings must stop periodic reads')
+  route.target.$route.meta.firstPlay = true
+  route.component.watch['$route.meta.firstPlay'].call(route.target, true)
+  assert.equal(route.calls.signalStart, 1, 'Returning to Play must restart reads')
 })
 
 test('interruption pauses MIDI and offers the visible Resume sound control', () => {
