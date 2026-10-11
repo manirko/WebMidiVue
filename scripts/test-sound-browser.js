@@ -448,6 +448,7 @@ async function verifySettingsActions(page, origin) {
   assert.equal(importedValues.minPlantVelocity, 0); assert.equal(importedValues.plantBpm, 127)
   for (const item of preset.commands.filter(item => !['minPlantVelocity','plantBpm'].includes(item.name))) assert.equal(importedValues[item.name],item.value)
   assert.equal(await page.evaluate(() => window.__soundMidiSent.length),localMarker)
+  assert.equal(await page.getByRole('combobox',{name:'Preset',exact:true}).locator('option:checked').textContent(),'Unsaved Patch', 'Import must select the new draft, not retain the saved preset identity')
   pass('partial legacy import preserves other fields and explicit zero without device writes')
   await page.getByRole('button',{name:'Save in browser',exact:true}).filter({visible:true}).first().click()
   await page.getByRole('textbox',{name:'Preset name'}).fill('Autonomous settings test')
