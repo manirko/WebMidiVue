@@ -33,7 +33,7 @@ export default {
     },
     actionText() {
       if (!this.internal) return 'Update'
-      return {idle: '⬇️ Download & check', 'preflight-error': '🔁 Try again', prepared: this.manualBoot ? 'Continue with manual BOOT' : '🔄 Restart Biotron',
+      return {idle: '⬇️ Download & check', 'preflight-error': '🔁 Try again', prepared: this.manualBoot ? 'Continue to drive selection' : '🔄 Restart Biotron',
         'select-drive': '💾 Choose RPI-RP2 → install'}[this.phase] || ''
     },
     actionDisabled() { return this.busy || !this.online || (this.internal ? this.phase === 'prepared' && !this.device : !this.device) }
@@ -87,11 +87,11 @@ export default {
         } else if (this.phase === 'prepared') {
           if (this.manualBoot) {
             this.phase = 'select-drive'
-            this.message = `Use your model’s hardware BOOT instructions to enter update mode. Settings may be reset by older firmware. Once RPI-RP2 appears, ${PICK}`
+            this.message = `Software BOOT is not validated for this version in this updater. Confirm your board with support before touching contacts. Older updates may reset settings. If RPI-RP2 appears, ${PICK}`
             return
           }
           this.phase = 'booting'; this.message = '🔄 Restarting Biotron…'; await bootDevice(this.device)
-          this.phase = 'select-drive'; this.message = `🔄 Biotron is now drive RPI-RP2. ${PICK}`
+          this.phase = 'select-drive'; this.message = `🔄 Update-mode request sent. Check that RPI-RP2 appears on your computer. ${PICK}`
         } else if (this.phase === 'select-drive') {
           this.phase = 'writing'; await writeFirmware(this.prepared, this.latest); this.phase = 'reconnecting'
           if (this.updaterUnmounted) return
@@ -118,14 +118,15 @@ export default {
           @click="$emit('check_firmware')">{{ buttonText }}</button>
   <button v-else data-bs-toggle="modal" data-bs-target="#UpdateConf" class="btn" :class="[recovery ? 'btn-outline-secondary' : 'btn-primary', $attrs.class]"
           :disabled="checking || current">{{ buttonText }}</button>
+  <a v-if="versionAware && !currentVersion && device" href="https://help.playtronica.com/troubleshooting/firmware-reset/#biotron-recovery" target="_blank" rel="noopener">Cannot read the version? Biotron recovery help</a>
   <div class="modal fade" id="UpdateConf" tabindex="-1" aria-labelledby="firmware-title" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
       <div class="modal-header"><h5 class="modal-title" id="firmware-title">💾 Update firmware</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
       <div class="modal-body">
         <p v-if="available" class="firmware-version">Installed <strong>{{ currentVersion }}</strong> <span aria-hidden="true">→</span> Beta update <strong>{{ latest.version }}</strong></p>
-        <ol v-if="internal && ready" class="firmware-steps"><li>Download and verify the file.</li><li>Restart into update mode.</li><li>Choose RPI-RP2 and wait for the version check.</li></ol>
-        <p v-if="manualBoot" class="alert alert-warning">Unknown or older firmware needs the hardware BOOT procedure for your model. Export your preset first; saved settings may be reset. No software BOOT command will be sent.</p>
+        <p v-if="internal && ready" class="alert alert-warning">Before restarting, save settings that actually loaded from Biotron. An update can reset them, even when software BOOT is available.</p><ol v-if="internal && ready" class="firmware-steps"><li>Download and verify the file.</li><li>Restart into update mode.</li><li>Choose RPI-RP2 and wait for the version check.</li></ol>
+        <p v-if="internal && manualBoot" class="alert alert-warning">Software BOOT is not validated here for this version. Save settings that actually loaded from Biotron; older updates may reset them. No software BOOT command will be sent. Confirm your board with support before touching contacts. <a href="https://help.playtronica.com/troubleshooting/firmware-reset/#biotron-recovery" target="_blank" rel="noopener">Biotron recovery help</a>.</p>
         <p v-if="recovery">🔌 {{ device ? 'Biotron did not report its firmware version.' : 'No Biotron over MIDI.' }} 💾 Drive <strong>RPI-RP2</strong> on your computer? → Install {{ latest.version }} now.</p>
         <p v-if="internal && ready && !canInstall">{{ desktopOnly }}</p>
         <p v-if="internal && ready && canInstall">✅ File is checked first. 💾 Then you choose drive RPI-RP2.</p>
@@ -136,7 +137,7 @@ export default {
         <p v-if="current" class="alert alert-success mb-0">Firmware {{ currentVersion }} is already installed. This beta offers {{ latest.version }}; no downgrade is offered.</p>
         <p v-if="!online" class="alert alert-warning mb-0">Connect to the internet for firmware updates. Settings remain available offline.</p>
         <p v-if="error" class="alert alert-danger mb-0" role="alert">{{ error }}</p>
-        <p v-if="message" class="alert alert-info mb-0" role="status" aria-live="polite">{{ message }}</p>
+        <p v-if="message" class="alert alert-info mb-0" role="status" aria-live="polite">{{ message }} <a v-if="phase === 'select-drive' || error" href="https://help.playtronica.com/troubleshooting/firmware-reset/#biotron-recovery" target="_blank" rel="noopener">No RPI-RP2 drive? Get recovery help</a>.</p>
       </div>
       <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
         <button v-if="ready && actionText && (!internal || canInstall)" type="button" class="btn btn-primary" :disabled="actionDisabled" @click="runStep">{{ actionText }}</button>
