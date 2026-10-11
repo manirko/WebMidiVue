@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import {analyze,wav,SCORE,creatorFixtureMetrics,creatorFixtureHasBoth} from './analyze.mjs'
+assert(!process.argv.includes('--creator-cold-processor-fault') || process.argv.includes('--creator-cold-native'),
+  '--creator-cold-processor-fault requires --creator-cold-native')
 const rate=8000,n=rate*SCORE.seconds,good=new Float32Array(n)
 for(let i=rate;i<rate*3;i++)good[i]=.1*Math.sin(i*2*Math.PI*440/rate)
 assert.equal(analyze([good],rate).result,'PASS')
@@ -128,7 +130,7 @@ async function testCreatorPrototype() {
         derived = derived.replace(faultTarget, "throw Error('Injected cold recorder processor failure');const a=inputs[0]?.[0];")
       }
       fs.writeFileSync(entry, derived)
-      report.coldNative = {scope: 'Native listeners on actual nodes; generated recorder-only observation changes timing; production source/core unchanged. No extra awaits or warmup before Stop.',
+      report.coldNative = {scope: 'Native listeners plus generated recorder process-entry metadata change timing; production source/core unchanged. No extra awaits or warmup before Stop. Native error-event absence cannot rule out a processor failure.',
         processorFaultInjected: process.argv.includes('--creator-cold-processor-fault'), originalEntrySha256: hash(before), derivedEntrySha256: hash(derived), consoleErrors: []}; save()
     }
     if (process.argv.includes('--creator-release-boundary-fault')) {
@@ -412,6 +414,14 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
     const file = Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer()))))
     fs.writeFileSync(`${output}/cold-take.wav`, file); report.coldNative.wavSha256 = hash(file); save()
     assert(file.length > 44, 'Cold recording must keep PCM, not an empty WAV')
+    assert.equal(file.toString('ascii', 0, 4), 'RIFF'); assert.equal(file.toString('ascii', 8, 12), 'WAVE')
+    assert.equal(file.readUInt16LE(20), 3); assert.equal(file.readUInt16LE(22), 1); assert.equal(file.readUInt16LE(34), 32)
+    assert.equal(file.readUInt32LE(4), file.length - 8); assert.equal(file.readUInt32LE(40), file.length - 44)
+    const pcm = Float32Array.from({length: (file.length - 44) / 4}, (_, i) => file.readFloatLE(44 + i * 4))
+    report.coldNative.metrics = creatorFixtureMetrics(pcm, file.readUInt32LE(24)); save()
+    assert(report.coldNative.metrics.rms > .001 && report.coldNative.metrics.music > .001 && report.coldNative.metrics.peak < .999,
+      'Cold example WAV must contain finite unclipped fixture music, not just nonempty blocks')
+    assert(report.coldNative.events.some(event => event.type === 'process-entered'))
     assert(report.coldNative.events.some(event => event.type === 'first-pcm'))
     assert(!report.coldNative.events.some(event => event.type === 'processorerror'))
     await observe('seed/after-stop'); pass('cold Record→Example900ms→Stop retains actual PCM with native event observations'); return
