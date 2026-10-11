@@ -44,7 +44,7 @@ async function run(action) {
   let done; runFinished = new Promise(resolve => { done = resolve })
   busy = true; update()
   try { await action() }
-  catch (error) { if (started === generation && pageActive) status(error.message || String(error)) }
+  catch (error) { if (started === generation && pageActive) status((error.message || String(error)) + (error.takeOutcome || '')) }
   finally {
     done()
     if (started !== generation || !pageActive) return
@@ -61,7 +61,22 @@ async function ready(signal) {
   if (!engine || engine.stopped) engine = createRealtimeElementarySynth({preset: currentSound().preset, volume: +$('volume').value})
   const owned = engine
   try { await guard(owned.resume(), 'Sound resume', 10000, signal); await guard(owned.ensureReady(), 'Sound start', 10000, signal) }
-  catch (error) { try { await guard(owned.stop(), 'Sound cleanup') } catch (cleanup) { error.cleanupFailure = String(cleanup) }; throw error }
+  catch (error) {
+    const session = capture
+    if (session?.engine === owned && started === generation && pageActive) {
+      stopNotes()
+      try {
+        if (owned.context.state !== 'running') throw Error('Recording context is not running')
+        await finish(); error.takeOutcome = '. Current take kept. Previous takes remain available.'
+      } catch (failure) {
+        error.takeFailure = String(failure); error.takeOutcome = '. Current take was not saved. Previous takes remain available.'
+        if (capture === session) capture = null
+        try { await cleanCapture(session) } catch (cleanup) { error.cleanupFailure = String(cleanup) }
+      }
+    }
+    try { await guard(owned.stop(), 'Sound cleanup') } catch (cleanup) { error.cleanupFailure = String(cleanup) }
+    throw error
+  }
 }
 function stopNotes() {
   if (engine?.activeVoiceCount) send({type: 'panic'})
@@ -214,28 +229,45 @@ const worklet = `class Take extends AudioWorkletProcessor {
 }registerProcessor('creator-take',Take)`
 async function startAudio(signal) {
   if (takes.length >= 3) throw Error('Three takes kept. Save and remove a take before recording another.')
+  const started = generation
+  status('Starting recording. Cancel start is available.')
   await ready(signal)
   signal.throwIfAborted()
+  const deadline = performance.now() + 10000
   if (workletContext !== engine.context) {
     const url = URL.createObjectURL(new Blob([worklet], {type: 'text/javascript'}))
-    try { await guard(engine.context.audioWorklet.addModule(url), 'Recorder start', 10000, signal); signal.throwIfAborted(); workletContext = engine.context }
+    try { await guard(engine.context.audioWorklet.addModule(url), 'Recorder start', deadline - performance.now(), signal); signal.throwIfAborted(); workletContext = engine.context }
     finally { URL.revokeObjectURL(url) }
   }
   const tap = new AudioWorkletNode(engine.context, 'creator-take'), drain = engine.context.createGain()
   drain.gain.value = 0; tap.connect(drain); drain.connect(engine.context.destination)
   const session = {kind: 'audio', engine, tap, drain, blocks: [], events: [], started: engine.context.currentTime, sound: currentSound().id, sampleRate: engine.context.sampleRate}
+  const firstPCM = new Promise((resolve, reject) => { session.firstBlock = resolve; session.startFailure = reject })
   capture = session
   tap.port.onmessage = event => {
     if (capture !== session) return
-    if (event.data.done) { session.done = true; session.resolve?.(); requestFinish() }
-    else session.blocks.push(event.data)
+    if (event.data.done) { session.done = true; session.startFailure?.(Error('Recorder stopped before receiving audio. Try again; previous takes are kept.')); session.resolve?.(); requestFinish() }
+    else {
+      session.blocks.push(event.data)
+      if (event.data.pcm?.length) { session.firstBlock?.(); session.firstBlock = session.startFailure = null }
+    }
   }
-  engine.output.connect(tap)
-  status('Recording sound. Play the example, keyboard or connected Biotron. Maximum 30 seconds.')
+  try {
+    engine.output.connect(tap)
+    await guard(firstPCM, 'Recorder start', deadline - performance.now(), signal)
+    signal.throwIfAborted()
+    if (!pageActive || started !== generation || capture !== session) throw new DOMException('Start cancelled. Previous takes are kept.', 'AbortError')
+    status('Recording sound. Play the example, keyboard or connected Biotron. Maximum 30 seconds.')
+  } catch (error) {
+    if (capture === session) capture = null
+    try { await cleanCapture(session) } catch (cleanup) { error.cleanupFailure = String(cleanup) }
+    throw error
+  }
 }
 async function cleanCapture(session) {
   // Detach before engine.stop disconnects output; still close the port on error.
   session.cleaning ||= (async () => {
+    session.firstBlock = session.startFailure = null
     let failure
     for (const release of [() => session.engine.output.disconnect(session.tap), () => session.tap.disconnect(), () => session.drain.disconnect(), () => { session.tap.port.onmessage = null; session.tap.port.close() }]) {
       try { release() } catch (error) { failure ||= error }

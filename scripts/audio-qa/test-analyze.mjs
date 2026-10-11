@@ -140,6 +140,23 @@ async function testCreatorPrototype() {
       fs.writeFileSync(entry, before.replace(line, 'const pending = input.close(); return pending // injected old normal-release behavior'))
       report.injectedFault = {kind:'normal close promise is not retained', entrySha256:hash(fs.readFileSync(entry)), scope:'recorder ownership control, not a DSP fault or actual old build'}; save()
     }
+    if (!coldNative && !process.argv.includes('--creator-benchmark') && !process.argv.includes('--creator-fidelity') && !process.argv.includes('--creator-fidelity-fault')) {
+      const entry = path.join(bench, 'creator-entry.mjs'), before = fs.readFileSync(entry, 'utf8')
+      const target = 'tap.port.onmessage = event => {'
+      assert(before.includes(target), 'first-PCM delivery control target changed')
+      const derived = before.replace(target, target + `
+    const controls = globalThis.__creatorControls
+    if (event.data.pcm?.length && session.firstBlock && controls?.pcmMode === 'hold') {
+      const held = controls.heldPCM ||= []; held.push(event)
+      if (!controls.releaseFirstPCM) {
+        const deliver = tap.port.onmessage
+        controls.releaseFirstPCM = () => { controls.pcmMode = null; for (const block of held) deliver(block); held.length = 0 }
+      }
+      return // withhold native delivery, never substitute generated PCM
+    }`)
+      fs.writeFileSync(entry, derived)
+      report.startDeliveryControl = {originalEntrySha256: hash(before), derivedEntrySha256: hash(derived), scope: 'Generated first-native-PCM delivery control; runtime core and PCM bytes unchanged'}; save()
+    }
     const bundle = execFileSync(process.execPath, [path.join(bench, 'build.cjs')], {encoding: 'utf8', timeout: 60000})
     fs.writeFileSync(path.join(output, 'build.log'), build + bundle)
     report.inputs = JSON.parse(fs.readFileSync(path.join(bench, 'source-manifest.json'), 'utf8')).generated_from
@@ -237,7 +254,7 @@ async function testCreatorPrototype() {
     pass('actual selected sound/register/volume URL, clipboard reject fallback, fresh-context restoration')
     await page.selectOption('#sound', 'tone-reference'); await page.selectOption('#register', '0'); await page.locator('#volume').fill('70')
     await page.locator('#record-audio').click(); await page.locator('#stop').waitFor({state: 'visible'})
-    await page.waitForFunction(() => __CreatorPrototype.capture?.kind === 'audio')
+    await page.waitForFunction(() => __CreatorPrototype.capture?.kind === 'audio' && document.querySelector('#stop').textContent === 'Stop recording')
     await page.locator('#example').click(); await page.waitForTimeout(5200)
     await page.locator('#stop').click(); await page.waitForFunction(() => __CreatorPrototype.takes.length === 1 && !__CreatorPrototype.capture)
     const file = await browserCall(browser, () => page.evaluate(async () => {
@@ -265,7 +282,7 @@ async function testCreatorPrototype() {
     assert.equal(hash(Buffer.from(await page.evaluate(() => __creatorControls.shared[0]))), sha); assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 1)
     pass('exact download/readback, Share cancel/reject/success keep the same file; no receiving-app success claim')
     await page.evaluate(() => { __creatorControls.share = 'cancel'; Object.defineProperty(navigator, 'canShare', {value: () => false, configurable: true}) })
-    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
     assert.equal(await page.locator('#repeat').isDisabled(), false)
     await page.locator('#repeat').click(); await page.waitForTimeout(5600); await page.locator('#stop').click()
     await page.waitForFunction(() => __CreatorPrototype.takes.length === 2)
@@ -283,7 +300,7 @@ async function testCreatorPrototype() {
     // Held-key blur must be represented in replay, not just the original audio.
     while (await page.evaluate(() => __CreatorPrototype.takes.length > 1)) await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
     await page.locator('#volume').fill('70'); await page.locator('#volume').dispatchEvent('input')
-    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
     await page.keyboard.down('KeyA'); await page.waitForTimeout(350); await page.evaluate(() => window.dispatchEvent(new Event('blur')))
     await page.waitForTimeout(350); await page.locator('#stop').click(); await page.waitForFunction(() => __CreatorPrototype.takes.length === 2)
     assert(await page.evaluate(() => __CreatorPrototype.takes.at(-1).events.some(event => event.type === 'panic')))
@@ -300,7 +317,7 @@ async function testCreatorPrototype() {
     })
     await page.locator('#example').click(); await page.locator('#example').click()
     await page.locator('#connect').click(); await page.waitForFunction(() => typeof __creatorControls.input.onmidimessage === 'function')
-    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
     await page.evaluate(() => __creatorControls.input.onmidimessage({data: [0x91, 64, 97]})); await page.waitForTimeout(500)
     await page.evaluate(() => __creatorControls.input.onmidimessage({data: [0x81, 64, 0]})); await page.waitForTimeout(500)
     await page.locator('#stop').click(); await page.waitForFunction(() => __CreatorPrototype.takes.length === 1)
@@ -314,7 +331,7 @@ async function testCreatorPrototype() {
     assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 1)
     assert.equal(await page.evaluate(() => __creatorControls.midi), 1)
     pass('controlled Biotron input preserves channel/note/velocity, no outputs/SysEx; busy sound-start disconnect detaches and releases, retaining the old take')
-    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
     await page.evaluate(() => { __CreatorPrototype.capture.tap.port.postMessage = () => {} })
     await page.locator('#stop').click(); await page.waitForFunction(() => !document.querySelector('#record-audio').disabled, null, {timeout: 8000})
     assert.match(await page.locator('#status').innerText(), /finalization timed out/); assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 1)
@@ -322,7 +339,7 @@ async function testCreatorPrototype() {
     for (const action of ['disconnect', 'release']) {
       await page.evaluate(() => { __creatorControls.input.state = 'connected'; __creatorControls.closed = false })
       await page.locator('#connect').click(); await page.waitForFunction(() => typeof __creatorControls.input.onmidimessage === 'function')
-      await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+      await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
       await page.evaluate(() => { __CreatorPrototype.capture.tap.port.postMessage = () => {} })
       if (action === 'disconnect') await page.evaluate(() => { __creatorControls.input.state = 'disconnected'; __creatorControls.access.onstatechange({port: __creatorControls.input}) })
       else await page.locator('#release').click()
@@ -334,7 +351,7 @@ async function testCreatorPrototype() {
     pass('disconnect and explicit release close controlled MIDI inputs even when capture finalization fails; first timeout and prior take survive')
     await page.evaluate(() => { __creatorControls.input.state = 'connected' })
     await page.locator('#connect').click(); await page.waitForFunction(() => typeof __creatorControls.input.onmidimessage === 'function')
-    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
     await page.evaluate(() => { for (let i = 0; i < 2001; i++) __creatorControls.input.onmidimessage({data: [0xe0, i % 128, 64]}) })
     await page.waitForTimeout(300); await page.locator('#stop').click(); await page.waitForFunction(() => __CreatorPrototype.takes.length === 2)
     assert.match(await page.locator('#status').innerText(), /Repeat unavailable/); assert(await page.locator('#repeat').isDisabled())
@@ -342,7 +359,7 @@ async function testCreatorPrototype() {
     assert(await page.evaluate(async () => (await __CreatorPrototype.takes.at(-1).file.arrayBuffer()).byteLength > 44))
     await page.locator('#takes button', {hasText: 'Remove take'}).last().click(); await page.locator('#release').click()
     pass('2001 controlled events keep a playable file but disable incomplete performance replay; event memory remains bounded')
-    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
     await page.waitForFunction(() => __CreatorPrototype.takes.length === 2 && !__CreatorPrototype.capture, null, {timeout: 35000})
     assert(await page.evaluate(() => __CreatorPrototype.takes.at(-1).seconds >= 30 && __CreatorPrototype.takes.at(-1).seconds < 30.1))
     pass('actual audio-clock 30-second cap finalizes a bounded WAV without operator action')
@@ -405,7 +422,7 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
       blocks: __CreatorPrototype.capture?.blocks.length ?? null, events: __CreatorPrototype.capture?.events.length ?? null}))
     report.lifecycle.observations.push({name, value}); save(); return value
   }
-  await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+  await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
   if (!coldOnly) await observe('seed/record-started')
   await page.locator('#example').click(); await page.waitForTimeout(900)
   if (!coldOnly) await observe('seed/before-stop')
@@ -431,8 +448,63 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
   await page.locator('#example').click()
   const retained = async () => hash(Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer())))))
   const previousSha = await retained(); report.lifecycle.previousWavSha256 = previousSha; save()
+  for (const boundary of ['delayed', 'resolve-abort', 'cancel-late', 'pagehide-late', 'deadline', 'done-before-pcm']) {
+    await page.evaluate(() => { __creatorControls.pcmMode = 'hold'; delete __creatorControls.releaseFirstPCM; delete __creatorControls.heldPCM })
+    // A fresh context makes module loading part of the single recorder deadline.
+    if (boundary === 'deadline') {
+      await page.evaluate(() => { __creatorControls.pcmMode = null; window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted: true})); window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true})) })
+      await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
+      await page.locator('#example').click(); await page.locator('#example').click()
+      await page.evaluate(() => {
+        __creatorControls.pcmMode = 'hold'; delete __creatorControls.releaseFirstPCM; delete __creatorControls.heldPCM
+        const target = __CreatorPrototype.engine.context.audioWorklet, original = target.addModule
+        target.addModule = (...args) => original.apply(target, args).then(value => new Promise(resolve => setTimeout(() => resolve(value), 2000)))
+        __creatorControls.restorePCMModule = () => { target.addModule = original }
+      })
+    }
+    const began = Date.now()
+    await page.locator('#record-audio').click()
+    await page.waitForFunction(() => typeof __creatorControls.releaseFirstPCM === 'function')
+    const pending = await observe(`pcm/${boundary}/pending`)
+    assert.match(pending.status, /Starting recording/); assert.equal(pending.stopText, 'Cancel start'); assert(!pending.stopDisabled)
+    assert.equal(pending.blocks, 0); assert.equal(await retained(), previousSha)
+    if (boundary === 'delayed') {
+      await page.evaluate(() => __creatorControls.releaseFirstPCM())
+      await page.waitForFunction(() => document.querySelector('#stop').textContent === 'Stop recording')
+      await page.locator('#example').click(); await page.waitForTimeout(900); await page.locator('#stop').click()
+      await page.waitForFunction(() => __CreatorPrototype.takes.length === 2 && !__CreatorPrototype.capture)
+      await page.locator('#example').click(); await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
+    } else {
+      await page.evaluate(boundary => {
+        __creatorControls.pendingPCM = __CreatorPrototype.capture
+        if (boundary === 'resolve-abort') { __creatorControls.releaseFirstPCM(); queueMicrotask(() => document.querySelector('#stop').click()) }
+        else if (boundary === 'cancel-late') document.querySelector('#stop').click()
+        else if (boundary === 'pagehide-late') { window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted: true})); window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true})) }
+        else if (boundary === 'done-before-pcm') __CreatorPrototype.capture.tap.port.onmessage({data: {done: true}})
+      }, boundary)
+      await page.waitForFunction(() => !document.querySelector('#record-audio').disabled, null, {timeout: 12000})
+      const outcome = await observe(`pcm/${boundary}/outcome`)
+      if (boundary === 'deadline') { assert.match(outcome.status, /Recorder start timed out/); assert(Date.now() - began < 11500, 'Module and first PCM must share one 10s recorder deadline'); await page.evaluate(() => __creatorControls.restorePCMModule()) }
+      else if (boundary === 'done-before-pcm') assert.match(outcome.status, /stopped before receiving audio/)
+      else assert.match(outcome.status, boundary === 'pagehide-late' ? /Returned/ : /cancelled/)
+      assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false)
+      assert.equal(await page.evaluate(() => __creatorControls.pendingPCM.tap.port.onmessage), null)
+      assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 1)
+      await page.evaluate(() => __creatorControls.releaseFirstPCM())
+      assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false)
+      assert.equal(await page.locator('#status').innerText(), outcome.status, 'Late PCM cannot publish an old Recording status')
+    }
+    assert.equal(await retained(), previousSha)
+    await page.evaluate(() => { __creatorControls.pcmMode = null; delete __creatorControls.releaseFirstPCM })
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => document.querySelector('#stop').textContent === 'Stop recording' && __CreatorPrototype.capture)
+    await page.locator('#example').click(); await page.waitForTimeout(900); await page.locator('#stop').click()
+    await page.waitForFunction(() => __CreatorPrototype.takes.length === 2 && !__CreatorPrototype.capture)
+    assert.equal(await retained(), previousSha)
+    await page.locator('#example').click(); await page.locator('#takes button', {hasText: 'Remove take'}).last().click()
+    pass(`first PCM/${boundary}: truthful pending/cancel/deadline boundary, previous WAV retained and next recording succeeds`)
+  }
   for (const boundary of ['ready-running', 'ready-closed', 'ready-no-ack', 'ready-pagehide']) {
-    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
     await page.locator('#example').click()
     await page.waitForFunction(() => __CreatorPrototype.capture.blocks.some(block => block.pcm.some(value => Math.abs(value) > .001)))
     await page.locator('#example').click()
@@ -474,7 +546,7 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
     }
     pass(`${boundary}: ready failure keeps the prior WAV, clears capture, and reports the current take outcome`)
     await page.evaluate(() => { __creatorControls.readyStopRequested = false })
-    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
     await page.locator('#example').click(); await page.waitForTimeout(900); await page.locator('#stop').click()
     await page.waitForFunction(() => __CreatorPrototype.takes.length === 2 && !__CreatorPrototype.capture)
     assert.equal(await retained(), previousSha)
@@ -620,7 +692,7 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
   await page.evaluate(() => { __creatorControls.permission = 'pending' })
   await page.locator('#connect').click(); await page.waitForFunction(() => document.querySelector('#stop').textContent.includes('Cancel'))
   await page.locator('#stop').click(); await page.waitForFunction(() => !document.querySelector('#record-audio').disabled)
-  await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+  await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
   await page.evaluate(() => __creatorControls.rejectPermission()); await page.waitForTimeout(100)
   assert.match(await page.locator('#status').innerText(), /Recording sound/)
   await page.locator('#example').click(); await page.waitForTimeout(500)
@@ -633,7 +705,7 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
   assert.equal(returned.takes, 1); assert.equal(await retained(), previousSha)
   assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false)
   pass('active pagehide visibly identifies current-take loss and preserves previous WAV; late rejection cannot overwrite a newer recording')
-  await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+  await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
   await page.evaluate(() => { __CreatorPrototype.capture.tap.port.postMessage = () => {} })
   await page.locator('#stop').click()
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted: true})))
@@ -643,7 +715,7 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
   assert.match(finalizing.status, /current recording.*not kept/i); assert(!/Cleanup failed/.test(finalizing.status))
   assert.equal(finalizing.takes, 1); assert.equal(await retained(), previousSha)
   pass('pagehide during pending finalization blocks late take creation and releases recording nodes once')
-  await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
+  await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture && document.querySelector('#stop').textContent === 'Stop recording')
   await page.locator('#example').click(); await page.waitForTimeout(600); await page.locator('#stop').click()
   await page.waitForFunction(() => __CreatorPrototype.takes.length === 2 && !__CreatorPrototype.capture)
   assert.equal(await retained(), previousSha)
@@ -686,7 +758,7 @@ async function verifyCreatorFidelity({browser, page, report, save, pass, output,
       tap.port.onmessage = event => { if (event.data.done) probe.resolve?.(); else probe.blocks.push(event.data) }
       engine.output.connect(tap)
     }, sound), 'creator fidelity reference start')
-    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture?.kind === 'audio')
+    await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture?.kind === 'audio' && document.querySelector('#stop').textContent === 'Stop recording')
     await page.evaluate(() => { __creatorFidelity.session = __CreatorPrototype.capture })
     await page.locator('#example').click(); await page.waitForFunction(() => document.querySelector('#example').textContent === 'Play example')
     await page.locator('#stop').click(); await page.waitForFunction(() => !__CreatorPrototype.capture && __CreatorPrototype.takes.length === 1)
@@ -751,7 +823,7 @@ async function benchmarkCreator({browser, context, page, report, save, output, f
     return {started, ended: performance.now(), metrics, heap, processes}
   }
   const phrase = async () => { await page.locator('#example').click(); await page.waitForFunction(() => document.querySelector('#example').textContent === 'Play example') }
-  const begin = async () => { await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture?.kind === 'audio') }
+  const begin = async () => { await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture?.kind === 'audio' && document.querySelector('#stop').textContent === 'Stop recording') }
   const finish = async () => { await page.locator('#stop').click(); await page.waitForFunction(() => !__CreatorPrototype.capture && __CreatorPrototype.takes.length === 1) }
   const remove = async () => { await page.locator('#takes button', {hasText: 'Remove take'}).click(); assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 0) }
   await page.selectOption('#sound', 'tone-reference'); await phrase()
