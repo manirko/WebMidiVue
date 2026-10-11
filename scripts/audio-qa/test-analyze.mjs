@@ -325,6 +325,14 @@ async function testCreatorPrototype() {
     assert.deepEqual(errors, []); report.status = 'PASS_SCOPED'; save()
   } catch (error) {
     report.status = 'FAIL'; report.firstFault = {message: String(error), stack: error.stack, errors}; save()
+    if (page && browser?.isConnected()) {
+      report.firstFault.state = await browserCall(browser, () => page.evaluate(() => ({
+        visibility: document.visibilityState, focus: document.hasFocus(), status: document.querySelector('#status')?.textContent,
+        context: __CreatorPrototype.engine?.context.state, time: __CreatorPrototype.engine?.context.currentTime,
+        ready: __CreatorPrototype.engine?.ready, stopped: __CreatorPrototype.engine?.stopped,
+        blocks: __CreatorPrototype.capture?.blocks.length ?? null, takes: __CreatorPrototype.takes.length
+      })), 'creator first-fault state', 1500).catch(stateError => ({error: String(stateError)})); save()
+    }
     if (page) await page.screenshot({path: path.join(output, 'first-fault.png'), timeout: 2000}).catch(() => {})
     throw error
   } finally {
@@ -342,11 +350,16 @@ async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, outpu
       recordDisabled: document.querySelector('#record-audio').disabled, connection: document.querySelector('#connection').textContent,
       status: document.querySelector('#status').textContent, takes: __CreatorPrototype.takes.length,
       requests: __creatorControls.midi, opens: __creatorControls.opens || 0, closes: __creatorControls.closes || 0,
-      listener: typeof __creatorControls.input?.onmidimessage, stateListener: typeof __creatorControls.access?.onstatechange}))
+      listener: typeof __creatorControls.input?.onmidimessage, stateListener: typeof __creatorControls.access?.onstatechange,
+      visibility: document.visibilityState, focus: document.hasFocus(), context: __CreatorPrototype.engine?.context.state,
+      time: __CreatorPrototype.engine?.context.currentTime, ready: __CreatorPrototype.engine?.ready,
+      blocks: __CreatorPrototype.capture?.blocks.length ?? null, events: __CreatorPrototype.capture?.events.length ?? null}))
     report.lifecycle.observations.push({name, value}); save(); return value
   }
   await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture)
-  await page.locator('#example').click(); await page.waitForTimeout(900); await page.locator('#stop').click()
+  await observe('seed/record-started')
+  await page.locator('#example').click(); await page.waitForTimeout(900)
+  await observe('seed/before-stop'); await page.locator('#stop').click()
   await page.waitForFunction(() => __CreatorPrototype.takes.length === 1 && !__CreatorPrototype.capture)
   await page.locator('#example').click()
   const retained = async () => hash(Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer())))))
