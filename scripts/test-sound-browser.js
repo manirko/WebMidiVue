@@ -429,7 +429,14 @@ async function verifySettingsActions(page, origin) {
   assert.equal(await page.evaluate(() => window.__soundMidiSent.length), selectedMarker, 'Selecting/exporting a browser preset wrote the device')
   pass('preset selection and file export stay local before explicit Apply')
   await page.getByRole('button', {name: 'Apply preset to Biotron', exact: true}).click()
-  await page.getByText('Saved on Biotron.', {exact: true}).waitFor()
+  // Locator backoff can miss feedback that becomes visible just before the same deadline.
+  await page.waitForFunction(() => {
+    const status = document.querySelector('.settings-feedback > span')
+    return Boolean(status?.isConnected && status.textContent === 'Saved on Biotron.' &&
+      status.getBoundingClientRect().width > 0 && status.getBoundingClientRect().height > 0 &&
+      getComputedStyle(status).visibility === 'visible')
+  }, null, {timeout: 5000, polling: 100})
+  assert(await page.getByText('Saved on Biotron.', {exact: true}).isVisible(), 'Exact saved feedback must be visible')
   const writes = await page.evaluate(start => window.__soundMidiSent.slice(start).filter(message => message[3] !== 123), selectedMarker)
   // Whole-preset protocol ordering, independently specified from firmware commands.
   const ids = {lightBpm:9,noteOffPercent:12,noteDistance:1,firstValue:2,smoothness:3,scale:4,minPlantVelocity:15,maxPlantVelocity:5,minLightVelocity:17,maxLightVelocity:6,randomness:10,same_note_plant:11,same_note_light:24,range_light_note:13,light_pitch_mode:19,plant_no_velocity:22,light_no_velocity:23,randomPlantVelocity:16,randomLightVelocity:18,performance:21,middle_plant_note:25,plant_midi_channel:[127,0],light_midi_channel:[127,1],swing_first_note_percent:26,button_mode_state:27}
