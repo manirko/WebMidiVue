@@ -74,7 +74,7 @@
     <template v-if="!betaBuild || settingsReady || (page_is_inited && !device)">
     <p v-if="betaBuild && !device" role="status">Local preset — changes stay in this browser. Connect Biotron, then choose Apply preset to Biotron.</p>
     <section :class="{'beta-preset-card': betaBuild}" :inert="betaBuild && is_loading" aria-label="Preset and saved settings">
-    <PatchSelector :patches="this.patches" :key="this.forceRerender + this.patchRerender" :page_id="this.id"  text_label="Preset"/>
+    <PatchSelector :patches="this.patches" :key="this.forceRerender + this.patchRerender" :page_id="this.id" :selected_id="patch_id" text_label="Preset"/>
     <div :class="betaBuild ? 'preset-actions' : 'row row-cols-1 row-cols-sm-2 row-cols-lg-4 g-2 mb-5'">
       <div :class="{'col': !betaBuild}">
         <button @click="change_data_loader" :disabled="!this.device || this.is_loading || (betaBuild && !settingsReady)" class="btn btn-primary w-100 h-100">
@@ -477,9 +477,7 @@ export default  {
   watch: {settingsState(state, previous) { if (this.betaBuild) recordSettingsState(state, previous, this.firmwareVersion) }},
   methods: {
     ...createSettingsConnectionMethods({settingsVectorFromCommands, settingsVectorsEqual, savedSettingsMessage}),
-    settingsDiagnosticPacket() {
-      return buildSettingsDiagnostic(this, process.env.VUE_APP_BUILD_ID || "local-build")
-    },
+    settingsDiagnosticPacket() { return buildSettingsDiagnostic(this, process.env.VUE_APP_BUILD_ID || "local-build") },
     async handleDeviceChanged(device) {
       this.clearLiveVerification()
       this.settingsLoadId++
@@ -640,7 +638,7 @@ export default  {
       this.is_loading = true
       try {
         const completed = await applyCalmerPlay(device, () => this.device, this.commands_data)
-        await this.patchChanged()
+        if (await this.patchChanged() === null) return
         if (!completed) throw new Error("Biotron disconnected while applying calmer play.")
         this.forceRerender++
         this.patchRerender++
@@ -654,33 +652,35 @@ export default  {
       }
     },
     async sendDataDeprecated(output) {
-      if (output) {
-        output.send([240, 11, 16, 127, 247])
-        let extraComp = []
-
-        extraComp.push("plantBpm");
-        for (let comm in this.commands_data) {
-          if (!extraComp.includes(comm)) {
-            this.commands_data[comm].sendToMidi(output, [11])
-            await output.wait(100);
-          }
+      if (!output) return
+      output.send([240, 11, 16, 127, 247])
+      for (let comm in this.commands_data) {
+        if (comm !== "plantBpm") {
+          this.commands_data[comm].sendToMidi(output, [11])
+          await output.wait(100);
         }
-        output.send([240, 11, 126, 247]);
-        await output.wait(100);
-        this.commands_data.plantBpm.sendToMidi(output, [11])
       }
+      output.send([240, 11, 126, 247]);
+      await output.wait(100);
+      this.commands_data.plantBpm.sendToMidi(output, [11])
     },
-    saveData() {
+    async saveData() {
       const state = Object.fromEntries(Object.values(this.commands_data).map(command => [command.name, command.value]))
-      return withPresetFeedback(this.id, "autosave", () =>
-        this.db.updatePatch(localStorage.getItem(this.id), state))
+      const saved = await withPresetFeedback(this.id, "autosave", () =>
+        this.db.updatePatch(this.patch_id, state))
+      if (saved === null) {
+        this.settingsState = "error"
+        this.settingsMessage = "Browser preset was not saved. Keep this page open and retry your change."
+      }
+      return saved
     },
 
     async loadData() {
       let commands
       try {
-        let preset = await this.db.getPatch(localStorage.getItem(this.id))
+        let preset = await this.db.getPatch(this.patch_id)
         if (!preset) {
+          this.patch_id = 1
           localStorage.setItem(this.id, 1)
           preset = await this.db.getPatch(1)
         }
@@ -708,9 +708,9 @@ export default  {
         this.settingsMessage = "Could not load preset. Choose a valid Biotron preset file."
         return
       }
-      await this.patchChanged();
+      if (await this.patchChanged() === null) return
       for (const item of commands) this.commands_data[item.name].set_value(Number(item.value))
-      await this.saveData();
+      if (await this.saveData() === null) return
       this.forceRerender++;
       this.markPresetPending()
     },
@@ -725,14 +725,13 @@ export default  {
       return commands
     },
     async patchChanged() {
-      let patch_id = parseInt(localStorage.getItem(this.id));
-
-      if (this.patches.find(item => item.id === patch_id).saved) {
-        patch_id = await this.db.getUnsavedPatch();
+      const patch = this.patches.find(item => item.id === this.patch_id)
+      if (patch?.saved) {
+        this.patch_id = await this.db.createPatch(patch.data)
         this.patches = await this.db.getPatch();
-        localStorage.setItem(this.id, patch_id);
+        localStorage.setItem(this.id, this.patch_id);
       }
-      await this.saveData();
+      return this.saveData()
     },
     async sys_ex_changed(object) {
       if (this.betaBuild && this.device && !this.settingsSnapshotKnown) return
@@ -740,7 +739,7 @@ export default  {
       const connectionCurrent = () => this.device === device && this.$refs?.deviceSelector?.operationId === operationId && (!this.betaBuild || !device || this.settingsSnapshotKnown)
       this.settingsLoadId++
       this.lastChangedSetting = object.name
-      await this.patchChanged();
+      if (await this.patchChanged() === null) return
       if (!connectionCurrent()) return
       if (this.betaBuild && !this.device) this.markPresetPending()
       if (this.betaBuild && this.presetPending) {
@@ -781,9 +780,8 @@ export default  {
       device: null,
       forceRerender: 0,
       patchRerender: 0,
-      db: {
-        type: BiotronDb
-      },
+      patch_id: 0,
+      db: null,
       patches: [],
       is_loading: false,
       calibrationState: "idle",
@@ -804,6 +802,7 @@ export default  {
     if (!localStorage.getItem(this.id)) {
       localStorage.setItem(this.id, "1")
     }
+    this.patch_id = parseInt(localStorage.getItem(this.id))
     this.db = new BiotronDb();
     await this.db.ready;
     this.patches = await this.db.getPatch();
@@ -816,19 +815,22 @@ export default  {
     if (!this.betaBuild) this.listenerScope.on(document, 'keyup', event => {
       if (event.code === 'Enter' && !this.is_loading) this.change_data_loader();
     })
-    this.listenerScope.on(document, 'PatchChanged', async () => {
+    this.listenerScope.on(document, 'PatchChanged', async event => {
+      if (event.detail?.pageId !== this.id) return
+      this.patch_id = event.detail.id
       if (await this.loadData()) this.markPresetPending()
     })
     this.listenerScope.on(document, "PatchSave", async (ev) => {
       await withPresetFeedback(this.id, "save", async () => {
-        await this.db.savePatch(localStorage.getItem(this.id), ev.detail)
+        await this.db.savePatch(this.patch_id, ev.detail)
         this.patches = await this.db.getPatch()
         this.patchRerender++;
       })
     })
     this.listenerScope.on(document, 'PatchDelete', async () => {
       await withPresetFeedback(this.id, "delete", async () => {
-        await this.db.deletePatch(parseInt(localStorage.getItem(this.id)))
+        await this.db.deletePatch(this.patch_id)
+        this.patch_id = 1
         localStorage.setItem(this.id, "1")
         this.patches = await this.db.getPatch()
         if (await this.loadData()) this.markPresetPending()

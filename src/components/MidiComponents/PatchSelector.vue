@@ -74,6 +74,7 @@
         type: String,
         required: true
       },
+      selected_id: {type: Number, default: null},
       text_label: {
         default: "Presets",
         type: String,
@@ -99,25 +100,13 @@
         this.storageMessage = ""
         localStorage.setItem(this.page_id, this.id)
 
-        if (!this.patches) return;
-
-        let current_item
-
-        for (let patch of this.patches) {
-          if (this.id === patch.id) {
-            current_item = patch
-            break
-          }
-        }
-
-        if (!current_item) {
-          return
-        }
+        const current_item = this.patches?.find(patch => patch.id === this.id)
+        if (!current_item) return
 
         this.active_button_enabled = current_item.editable
         this.button_state = current_item.saved ? "Delete" : "Save"
 
-        document.dispatchEvent(new CustomEvent('PatchChanged'));
+        document.dispatchEvent(new CustomEvent('PatchChanged', {detail: {pageId: this.page_id, id: this.id}}));
       },
       savePatch() {
         this.storageMessage = "Saving in browser…"
@@ -147,22 +136,9 @@
           this.active_button_enabled = false
         }
       })
-      this.id = parseInt(localStorage.getItem(this.page_id))
-
-      if (!this.patches) return;
-
-      let current_item
-
-      for (let patch of this.patches) {
-        if (this.id === patch.id) {
-          current_item = patch
-          break
-        }
-      }
-
-      if (!current_item) {
-        return
-      }
+      this.id = this.selected_id ?? parseInt(localStorage.getItem(this.page_id))
+      const current_item = this.patches?.find(patch => patch.id === this.id)
+      if (!current_item) return
 
       this.active_button_enabled = current_item.editable
       this.button_state = current_item.saved ? "Delete" : "Save"

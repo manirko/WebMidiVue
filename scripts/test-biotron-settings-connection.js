@@ -28,6 +28,11 @@ context.createSettingsConnectionMethods = connectionContext.module.exports
 context.settingsVectorFromCommands = () => []
 context.settingsVectorsEqual = () => true
 context.savedSettingsMessage = () => 'Saved'
+const storageEvents = []
+context.document = {dispatchEvent(event) {storageEvents.push(event.detail)}}
+context.CustomEvent = class {constructor(type, options) {this.type = type; this.detail = options?.detail}}
+const feedback = fs.readFileSync('src/assets/js/PresetsIDB.js', 'utf8').split('export async function withPresetFeedback')[1]
+vm.runInNewContext('async function withPresetFeedback' + feedback, context)
 vm.runInNewContext(
   script.replace(/import\s+[\s\S]*?\s+from\s+["'][^"']+["'];?/g, '')
     .replace('export default', 'module.exports ='),
@@ -133,6 +138,7 @@ assert.equal(pair.sent.length, rangeWrites, 'blank range endpoint must not write
   const storedData = new Map()
   context.localStorage = {getItem: key => storedData.get(key), setItem: (key, value) => storedData.set(key, value)}
   importing.id = 'stored-preset-fixture'
+  importing.patch_id = 9
   storedData.set(importing.id, '9')
   let storedPreset
   importing.db = {getPatch: async () => storedPreset}
@@ -318,5 +324,63 @@ assert.equal(pair.sent.length, rangeWrites, 'blank range endpoint must not write
   rejected.scheduleLiveVerification = () => { throw new Error('failed local save must not verify') }
   await assert.rejects(rejected.sys_ex_changed({name: 'scale', sendToMidi: device => rejectedWrites.push(device.id)}), /local preset save failed/)
   assert.deepEqual(rejectedWrites, [], 'failed local persistence still wrote MIDI')
-  console.log('Biotron Settings initial-read, retry and eight stale-gesture/independent-edit cases: PASS')
+
+  // Exercise the real feedback wrapper: it returns null on an aborted save.
+  // A throwing patchChanged stub alone cannot detect the production failure.
+  const storedEdit = () => {
+    const state = editable()
+    state.id = 'settings-storage-fixture'
+    state.patch_id = 7
+    state.patches = [{id: 7, saved: false}]
+    state.commands_data = {scale: {name: 'scale', value: 8}}
+    storedData.set(state.id, '7')
+    return state
+  }
+  const failure = storedEdit(), failureWrites = [], failureVerifications = []
+  failure.db = {async updatePatch() {throw new Error('Injected quota failure')}}
+  failure.scheduleLiveVerification = () => failureVerifications.push('verify')
+  storageEvents.length = 0
+  await failure.sys_ex_changed({name: 'scale', sendToMidi: () => failureWrites.push('send')})
+  assert.equal(storageEvents.at(-1).ok, false)
+  assert.deepEqual(failureWrites, [], 'real autosave rejection still sent MIDI')
+  assert.deepEqual(failureVerifications, [], 'real autosave rejection started verification')
+  assert.equal(failure.settingsState, 'error')
+  assert.match(failure.settingsMessage, /not saved/i)
+  assert.equal(failure.commands_data.scale.value, 8, 'storage failure discarded the edit')
+  failure.db.updatePatch = async (id, data) => ({id, data})
+  await failure.sys_ex_changed({name: 'scale', sendToMidi: () => failureWrites.push('send')})
+  assert.equal(storageEvents.at(-1).ok, true)
+  assert.deepEqual(failureWrites, ['send'], 'retry did not restore the live path')
+  assert.deepEqual(failureVerifications, ['verify'])
+
+  const a = storedEdit(), records = new Map([[7, {scale: 2}], [9, {scale: 3}]])
+  const addresses = []
+  a.patches = [{id: 7, saved: false}, {id: 9, saved: false}]
+  a.db = {async updatePatch(id, data) {addresses.push(Number(id)); records.set(Number(id), data); return {id, data}}}
+  storedData.set(a.id, '9') // another tab changes the shared startup preference
+  await a.patchChanged()
+  assert.equal(records.get(9).scale, 3, 'tab B redirected tab A into its preset')
+  assert.equal(records.get(7).scale, 8)
+  assert.deepEqual(addresses, [7])
+  a.patches[0].saved = true
+  a.patches[0].data = {scale: 2}
+  a.db.createPatch = async data => {records.set(10, data); return 10}
+  a.db.getPatch = async () => [...a.patches, {id: 10, saved: false}]
+  a.commands_data.scale.value = 11
+  await a.patchChanged()
+  assert.equal(a.patch_id, 10, 'editing a saved preset did not select its own draft')
+  assert.equal(records.get(9).scale, 3, 'saved-preset fork overwrote another tab draft')
+  assert.equal(records.get(10).scale, 11)
+  assert.equal(records.get(7).scale, 8, 'saved source was overwritten')
+  const legacyOrder = page(), legacyCalls = []
+  legacyOrder.commands_data = Object.fromEntries(['scale', 'plantBpm', 'lightBpm'].map(name => [name,
+    {sendToMidi(output, bytes) {legacyCalls.push([name, ...bytes])}}]))
+  await legacyOrder.sendDataDeprecated(null)
+  assert.deepEqual(legacyCalls, [])
+  await legacyOrder.sendDataDeprecated({send(bytes) {legacyCalls.push(Array.from(bytes))},
+    async wait(ms) {legacyCalls.push(['wait', ms])}})
+  assert.deepEqual(legacyCalls, [[240,11,16,127,247], ['scale',11], ['wait',100],
+    ['lightBpm',11], ['wait',100], [240,11,126,247], ['wait',100], ['plantBpm',11]],
+    'simplification changed the legacy firmware command order')
+  console.log('Biotron Settings initial-read, retry, stale gestures, real autosave failure/retry, preset addressing/fork and legacy order: PASS')
 })().catch(error => { console.error(error); process.exitCode = 1 })

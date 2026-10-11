@@ -266,7 +266,7 @@ async function verifySettingsActions(page, origin) {
     })
     db.close()
     localStorage.setItem('BiotronWebMidiId_2', String(id))
-    document.dispatchEvent(new CustomEvent('PatchChanged'))
+    document.dispatchEvent(new CustomEvent('PatchChanged', {detail: {pageId: 'BiotronWebMidiId_2', id}}))
     return id
   }, data)
   const beforeStored = Object.fromEntries(original.commands.map(item => [item.name,item.value]))
@@ -299,6 +299,77 @@ async function verifySettingsActions(page, origin) {
   assert.equal((await exportPreset()).commands.find(item=>item.name==='plantBpm').value,404,'another preset did not recover after rejected data')
   assert.equal(await page.evaluate(()=>window.__soundMidiSent.length),localMarker)
   pass('six damaged saved presets preserve form/storage/MIDI and another preset recovers')
+
+  // Two real tabs share IndexedDB and the startup preference, but each edit
+  // must keep the preset selected in that tab. MIDI remains this suite's fake.
+  const other = await page.context().newPage()
+  const presetRecords = (tab, operation, ids = []) => tab.evaluate(async ({operation, ids, data}) => {
+    const db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('BiotronDB', 10)
+      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error)
+    })
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction('Biotron_Patches', operation === 'seed' ? 'readwrite' : 'readonly')
+        const store = tx.objectStore('Biotron_Patches'), requests = operation === 'seed'
+          ? ['A', 'B'].map(name => store.add({name:`Tab ${name}`, editable:true, saved:false, data:{...data, scale:3}}))
+          : ids.map(id => store.get(id))
+        tx.oncomplete = () => resolve(requests.map(request => request.result))
+        tx.onabort = () => reject(tx.error)
+      })
+    } finally { db.close() }
+  }, {operation, ids, data: beforeStored})
+  try {
+    const [a, b] = await presetRecords(page, 'seed')
+    await openSettingsForTest(page, origin)
+    const selector = tab => tab.getByRole('combobox', {name:'Preset', exact:true})
+    await selector(page).selectOption(String(a))
+    await page.getByRole('button', {name:'Apply preset to Biotron', exact:true}).click()
+    await page.getByText('Saved on Biotron.', {exact:true}).waitFor()
+    const scale = sections['Plant sensor'].getByRole('combobox', {name:'🎼 Scale', exact:true})
+    const failMarker = await page.evaluate(() => window.__soundMidiSent.length)
+    await page.evaluate(() => {
+      window.__presetPut = IDBObjectStore.prototype.put
+      IDBObjectStore.prototype.put = function (...args) {
+        if (this.name === 'Biotron_Patches') throw new DOMException('Injected quota', 'QuotaExceededError')
+        return window.__presetPut.apply(this, args)
+      }
+    })
+    await scale.selectOption('8')
+    await page.getByText('Browser preset was not saved. Keep this page open and retry your change.', {exact:true}).waitFor()
+    assert.equal(await scale.inputValue(), '8')
+    assert.equal(await page.evaluate(() => window.__soundMidiSent.length), failMarker, 'failed IndexedDB write sent MIDI/query')
+    assert.equal((await presetRecords(page, 'read', [a]))[0].data.scale, 3, 'quota changed the stored record')
+    await page.evaluate(() => {IDBObjectStore.prototype.put = window.__presetPut})
+    await scale.selectOption('9')
+    await page.getByText('Saved on Biotron.', {exact:true}).waitFor()
+    assert.equal((await presetRecords(page, 'read', [a]))[0].data.scale, 9)
+    pass('actual IndexedDB quota preserves the edit, blocks MIDI and retry recovers')
+
+    await openSettingsForTest(other, origin)
+    await selector(other).selectOption(String(b))
+    await other.getByRole('button', {name:'Apply preset to Biotron', exact:true}).waitFor()
+    await scale.selectOption('6')
+    await page.getByText('Saved on Biotron.', {exact:true}).waitFor()
+    const [storedA, storedB] = await presetRecords(page, 'read', [a, b])
+    assert.equal(storedA.data.scale, 6); assert.equal(storedB.data.scale, 3)
+    assert.equal(await selector(page).inputValue(), String(a), 'rerender displayed the other tab selection')
+    pass('two actual tabs preserve their own preset address and displayed selection')
+
+    await page.getByRole('button',{name:'Save in browser',exact:true}).filter({visible:true}).first().click()
+    await page.getByRole('textbox',{name:'Preset name'}).fill('Tab A saved')
+    await page.locator('#saveModal').getByRole('button',{name:'Save in browser',exact:true}).click()
+    await page.getByText('Saved in this browser.',{exact:true}).waitFor()
+    assert.equal((await presetRecords(page, 'read', [a]))[0].name, 'Tab A saved')
+    assert.equal((await presetRecords(page, 'read', [b]))[0].saved, false)
+    await scale.selectOption('5')
+    await page.getByText('Saved on Biotron.', {exact:true}).waitFor()
+    const draft = Number(await selector(page).inputValue())
+    assert(draft !== a && draft !== b, 'saved preset reused another tab draft')
+    const [source, untouched, fork] = await presetRecords(page, 'read', [a, b, draft])
+    assert.equal(source.data.scale, 6); assert.equal(untouched.data.scale, 3); assert.equal(fork.data.scale, 5)
+    pass('save and saved-to-draft fork preserve the other tab and the saved source')
+  } finally { await other.close() }
   console.log(`PASS Settings actions: ${records.length} cases; native effects NOT RUN`)
 }
 
