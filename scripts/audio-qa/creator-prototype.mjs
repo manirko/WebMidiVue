@@ -186,9 +186,10 @@ const worklet = `class Take extends AudioWorkletProcessor {
 async function startAudio(signal) {
   if (takes.length >= 3) throw Error('Three takes kept. Save and remove a take before recording another.')
   await ready(signal)
+  signal.throwIfAborted()
   if (workletContext !== engine.context) {
     const url = URL.createObjectURL(new Blob([worklet], {type: 'text/javascript'}))
-    try { await guard(engine.context.audioWorklet.addModule(url), 'Recorder start', 10000, signal); workletContext = engine.context }
+    try { await guard(engine.context.audioWorklet.addModule(url), 'Recorder start', 10000, signal); signal.throwIfAborted(); workletContext = engine.context }
     finally { URL.revokeObjectURL(url) }
   }
   const tap = new AudioWorkletNode(engine.context, 'creator-take'), drain = engine.context.createGain()
