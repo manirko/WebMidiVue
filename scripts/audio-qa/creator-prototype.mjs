@@ -120,7 +120,7 @@ async function finishAndRelease() {
   finally { try { await releaseMidi() } catch (error) { if (primary) primary.cleanupFailure = String(error); else throw error } }
 }
 $('connect').onclick = () => run(async () => {
-  startAbort = new AbortController(); const signal = startAbort.signal; update()
+  const controller = new AbortController(); startAbort = controller; const signal = controller.signal; update()
   try {
     await ready(signal)
     const access = await guard(navigator.requestMIDIAccess({sysex: false}), 'MIDI permission', 30000, signal)
@@ -131,12 +131,15 @@ $('connect').onclick = () => run(async () => {
       const pending = input.open(); opening.add(input)
       // Native open cannot be aborted. Keep reconnect disabled until its late close.
       void Promise.resolve(pending).then(async () => {
-        if (signal.aborted) await guard(input.close(), 'Cancelled MIDI release')
-      }).catch(error => {
         if (!signal.aborted) return
-        if (!inputs.includes(input)) inputs.push(input)
-        midi ||= access; $('connection').textContent = error.message + '. Try Release Biotron.'
-      }).finally(() => { opening.delete(input); update() })
+        try {
+          await guard(input.close(), 'Cancelled MIDI release')
+          inputs = inputs.filter(item => item !== input); if (!inputs.length && midi === access) midi = null
+        } catch (error) {
+          if (!inputs.includes(input)) inputs.push(input)
+          midi ||= access; $('connection').textContent = error.message + '. Try Release Biotron.'
+        }
+      }, () => {}).finally(() => { opening.delete(input); update() })
       await guard(pending, 'MIDI input', 10000, signal)
       input.onmidimessage = event => {
         const message = parseMidiMessage(event.data)
@@ -151,7 +154,7 @@ $('connect').onclick = () => run(async () => {
       if (!busy) void run(async () => {})
     }
     $('connection').textContent = 'Biotron connected. No device settings are changed.'
-  } catch (error) { try { await releaseMidi() } catch (cleanup) { error.cleanupFailure = String(cleanup) }; throw error }
+  } catch (error) { controller.abort(); try { await releaseMidi() } catch (cleanup) { error.cleanupFailure = String(cleanup) }; throw error }
   finally { startAbort = null }
 })
 $('release').onclick = () => run(async () => { await finishAndRelease(); $('connection').textContent = 'Biotron released.' })
@@ -192,9 +195,14 @@ async function startAudio(signal) {
   status('Recording sound. Play the example, keyboard or connected Biotron. Maximum 30 seconds.')
 }
 async function cleanCapture(session) {
-  session.cleaning ||= Promise.resolve().then(() => {
-    session.engine.output.disconnect(session.tap); session.tap.disconnect(); session.drain.disconnect(); session.tap.port.onmessage = null; session.tap.port.close()
-  })
+  // Detach before engine.stop disconnects output; still close the port on error.
+  session.cleaning ||= (async () => {
+    let failure
+    for (const release of [() => session.engine.output.disconnect(session.tap), () => session.tap.disconnect(), () => session.drain.disconnect(), () => { session.tap.port.onmessage = null; session.tap.port.close() }]) {
+      try { release() } catch (error) { failure ||= error }
+    }
+    if (failure) throw failure
+  })()
   await session.cleaning
 }
 async function finish() {
