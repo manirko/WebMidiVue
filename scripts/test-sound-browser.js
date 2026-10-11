@@ -455,7 +455,46 @@ async function verifySettingsActions(page, origin) {
   await page.getByText('Saved in this browser.',{exact:true}).waitFor()
   assert.equal(await page.getByRole('combobox',{name:'Preset',exact:true}).locator('option:checked').textContent(),'Autonomous settings test')
   pass('named browser preset saves through its actual dialog')
+  const modalReadEvidence = []
+  const saveModalReadEvidence = () => {if (process.env.BIOTRON_TEST_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR,'modal-read.json'),JSON.stringify(modalReadEvidence,null,2))}
+  await page.evaluate(() => {
+    const descriptor=Object.getOwnPropertyDescriptor(IDBTransaction.prototype,'oncomplete')
+    if (!descriptor?.set) throw Error('Native transaction oncomplete descriptor unavailable')
+    window.__presetReadCompletions=0;window.__holdNextPresetRead=false
+    Object.defineProperty(IDBTransaction.prototype,'oncomplete',{...descriptor,set(handler) {
+      const transaction=this
+      descriptor.set.call(this,function(event) {
+        if(transaction.mode==='readonly' && transaction.objectStoreNames.contains('Biotron_Patches')) {
+          const complete=()=>{handler.call(transaction,event);queueMicrotask(()=>window.__presetReadCompletions++)}
+          if(window.__holdNextPresetRead) {
+            window.__holdNextPresetRead=false;window.__completeHeldPresetRead=complete;return
+          }
+          complete();return
+        }
+        handler.call(transaction,event)
+      })
+    }})
+    window.__restorePresetComplete=()=>Object.defineProperty(IDBTransaction.prototype,'oncomplete',descriptor)
+  })
+  const previousRead=await page.evaluate(()=>window.__presetReadCompletions)
+  await page.getByRole('combobox',{name:'Preset',exact:true}).selectOption({label:'Fast role'})
+  await page.waitForFunction(n=>window.__presetReadCompletions>n,previousRead)
+  await page.evaluate(()=>{window.__holdNextPresetRead=true})
+  await page.getByRole('combobox',{name:'Preset',exact:true}).selectOption({label:'Autonomous settings test'})
+  await page.waitForFunction(()=>typeof window.__completeHeldPresetRead==='function')
   await page.getByRole('button',{name:'Delete browser preset',exact:true}).click()
+  await page.locator('#deleteModel').getByRole('button',{name:'Delete',exact:true}).waitFor({timeout:5000})
+  const state=await page.evaluate(async()=>{
+    const original=document.querySelector('#deleteModel'),selected=document.querySelector('#patch-selector').value
+    const before={selected,connected:original.isConnected,classes:original.className,backdrops:document.querySelectorAll('.modal-backdrop').length}
+    window.__completeHeldPresetRead();window.__completeHeldPresetRead=null
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))
+    const current=document.querySelector('#deleteModel')
+    window.__restorePresetComplete()
+    return {before,after:{selected:document.querySelector('#patch-selector').value,sameNode:original===current,oldConnected:original.isConnected,classes:current?.className,backdrops:document.querySelectorAll('.modal-backdrop').length},scope:'Native readonly transaction completed;only its app callback held after native request success. No synthetic click drop or device write.'}
+  })
+  modalReadEvidence.push(state);saveModalReadEvidence()
+  assert(state.after.sameNode && state.after.oldConnected && state.after.classes.includes('show'), 'Preset-read completion replaced the open Delete dialog')
   await page.locator('#deleteModel').getByRole('button',{name:'Delete',exact:true}).click()
   await page.waitForFunction(() => ![...document.querySelectorAll('#patch-selector option')].some(option=>option.textContent==='Autonomous settings test'))
   assert.equal(await page.evaluate(() => window.__soundMidiSent.length),localMarker)

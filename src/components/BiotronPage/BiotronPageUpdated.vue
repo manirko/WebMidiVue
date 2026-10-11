@@ -79,7 +79,7 @@
     <template v-if="!betaBuild || settingsReady || (page_is_inited && !device)">
     <p v-if="betaBuild && !device" role="status">Local preset — changes stay in this browser. Connect Biotron, then choose Apply preset to Biotron.</p>
     <section :class="{'beta-preset-card': betaBuild}" :inert="betaBuild && is_loading" aria-label="Preset and saved settings">
-    <PatchSelector :patches="this.patches" :key="this.forceRerender + this.patchRerender" :page_id="this.id" :selected_id="patch_id" text_label="Preset"/>
+    <PatchSelector :patches="this.patches" :key="this.patchRerender" :page_id="this.id" :selected_id="patch_id" text_label="Preset"/>
     <div :class="betaBuild ? 'preset-actions' : 'row row-cols-1 row-cols-sm-2 row-cols-lg-4 g-2 mb-5'">
       <div :class="{'col': !betaBuild}">
         <button @click="change_data_loader" :disabled="!this.device || this.is_loading || (betaBuild && !settingsReady)" class="btn btn-primary w-100 h-100">
