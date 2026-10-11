@@ -665,7 +665,7 @@ export default {
 .sound-lab__intro { max-width: 650px; margin-bottom: 2rem; }
 .sound-lab__intro--reveal { margin: 2.25rem auto 1.5rem; text-align: center; }
 .sound-lab__intro small { color: #6b6761; font-size: var(--ui-text-small); }
-.sound-lab__intro h1 { margin: .35rem 0; font-size: var(--ui-text-hero); line-height: 1.1; letter-spacing: -.035em; }
+.sound-lab__intro h1 { margin: .35rem 0; scroll-margin-top: 72px; font-size: var(--ui-text-hero); line-height: 1.1; letter-spacing: -.035em; }
 .sound-lab__intro p, .sound-lab__midi p { color: #625e58; line-height: 1.5; }
 .sound-lab section { margin-top: 2rem; }
 .sound-lab__controls, .sound-lab__variants, .sound-lab__midi-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }

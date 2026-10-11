@@ -394,6 +394,10 @@ async function auditProfile(browser, origin, profile) {
   await page.getByRole('heading', {name: 'Settings', level: 2}).waitFor()
   assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Settings',
     `${profile.name}: opening Settings lost the task focus`)
+  const settingsFocus = await page.getByRole('heading', {name: 'Settings', level: 2}).boundingBox()
+  const settingsNav = await nav.boundingBox()
+  assert(settingsFocus.y >= settingsNav.y + settingsNav.height,
+    `${profile.name}: focused Settings title is obscured by navigation`)
   assert(await page.locator('.sound-lab').isVisible(), `${profile.name}: player hidden after opening settings`)
   assert.equal(await page.locator('.sound-lab').getAttribute('data-example'), 'playing',
     `${profile.name}: opening settings stopped the example`)
@@ -407,12 +411,18 @@ async function auditProfile(browser, origin, profile) {
   await palette.getByRole('button', {name: 'Stop example', exact: true}).click()
   await page.locator('.sound-lab[data-example="idle"][data-audio-state="closed"][data-active-voices="0"]').waitFor()
   await auditExpanded('Shared player and Settings after Stop')
+  await nav.getByRole('link', {name: 'Play', exact: true}).click()
+  assert.equal(await page.evaluate(() => document.activeElement?.tagName), 'H1',
+    `${profile.name}: returning to Play lost the title focus`)
+  const playFocus = await page.getByRole('heading', {name: 'Plant music', level: 1}).boundingBox()
+  const playNav = await nav.boundingBox()
+  assert(playFocus.y >= playNav.y + playNav.height,
+    `${profile.name}: focused Play title is obscured by navigation`)
   fs.writeFileSync(path.join(artifacts, `${profile.name}-workspace.json`), JSON.stringify({
     playerVisible: true, navigationCount: 1, preservedExample: true, playingSound, stopClosed: true,
+    settingsFocus, settingsNav, playFocus, playNav,
     scope: 'Real browser audio with empty fake MIDI; no native device or hearing acceptance'
   }, null, 2))
-
-  await nav.getByRole('link', {name: 'Play', exact: true}).click()
 
   if (!profile.midi) {
     await page.goto(`${origin}/#/sound`, {waitUntil: 'domcontentloaded'})
