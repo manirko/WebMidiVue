@@ -117,9 +117,9 @@ async function testCreatorPrototype() {
   tap.port.onmessage = event => {`
       let derived = before.replace(target, observe)
       if (process.argv.includes('--creator-cold-processor-fault')) {
-        const process = 'process(inputs){const a=inputs[0]?.[0];'
-        assert(derived.includes(process), 'native processor fault target changed')
-        derived = derived.replace(process, "process(inputs){throw Error('Injected cold recorder processor failure');const a=inputs[0]?.[0];")
+        const processTarget = 'process(inputs){const a=inputs[0]?.[0];'
+        assert(derived.includes(processTarget), 'native processor fault target changed')
+        derived = derived.replace(processTarget, "process(inputs){throw Error('Injected cold recorder processor failure');const a=inputs[0]?.[0];")
       }
       fs.writeFileSync(entry, derived)
       report.coldNative = {scope: 'Native listeners on actual nodes; generated recorder-only observation changes timing; production source/core unchanged. No extra awaits or warmup before Stop.',
