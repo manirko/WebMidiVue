@@ -41,7 +41,7 @@
         <CompatibilityGate :route="$route">
           <DeviceTaskNav v-if="betaBuild && biotronSoundRoute" class="workspace-nav" device-name="Biotron"
             :active-task="$route.path === '/biotron' ? 'settings' : 'play'" play-route="/biotron/play" settings-route="/biotron" />
-          <details v-if="betaBuild && biotronSoundRoute" class="beta-compatibility">
+          <details v-if="betaBuild && biotronSoundRoute" class="beta-experiment">
             <summary>Record sound for a video · Experiment</summary>
             <p>Keep a short WAV take for CapCut or your usual editor. Film with your camera app. This stops sound and releases Biotron; choose the sound again on the recording page.</p>
             <button id="creator-action" class="btn btn-outline-secondary" type="button" :disabled="creatorOpening" @click="openCreator">{{ creatorOpening ? 'Releasing Biotron…' : 'Open recording experiment' }}</button>
@@ -369,8 +369,8 @@ export default {
 .offline-status--preparing { color:#664d03; background:#fff3cd; border-color:#ffecb5; }
 .offline-status--error { color:#842029; background:#f8d7da; border-color:#f5c2c7; }
 .beta-feedback { width:min(760px,100%); padding:clamp(1.2rem,4vw,2rem); border:1px solid var(--beta-line); border-radius:var(--ui-radius); background:var(--beta-surface); }
-.beta-compatibility { margin-top:1rem; padding-top:1rem; border-top:1px solid var(--beta-line); color:var(--beta-muted); }
-.beta-compatibility summary { min-height:44px; padding:.65rem 0; color:var(--beta-ink); font-weight:700; cursor:pointer; }
+.beta-compatibility, .beta-experiment { margin-top:1rem; padding-top:1rem; border-top:1px solid var(--beta-line); color:var(--beta-muted); }
+.beta-compatibility summary, .beta-experiment summary { min-height:44px; padding:.65rem 0; color:var(--beta-ink); font-weight:700; cursor:pointer; }
 .beta-compatibility ul { margin:.4rem 0 .6rem; padding-left:1.25rem; }
 .beta-compatibility li + li { margin-top:.4rem; }
 .beta-feedback__title { margin-bottom:.45rem; font-size:var(--beta-text-section); font-weight:700; letter-spacing:-.02em; }
