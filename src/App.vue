@@ -26,39 +26,6 @@
   <div v-if="betaBuild" class="beta-meta">
     <small class="beta-build"><span>Biotron beta</span> · {{ versionLabel }}</small>
   </div>
-  <div v-if="!firstPlay && offlineStatus.state !== 'update-pending'" class="offline-status-slot">
-    <div
-      v-if="offlineMessage"
-      class="offline-status mx-auto mt-2 px-3 py-2"
-      :class="offlineStatusClass"
-      role="status"
-      aria-live="polite"
-  >
-    <span>{{ offlineMessage }}</span>
-    <span v-if="offlineStatus.ready && !installed" class="offline-actions">
-      <button
-          type="button"
-          class="btn btn-outline-secondary offline-action"
-          @click="installApp"
-      >
-        Install app
-      </button>
-    </span>
-    <span v-if="installed" class="offline-installed">App installed</span>
-    <button
-        v-if="offlineStatus.state === 'error'"
-        type="button"
-        class="btn btn-outline-secondary offline-action offline-action--error"
-        @click="retryOfflineSetup"
-        :disabled="offlineRetrying"
-    >
-      {{ offlineRetrying ? "Retrying…" : "Retry" }}
-    </button>
-    <small v-if="showInstallHelp && offlineStatus.ready && !installed" class="offline-install-help">
-      Android Chrome: menu ⋮ → Add to Home screen. Chrome: menu ⋮ → Cast, save and share → Install page as app. Edge: menu ⋯ → More tools → Apps → Install this site as an app.
-    </small>
-    </div>
-  </div>
   <div v-if="betaBuild && appUpdate.available" class="offline-status-slot app-update-slot">
     <div class="offline-status mx-auto px-3 py-2" role="status" aria-live="polite">
       <span>{{ appUpdateMessage }}</span>
@@ -106,6 +73,39 @@
 
     </div>
     <footer v-if="!firstPlay" class="bottom-panel">
+  <div v-if="!firstPlay && offlineStatus.state !== 'update-pending'" class="offline-status-slot">
+    <div
+      v-if="offlineMessage"
+      class="offline-status mx-auto mt-2 px-3 py-2"
+      :class="offlineStatusClass"
+      role="status"
+      aria-live="polite"
+  >
+    <span>{{ offlineMessage }}</span>
+    <span v-if="offlineStatus.ready && !installed" class="offline-actions">
+      <button
+          type="button"
+          class="btn btn-outline-secondary offline-action"
+          @click="installApp"
+      >
+        Install app
+      </button>
+    </span>
+    <span v-if="installed" class="offline-installed">App installed</span>
+    <button
+        v-if="offlineStatus.state === 'error'"
+        type="button"
+        class="btn btn-outline-secondary offline-action offline-action--error"
+        @click="retryOfflineSetup"
+        :disabled="offlineRetrying"
+    >
+      {{ offlineRetrying ? "Retrying…" : "Retry" }}
+    </button>
+    <small v-if="showInstallHelp && offlineStatus.ready && !installed" class="offline-install-help">
+      Android Chrome: menu ⋮ → Add to Home screen. Chrome: menu ⋮ → Cast, save and share → Install page as app. Edge: menu ⋯ → More tools → Apps → Install this site as an app.
+    </small>
+    </div>
+  </div>
       <SocialLinks/>
       <div v-if="betaBuild" class="beta-footer">
         <nav aria-label="Support and privacy">
