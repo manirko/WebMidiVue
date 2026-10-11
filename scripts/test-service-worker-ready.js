@@ -40,10 +40,10 @@ function environment({ready = Promise.resolve({}), cached = true, controller = {
     '/index.html?__WB_REVISION__=one', '/manifest.json?__WB_REVISION__=one',
     '/img/icons/icon-192x192.png', '/img/icons/icon-512x512.png',
     '/js/app.123.js', '/css/app.123.css', '/js/biotron.123.js',
-    '/js/sound-lab.123.js', '/js/elementary-runtime.123.js'
+    '/js/elementary-runtime.123.js'
   ]
   const cache = {
-    paths: cached ? paths : paths.filter(value => !value.includes('sound-lab')),
+    paths: cached ? paths : paths.filter(value => value !== '/js/app.123.js'),
     async keys() { return this.paths.map(value => ({url: `https://test.local${value}`})) }
   }
   const worker = eventTarget({
@@ -135,8 +135,15 @@ function environment({ready = Promise.resolve({}), cached = true, controller = {
     module = await loadModule()
     assert.deepStrictEqual(await bounded(module.prepareOfflineAccess()),
       {state: 'error', code: 'SW_CACHE_INCOMPLETE', ready: false})
-    env.cache.paths.push('/js/sound-lab.123.js')
+    env.cache.paths.push('/js/app.123.js')
     assert.equal((await bounded(module.prepareOfflineAccess())).ready, true, 'Incomplete cache retry failed')
+
+    for (const missing of ['/js/biotron.123.js', '/js/elementary-runtime.123.js']) {
+      env = environment()
+      env.cache.paths = env.cache.paths.filter(path => path !== missing)
+      module = await loadModule()
+      assert.equal((await bounded(module.prepareOfflineAccess())).code, 'SW_CACHE_INCOMPLETE', missing)
+    }
 
     // Opera GX report: a newer network shell with an old worker/cache has an
     // explicit update available. Retry cannot make that old cache this build.

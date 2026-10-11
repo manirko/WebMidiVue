@@ -151,7 +151,7 @@ const waitForController = (signal, previous = null) => new Promise((resolve, rej
 })
 
 // Workbox stores revisioned URLs with a query string. Check their paths in one
-// precache, including the lazy Biotron/Sound chunks and this page's shell assets.
+// precache, including Biotron/audio runtime and the shell containing the player.
 const hasRequiredPrecache = async signal => {
   if (!('caches' in window)) return false
   const base = new URL(process.env.BASE_URL, window.location.origin)
@@ -174,7 +174,6 @@ const hasRequiredPrecache = async signal => {
     const paths = new Set(keys.map(request => relative(request.url)))
     if (required.every(path => paths.has(path)) &&
         [...paths].some(path => /^js\/biotron\.[^.]+\.js$/.test(path)) &&
-        [...paths].some(path => /^js\/sound-lab\.[^.]+\.js$/.test(path)) &&
         [...paths].some(path => /^js\/elementary-runtime\.[^.]+\.js$/.test(path))) return true
   }
   return false
