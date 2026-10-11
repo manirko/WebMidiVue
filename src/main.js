@@ -55,8 +55,7 @@ const routes = [
 if (betaBuild) {
     routes.push({
         path: '/biotron/play',
-        component: SoundLab,
-        props: {mode: 'reveal', profileId: 'biotron'},
+        component: {render: () => null},
         meta: {requiresAudio: true, productName: 'Biotron', firstPlay: true}
     })
     routes.push({path: '/sound', component: SoundLab, meta: {requiresAudio: true, productName: 'Playtronica Sound'}})

@@ -40,7 +40,7 @@ function environment({ready = Promise.resolve({}), cached = true, controller = {
     '/index.html?__WB_REVISION__=one', '/manifest.json?__WB_REVISION__=one',
     '/img/icons/icon-192x192.png', '/img/icons/icon-512x512.png',
     '/js/app.123.js', '/css/app.123.css', '/js/biotron.123.js',
-    '/js/elementary-runtime.123.js'
+    '/js/elementary-runtime.123.js', '/js/sound-lab.123.js', '/js/sound-session.123.js'
   ]
   const cache = {
     paths: cached ? paths : paths.filter(value => value !== '/js/app.123.js'),
@@ -138,11 +138,14 @@ function environment({ready = Promise.resolve({}), cached = true, controller = {
     env.cache.paths.push('/js/app.123.js')
     assert.equal((await bounded(module.prepareOfflineAccess())).ready, true, 'Incomplete cache retry failed')
 
-    for (const missing of ['/js/biotron.123.js', '/js/elementary-runtime.123.js']) {
+    for (const missing of ['/js/biotron.123.js', '/js/elementary-runtime.123.js',
+      '/js/sound-lab.123.js', '/js/sound-session.123.js']) {
       env = environment()
       env.cache.paths = env.cache.paths.filter(path => path !== missing)
       module = await loadModule()
       assert.equal((await bounded(module.prepareOfflineAccess())).code, 'SW_CACHE_INCOMPLETE', missing)
+      env.cache.paths.push(missing)
+      assert.equal((await bounded(module.prepareOfflineAccess())).ready, true, `Retry after ${missing} failed`)
     }
 
     // Opera GX report: a newer network shell with an old worker/cache has an

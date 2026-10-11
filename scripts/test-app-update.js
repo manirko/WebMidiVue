@@ -23,7 +23,7 @@ async function main() {
   const context = {window: {addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: (name, fn) => { if (listeners.get(name) === fn) listeners.delete(name) }, location: {assign: url => navigations.push(url)}}, document: {},
     setTimeout: fn => { const id = {}; deadlines.set(id, fn); return id }, clearTimeout: id => deadlines.delete(id),
     module: {exports: {}}, exports: {}, require: name => {
-    if (name === 'vue') return {defineAsyncComponent: () => ({})}
+    if (name === 'vue') return require('vue')
     if (name === '@/appUpdateSafety.mjs') return safety
     if (name === '@/audio/sessionState.mjs') return {stopPersistentSound: () => { stops++; return stop() }, releaseSettingsOwners: () => releaseSettings()}
     if (name === '@pwa-entry') return {requestAppUpdate: async canReload => {

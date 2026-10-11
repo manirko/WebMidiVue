@@ -129,26 +129,27 @@
 
 
 <script>
-import SoundLab from '@sound-lab';
+import {defineAsyncComponent, h, ref} from 'vue';
 import DeviceTaskNav from '@/components/DeviceTaskNav.vue';
 import SocialLinks from "@/components/SocialLinks.vue";
 import CompatibilityGate from "@compatibility-gate";
-import {
-  getOfflineStatus,
-  OFFLINE_STATUS_EVENT,
-  prepareOfflineAccess,
-  APP_UPDATE_EVENT,
-  getAppUpdateStatus,
-  requestAppUpdate
-} from "@pwa-entry";
+import {getOfflineStatus, OFFLINE_STATUS_EVENT, prepareOfflineAccess,
+  APP_UPDATE_EVENT, getAppUpdateStatus, requestAppUpdate} from "@pwa-entry";
 import {canReloadApp} from '@/appUpdateSafety.mjs';
 import {stopPersistentSound, releaseSettingsOwners} from '@/audio/sessionState.mjs';
-import {
-  clearInstallPrompt,
-  getInstallPrompt,
-  INSTALL_PROMPT_AVAILABLE_EVENT,
-  takeInstallPrompt
-} from "@/pwaInstallPrompt.mjs";
+import {clearInstallPrompt, getInstallPrompt,
+  INSTALL_PROMPT_AVAILABLE_EVENT, takeInstallPrompt} from "@/pwaInstallPrompt.mjs";
+
+const soundRetry = ref(null)
+const SoundLab = defineAsyncComponent({
+  loader: () => { soundRetry.value = null; return import(/* webpackChunkName: "sound-lab" */ '@sound-lab') },
+  delay: 0,
+  onError: (_error, retry) => { soundRetry.value = retry },
+  loadingComponent: {render: () => h('p', {role: 'status', class: 'sound-lab-loading'}, soundRetry.value ? [
+      'Sounds could not load. Check your connection. ',
+      h('button', {type: 'button', class: 'btn btn-outline-secondary', onClick: soundRetry.value}, 'Retry sounds')
+    ] : 'Loading sounds…')}
+})
 
 const runningStandalone = () => window.matchMedia('(display-mode: standalone)').matches ||
     window.navigator.standalone === true

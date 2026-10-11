@@ -1250,6 +1250,86 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
   return report
 }
 
+async function verifyLazyPlayerRecovery(browser, origin) {
+  const proof = [], errors = []
+  const isolate = async () => {
+    const context = await browser.newContext({serviceWorkers: 'block'})
+    context.setDefaultTimeout(5000)
+    context.on('page', tab => tab.on('pageerror', error => errors.push(error.message)))
+    await context.addInitScript(() => {
+      window.__lazyContexts = []; window.__lazyMidiRequests = []
+      const Native = window.AudioContext || window.webkitAudioContext
+      if (Native) {
+        const Tracked = class extends Native { constructor(...args) { super(...args); window.__lazyContexts.push(this) } }
+        Object.defineProperty(window, window.AudioContext ? 'AudioContext' : 'webkitAudioContext', {value: Tracked})
+      }
+      Object.defineProperty(navigator, 'requestMIDIAccess', {value: options => {
+        window.__lazyMidiRequests.push(options)
+        return Promise.resolve({inputs: new Map(), outputs: new Map(), onstatechange: null})
+      }})
+    })
+    return context
+  }
+  // Settings already discovers SysEx devices on mount; the player must not request note access or start audio.
+  const idle = async page => assert(await page.evaluate(() => __lazyMidiRequests.every(request => request.sysex === true) && __lazyContexts.length === 0), 'Lazy player requested note access or started audio')
+  for (const destination of ['/biotron/play', '/biotron']) {
+    const context = await isolate(), page = await context.newPage()
+    let requests = 0
+    await page.route(/\/js\/sound-lab\.[^/?]+\.js(?:\?.*)?$/, route => ++requests === 1 ? route.fulfill({status: 503, body: 'Controlled sound chunk failure'}) : route.continue())
+    await page.goto(`${origin}/#${destination}`, {waitUntil: 'domcontentloaded'})
+    await page.getByRole('button', {name: 'Retry sounds', exact: true}).waitFor()
+    if (destination === '/biotron/play') assert.equal(await page.locator('.beta-feedback').count(), 0, 'Lazy Play lost its first-play route')
+    assert.equal(requests, 1, 'Failed sound chunk automatically retried')
+    await idle(page)
+    const settingsRequests = await page.evaluate(() => __lazyMidiRequests.length)
+    await page.getByRole('button', {name: 'Retry sounds', exact: true}).click()
+    await page.locator('.sound-lab').waitFor()
+    assert.equal(requests, 2); assert.equal(await page.locator('.sound-lab').count(), 1)
+    await idle(page)
+    assert.equal(await page.evaluate(() => __lazyMidiRequests.length), settingsRequests, 'Retry requested additional Settings access')
+    await page.locator('.sound-palette > summary').click()
+    await page.getByRole('button', {name: 'Listen to example', exact: true}).click()
+    await page.locator('.sound-lab[data-audio-state="running"]').waitFor()
+    await page.evaluate(() => { window.__lazyPlayerNode = document.querySelector('.sound-lab'); window.__lazyFirstContext = __lazyContexts[0] })
+    for (const route of ['/biotron', '/biotron/play']) {
+      await page.evaluate(hash => { location.hash = hash }, route)
+      if (route === '/biotron') await page.getByRole('heading', {name: 'Settings', exact: true}).waitFor()
+      else await page.locator('.workspace-nav a[aria-current="page"]').filter({hasText: /^Play$/}).waitFor()
+      assert(await page.evaluate(() => __lazyPlayerNode === document.querySelector('.sound-lab') && __lazyContexts.length === 1 && __lazyFirstContext === __lazyContexts[0] && __lazyFirstContext.state === 'running'), 'Workspace route replaced or stopped the ready player')
+    }
+    await page.getByRole('button', {name: 'Stop & release', exact: true}).click()
+    await page.locator('.sound-lab[data-audio-state="closed"]').waitFor()
+    proof.push({destination, requests, retry: 'PASS', persistentExample: 'PASS', midiRequests: await page.evaluate(() => __lazyMidiRequests)})
+    await context.close()
+  }
+  const context = await isolate(), page = await context.newPage()
+  let release, requests = 0
+  const pending = new Promise(resolve => { release = resolve })
+  await page.route(/\/js\/sound-lab\.[^/?]+\.js(?:\?.*)?$/, async route => { requests++; await pending; await route.continue() })
+  await page.goto(`${origin}/#/biotron/play`, {waitUntil: 'domcontentloaded'})
+  await page.getByText('Loading sounds…', {exact: true}).waitFor()
+  await page.evaluate(() => { location.hash = '/biotron' })
+  await page.getByRole('heading', {name: 'Settings', exact: true}).waitFor()
+  assert.equal(requests, 1); await idle(page)
+  await page.evaluate(() => { location.hash = '/' })
+  await page.locator('.sound-lab-loading').waitFor({state: 'detached'})
+  const response = page.waitForResponse(/\/js\/sound-lab\.[^/?]+\.js(?:\?.*)?$/)
+  release(); await (await response).finished()
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  assert.equal(await page.locator('.sound-lab').count(), 0, 'Late chunk mounted a player after leaving Biotron')
+  await idle(page)
+  await page.evaluate(() => { location.hash = '/biotron/play' })
+  await page.locator('.sound-lab').waitFor(); assert.equal(requests, 1); await idle(page)
+  proof.push({pendingRoutes: 'PASS', lateMount: false, automaticPlayerAudioOrMidi: false, settingsDiscovery: 'empty-port fixture; no native access'})
+  assert.deepStrictEqual(errors, [], 'Lazy sound recovery caused an uncaught page error')
+  await context.close()
+  if (process.env.BIOTRON_TEST_EVIDENCE_DIR) {
+    fs.mkdirSync(process.env.BIOTRON_TEST_EVIDENCE_DIR, {recursive: true})
+    fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR, 'lazy-player-recovery.json'), JSON.stringify({browser: browser.version(), proof}, null, 2))
+  }
+  console.log('PASS lazy player: cold Play/Settings failure→Retry, one persistent example, pending routes and late-load cancellation')
+}
+
 ;(async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const origin = qaOrigin(server)
@@ -1265,6 +1345,10 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
           fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR, 'sound-online-identity.json'), JSON.stringify(identity, null, 2))
         }
       } finally { await identityContext.close() }
+    }
+    if (process.argv.includes('--lazy-player-only')) {
+      await verifyLazyPlayerRecovery(browser, origin)
+      return
     }
     if (process.argv.includes('--capability-only')) {
       await verifyCapabilityFallbacks(browser, origin)
@@ -1971,6 +2055,7 @@ async function runRealtimeSoak(page, devtools, seconds, browserVersion) {
     assert(expectedSession, 'Main page did not send session.started')
     assert(!telemetryEvents.some(event => event.invalidPayload), 'Telemetry receiver got malformed JSON')
     assert(telemetryEvents.some(event => event.session_id === expectedSession && event.event_name === 'session.started' && event.service_name === 'biotron'))
+    await verifyLazyPlayerRecovery(browser, origin)
     await verifyCapabilityFallbacks(browser, origin)
     assert(telemetryEvents.every(event => !('raw_midi' in event) && !('device_name' in event)))
     await verifyGardenStates(page, origin)

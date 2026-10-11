@@ -4,6 +4,7 @@ const path = require('path')
 
 const read = file => fs.readFileSync(path.resolve(__dirname, '..', file), 'utf8')
 const app = read('src/App.vue')
+const main = read('src/main.js')
 const taskNav = read('src/components/DeviceTaskNav.vue')
 const biotron = read('src/components/BiotronPage/BiotronPageUpdated.vue')
 const settingsReadback = read('src/biotron/settingsReadback.mjs')
@@ -79,8 +80,11 @@ assert(app.includes("$route.path === '/biotron' ? 'settings' : 'play'") &&
 assert(!app.includes(':controls-visible="firstPlay"') && biotron.includes('betaBuild && !embedded') &&
   biotron.includes("embedded ? 'h2' : 'h1'"),
   'embedded settings must keep one visible player, task navigation and page title')
-assert(app.includes("import SoundLab from '@sound-lab'"),
-  'offline shell validation relies on the player being in its required entry file')
+assert(app.includes('const SoundLab = defineAsyncComponent(') &&
+  !app.includes("import SoundLab from '@sound-lab'") &&
+  app.includes('Retry sounds') &&
+  /path: '\/biotron\/play',\s*component: \{render: \(\) => null\}/.test(main),
+  'one persistent lazy player must offer recovery without blocking the Play route')
 assert(sound.includes('class="sound-palette"') && sound.includes('<AudioCompare v-if="paletteVisited"'),
   'Biotron musical sound choices must be available lazily on Play before a device is connected')
 assert(compare.includes("bank.id !== 'calibration'") && biotron.includes('<AudioCompare calibration-only'),

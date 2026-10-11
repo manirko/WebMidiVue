@@ -3,7 +3,7 @@ const fs = require('fs')
 const path = require('path')
 const zlib = require('zlib')
 
-const root = path.resolve(__dirname, '..', 'dist')
+const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
 const read = file => fs.readFileSync(path.join(root, file), 'utf8')
 
 for (const file of ['index.html', 'manifest.json', 'service-worker.js', '_headers', '_worker.js', 'telemetry.html']) {
