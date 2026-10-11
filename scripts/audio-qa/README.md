@@ -26,6 +26,23 @@ Current lanes: offline DSP (existing), real-time engine capture (new), determini
 
 Store downloaded evidence under ProjectData, with the generated source-manifest.json. No recordings belong in Git. Primary research and remaining implementation sequence: docs/BIOTRON-AUDIO-QA-DESIGN.md.
 
+## Cold creator diagnostics
+
+`node scripts/audio-qa/test-analyze.mjs --creator-cold-native` keeps the cold
+Record → Example900ms → Stop sequence. It adds native listeners and one generated
+recorder process-entry message, filtered from PCM, without warmup or extra waits
+before Stop. The saved mono float WAV must contain finite, unclipped fixture music
+with RMS and music probe above .001. This is a diagnostic subset, not the full
+creator lifecycle suite or the immutable main-page candidate.
+
+Add `--creator-cold-processor-fault` only with that flag for an intentional
+generated recorder throw. A strict exit1 is expected; inspect the retained
+firstfault/events, not just the exit code. On11Oct the Chrome154 control entered
+process but emitted no processorerror; PWWebKit26.5 emitted it. Absence of that
+event cannot rule out a worklet failure. Listener/message instrumentation changes
+scheduling; normal retries do not establish the original no-block cause.
+No native MIDI, microphone, camera, speaker, editor or phone acceptance is claimed.
+
 ## Animation and audio contention
 
 Run animation + audio load ladder loads the current tracked Garden scene, waits for its renderer handshake, drives its ready/note animation and runs the same audio score at synthetic busy-loop budgets of 0, 4 and 10 ms per 16 ms timer interval. These are requested contention budgets, NOT measured CPU utilization or hardware throttle factors. The test records audio failure/continuity, host requestAnimationFrame p95/max and optional JS heap samples. Frame measurements describe the host page, not GPU render timing. Heap snapshots do not prove absence of leaks. Animation readability, low-end hardware acceptance and long soak remain NOT RUN.

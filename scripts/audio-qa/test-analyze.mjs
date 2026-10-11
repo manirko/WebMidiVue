@@ -391,7 +391,9 @@ async function testCreatorPrototype() {
 }
 
 async function verifyCreatorLifecycle({page, report, save, pass, hash, fs, output, coldOnly = false}) {
-  report.lifecycle = {scope: 'Controlled permission/open/page events; actual engine and retained WAV bytes. No native MIDI, BFCache or phone proof.', observations: []}
+  report.lifecycle = {scope: coldOnly
+    ? 'Cold Record→Example900ms→Stop; generated observer, actual engine and WAV. Permission/open/page lifecycle not run; no native MIDI or phone proof.'
+    : 'Controlled permission/open/page events; actual engine and retained WAV bytes. No native MIDI, BFCache or phone proof.', observations: []}
   const observe = async name => {
     const value = await page.evaluate(() => ({stopDisabled: document.querySelector('#stop').disabled, stopText: document.querySelector('#stop').textContent,
       recordDisabled: document.querySelector('#record-audio').disabled, connection: document.querySelector('#connection').textContent,
