@@ -312,6 +312,8 @@ async function verifyCreatorHandoff(page, origin) {
   assert.equal(page.url(), origin + '/creator.html', 'Old Return redirected the restored page after pagehide')
   assert.equal(crypto.createHash('sha256').update(Buffer.from(await page.evaluate(async () => Array.from(new Uint8Array(await __CreatorPrototype.takes[0].file.arrayBuffer()))))).digest('hex'), hash)
   pass('pending Return cannot redirect after pagehide/pageshow; previous WAV stays byte-identical')
+  await page.getByRole('button', {name:'Remove take', exact:true}).last().click()
+  assert.equal(await page.evaluate(() => __CreatorPrototype.takes.length), 2, 'Pagehide control needs a free take slot')
   await page.locator('#example').click(); await page.waitForFunction(() => __CreatorPrototype.engine?.ready)
   await page.evaluate(() => { const owned = __CreatorPrototype.engine; window.__hiddenEngine = owned; window.__nativeHiddenClose = owned.context.close.bind(owned.context); owned.context.close = async () => { throw Error('Pagehide audio close refused') }; window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted:true})); window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted:true})) })
   await page.getByText(/Cleanup failed:.*Pagehide audio close refused/).waitFor()
