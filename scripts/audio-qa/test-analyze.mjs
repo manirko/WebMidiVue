@@ -100,10 +100,9 @@ async function testCreatorPrototype() {
     const coldNative = process.argv.includes('--creator-cold-native')
     if (coldNative) {
       const entry = path.join(bench, 'creator-entry.mjs'), before = fs.readFileSync(entry, 'utf8')
-      const target = '  capture = session\n  tap.port.onmessage = event => {'
+      const target = '  drain.gain.value = 0; tap.connect(drain); drain.connect(engine.context.destination)'
       assert(before.includes(target), 'native cold observer target changed')
-      const observe = `  capture = session
-  const log = globalThis.__creatorNativeEvents ||= [], context = engine.context
+      const observe = `  const log = globalThis.__creatorNativeEvents ||= [], context = engine.context
   const remember = (type, extra = {}) => { if (log.length < 100) log.push({type, at: performance.now(), time: context.currentTime, state: context.state, ...extra}) }
   remember('attached')
   context.addEventListener('statechange', () => remember('statechange'))
@@ -114,7 +113,7 @@ async function testCreatorPrototype() {
     if (firstBlock && event.data.pcm) { firstBlock = false; remember('first-pcm', {frame: event.data.frame, samples: event.data.pcm.length}) }
     if (event.data.done) remember('done')
   })
-  tap.port.onmessage = event => {`
+  drain.gain.value = 0; tap.connect(drain); drain.connect(engine.context.destination)`
       let derived = before.replace(target, observe)
       if (process.argv.includes('--creator-cold-processor-fault')) {
         const processTarget = 'process(inputs){const a=inputs[0]?.[0];'
@@ -123,7 +122,7 @@ async function testCreatorPrototype() {
       }
       fs.writeFileSync(entry, derived)
       report.coldNative = {scope: 'Native listeners on actual nodes; generated recorder-only observation changes timing; production source/core unchanged. No extra awaits or warmup before Stop.',
-        processorFaultInjected: process.argv.includes('--creator-cold-processor-fault'), originalEntrySha256: hash(before), derivedEntrySha256: hash(derived)}; save()
+        processorFaultInjected: process.argv.includes('--creator-cold-processor-fault'), originalEntrySha256: hash(before), derivedEntrySha256: hash(derived), consoleErrors: []}; save()
     }
     if (process.argv.includes('--creator-release-boundary-fault')) {
       const entry = path.join(bench, 'creator-entry.mjs'), before = fs.readFileSync(entry, 'utf8')
@@ -165,6 +164,10 @@ async function testCreatorPrototype() {
     const fidelity = process.argv.includes('--creator-fidelity') || process.argv.includes('--creator-fidelity-fault')
     await context.tracing.start({screenshots: !benchmark, snapshots: !benchmark})
     page = await context.newPage(); page.on('pageerror', error => errors.push(String(error)))
+    if (coldNative) page.on('console', message => {
+      if (message.type() !== 'error' || report.coldNative.consoleErrors.length >= 20) return
+      report.coldNative.consoleErrors.push({text: message.text().slice(0, 1000), location: message.location()}); save()
+    })
     const origin = `http://127.0.0.1:${server.address().port}`, navStarted = Date.now()
     await page.goto(origin + '/creator.html', {waitUntil: 'networkidle'})
     await page.waitForFunction(() => window.__CreatorPrototype)
