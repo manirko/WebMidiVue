@@ -100,14 +100,14 @@ const report = {
 // bounded recovery reuses the settings timeout; failure/Retry, late completion,
 // unmount and malformed selection controls. Actual10784; no new file/dependency.
 // 11.10.2026 senior-reviewed same-origin creator entry and retained Settings
-// cleanup barrier and lifecycle/timeout guards: +70 lines, one core, 70 files;
+// cleanup barrier and lifecycle/timeout guards: +69 lines, one core, 70 files;
 // all other caps unchanged (within the reviewed +80 budget).
 const limits = {
   eagerDeviceRouteImports: 0,
   sleepCalls: 0,
   unmanagedListenerFiles: 0,
   sourceFiles: 70,
-  sourceLines: 10854,
+  sourceLines: 10853,
   largestProductFileLines: 850
 }
 const violations = [

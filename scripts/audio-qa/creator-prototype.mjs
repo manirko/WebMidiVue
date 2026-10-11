@@ -301,7 +301,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) { sta
 window.addEventListener('pagehide', () => {
   pageActive = false; generation++; busy = true; startAbort?.abort(); stopNotes()
   const session = capture, owned = engine; lostCurrentTake ||= Boolean(session)
-  capture = null; engine = null; workletContext = null; finishRequested = false; disconnectRequested = false
+  capture = null; workletContext = null; finishRequested = false; disconnectRequested = false
   hiddenCleanup = Promise.allSettled([hiddenCleanup, runFinished, session && cleanCapture(session), releaseMidi(), owned?.stop()])
 })
 window.addEventListener('pageshow', event => {

@@ -317,7 +317,7 @@ async function verifyCreatorHandoff(page, origin) {
   await page.getByText(/Cleanup failed:.*Pagehide audio close refused/).waitFor()
   await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture || !document.querySelector('#record-audio').disabled)
   assert.equal(await page.evaluate(() => Boolean(__CreatorPrototype.capture)), false, 'Pagehide forgot its rejected audio owner before Record')
-  assert.equal(await page.evaluate(() => __CreatorPrototype.engine === __hiddenEngine), true)
+  assert.equal(await page.evaluate(() => __CreatorPrototype.engine === __hiddenEngine), true, 'Pagehide forgot the still-unreleased audio engine')
   await page.evaluate(() => { __hiddenEngine.context.close = __nativeHiddenClose })
   await page.locator('#record-audio').click(); await page.waitForFunction(() => __CreatorPrototype.capture?.blocks.length > 0)
   assert.equal(await page.evaluate(() => __hiddenEngine.context.state), 'closed')
