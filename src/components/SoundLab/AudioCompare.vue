@@ -6,7 +6,7 @@
       </div><details class="sound-orbit">
         <summary>Sound sphere · Experiment</summary>
         <p>Drag left/right to choose a sound; up/down for brighter/darker. Effects last for this session.</p>
-        <div class="orbit" aria-hidden="true" @pointerdown="$event.currentTarget.setPointerCapture($event.pointerId); orbit($event)" @pointermove="$event.buttons === 1 && orbit($event)"><span :style="{transform: `rotateX(${character * 60}deg) rotateY(${palette.findIndex(sound => sound.bankId === bankId && sound.id === variantId) * 60}deg)`}">◯</span></div>
+        <div class="orbit" aria-hidden="true" @pointerdown="$event.currentTarget.setPointerCapture($event.pointerId); orbit($event)" @pointermove="$event.buttons === 1 && orbit($event)"><span :style="{width:'64px',height:'64px',border:'2px solid white',borderRadius:'50%',transform: `rotateX(${character * 60}deg) rotateY(${palette.findIndex(sound => sound.bankId === bankId && sound.id === variantId) * 60}deg)`}"></span></div>
         <label>Character: {{ character === 0 ? 'original' : character > 0 ? 'brighter' : 'darker' }}<input type="range" min="-1" max="1" step="0.1" :value="character" @input="adjust($event.target.value, space)"></label>
         <label>Space: {{ Math.round(space * 100) }}%<input type="range" min="0" max="1" step="0.1" :value="space" @input="adjust(character, $event.target.value)"></label>
         <button type="button" class="btn btn-outline-secondary" @click="adjust(0, 0)">Reset effects</button>

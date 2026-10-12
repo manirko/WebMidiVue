@@ -358,6 +358,7 @@ async function auditProfile(browser, origin, profile) {
   assert.equal(await sound.locator('.audio-compare').count(), 0,
     `${profile.name}: unopened Sound mounted its lazy controls`)
   await sound.locator(':scope > summary').click()
+  await sound.getByRole('group',{name:'Quick sounds',exact:true}).waitFor()
   assert.equal(await sound.getByRole('group',{name:'Quick sounds',exact:true}).getByRole('button').count(),6)
   assert.equal(await sound.locator('.sound-experiments').evaluate(element=>element.open),false,'all experiments opened by default')
   await sound.locator('.sound-orbit > summary').click()
