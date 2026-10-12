@@ -191,6 +191,21 @@ function readHttp(url, options = {}) {
     }
   } finally {fs.rmSync(captureRoot, {recursive: true, force: true})}
   console.log('PASS first fault survives unavailable/pending DOM; native helper guard bounds capture, zero/false and UI state are retained')
+  const auditionSource=fs.readFileSync(path.join(__dirname,'test-audition-browser.js'),'utf8')
+  const faultBegin=auditionSource.indexOf('  const faultPage=diagnosticPage || page'),faultEnd=auditionSource.indexOf('  // A ZIP export',faultBegin)
+  const bound=auditionSource.split('\n').find(line=>line.startsWith('const boundedCapture='))
+  const auditionFaultRoot=fs.mkdtempSync(path.join(os.tmpdir(),'biotron-audition-fault-'))
+  try {
+    for(const mode of ['success','reject','pending']){
+      const artifacts=path.join(auditionFaultRoot,mode);fs.mkdirSync(artifacts)
+      const page={evaluate:()=>{assert(fs.existsSync(path.join(artifacts,'failure.json')),'DOM began before first fault persisted');return mode==='pending'?new Promise(()=>{}):mode==='reject'?Promise.reject(Error('capture unavailable')):Promise.resolve({fixture:true})},screenshot:async()=>{assert.equal(JSON.parse(fs.readFileSync(path.join(artifacts,'failure.json'))).error,'primary sentinel')}}
+      await vm.runInNewContext('(async()=>{'+bound+'\n'+auditionSource.slice(faultBegin,faultEnd)+'})()',{fs,path,artifacts,page,diagnosticPage:null,stage:'sentinel',starts:0,error:Error('primary sentinel'),setTimeout})
+      const first=JSON.parse(fs.readFileSync(path.join(artifacts,'failure.json')))
+      assert.equal(first.error,'primary sentinel');assert.equal(first.beforeCapture,true)
+      const sidecar=JSON.parse(fs.readFileSync(path.join(artifacts,'failure-state.json')))
+      assert(mode==='success'?sidecar.state.fixture:sidecar.state.unavailable)
+    }
+  } finally {fs.rmSync(auditionFaultRoot,{recursive:true,force:true})}
   const fake = new EventEmitter()
   fake.isConnected = () => true
   assert.equal(await browserCall(fake, () => 42, 'resolved'), 42)
