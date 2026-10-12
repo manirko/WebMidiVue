@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import {detectedFault} from './qa-contract-controls.mjs'
 
 import {
   DEFAULT_VOLUME,
@@ -66,6 +67,177 @@ test('MIDI note-on, velocity-zero note-off and panic are accepted', () => {
   assert.deepEqual(parseMidiMessage([0xe2, 127, 127]), {type: 'pitch-bend', channel: 2, value: 16383})
   assert.deepEqual(parseMidiMessage([0xf0, 0x0b, 125, 0, 1, 0xf7]),
     {type: 'system-exclusive', data: [0xf0, 0x0b, 125, 0, 1, 0xf7]})
+})
+
+const midiUrl = new URL('../src/audio/midi.mjs', import.meta.url)
+function soundingFixture(Session) {
+  const sounding = new Set(), listeners = new Set()
+  const input = {id: 'fixture-input', name: 'Biotron fixture', state: 'connected',
+    async open() {}, async close() {},
+    addEventListener(type, listener) { if (type === 'midimessage') listeners.add(listener) },
+    removeEventListener(type, listener) { if (type === 'midimessage') listeners.delete(listener) }}
+  const engine = {get activeVoiceCount() { return sounding.size },
+    noteOn(source, channel, note) { assert.equal(source, input.id); sounding.add(`${channel}/${note}`) },
+    noteOff(source, channel, note) { assert.equal(source, input.id); sounding.delete(`${channel}/${note}`) },
+    panic() { sounding.clear() }}
+  const access = {inputs: new Map([[input.id, input]]), outputs: new Map(), removeEventListener() {}}
+  return {sounding, listeners, input, access, engine, session: new Session(engine)}
+}
+
+test('fault controls detect lost Note Off and missing release panic', async t => {
+  t.diagnostic(JSON.stringify(await detectedFault(midiUrl,
+    "else if (message.type === 'note-off') this.engine.noteOff(source, message.channel, message.note)",
+    "else if (message.type === 'note-off') {}", async ({MidiInputSession: Session}) => {
+      const f = soundingFixture(Session); f.session.input = f.input
+      f.session.onMessage({data: [0x91, 60, 100]}); assert.equal(f.sounding.size, 1)
+      f.session.onMessage({data: [0x81, 60, 0]})
+      assert.equal(f.sounding.size, 0, 'Note Off leaves sounding notes')
+    }, 'Note Off leaves sounding notes')))
+  t.diagnostic(JSON.stringify(await detectedFault(midiUrl,
+    '      this.engine.panic()\n      try {', '      // injected missing release panic\n      try {',
+    async ({MidiInputSession: Session}) => {
+      const f = soundingFixture(Session); f.session.input = f.input
+      f.session.onMessage({data: [0x91, 60, 100]}); assert.equal(f.sounding.size, 1)
+      await f.session.release()
+      assert.equal(f.sounding.size, 0, 'Stop release leaves sounding notes')
+      assert.equal(f.session.input, null)
+    }, 'Stop release leaves sounding notes')))
+})
+
+test('fault control detects an accepted stale sensor nonce', async t => {
+  t.diagnostic(JSON.stringify(await detectedFault(new URL('../src/audio/biotronCalibration.mjs', import.meta.url),
+    'data[3] !== nonce || ', '', ({parseBiotronSensorState: parse}) => {
+      const data = [0xf0, 0x0b, 125, 42, 5, ...Array(24).fill(0), 60, 0, 2, 0xf7]
+      assert.equal(parse({type: 'system-exclusive', data}, 42), 2)
+      assert.equal(parse({type: 'system-exclusive', data}, 41), null, 'Stale sensor nonce was accepted')
+    }, 'Stale sensor nonce was accepted')))
+})
+
+test('fault controls reject surviving faults and infrastructure errors', async () => {
+  const url = new URL('../src/audio/core.mjs', import.meta.url)
+  await assert.rejects(detectedFault(url, 'export const DEFAULT_VOLUME = 70', 'export const DEFAULT_VOLUME = 69',
+    () => {}, 'volume'), /Fault survived/)
+  await assert.rejects(detectedFault(url, 'export const DEFAULT_VOLUME = 70', 'export const DEFAULT_VOLUME = 69',
+    module => { if (module.DEFAULT_VOLUME === 69) throw new TypeError('fixture infrastructure') }, 'volume'), TypeError)
+  await assert.rejects(detectedFault(url, 'export const DEFAULT_VOLUME = 70', 'export const DEFAULT_VOLUME = 69',
+    module => { if (module.DEFAULT_VOLUME === 69) assert.fail('unrelated assertion') }, 'volume'), /unrelated assertion/)
+  await assert.rejects(detectedFault(url, 'missing target', '', () => {}, 'volume'), /exactly once/)
+})
+
+// Independent outcome model: whether an input may sound and which notes it owns.
+// This checks transport callbacks/listeners, not DSP tails or the browser UI.
+async function verifyMidiSequence(actions, Session = MidiInputSession, onFirstFault = () => {}) {
+  const f = soundingFixture(Session), expected = new Set()
+  let mode = 'stopped', session = f.session, first
+  try {
+    for (const [index, {action, channel = 1, note = 60}] of actions.entries()) {
+      const key = `${channel}/${note}`, before = f.sounding.size
+      if (action === 'start') {
+        await session.close(); expected.clear()
+        session = new Session(f.engine); session.access = f.access; f.input.state = 'connected'
+        await session.connect(f.input.id); mode = 'listening'
+      } else if (action === 'stop') {
+        await session.close(); expected.clear(); mode = 'stopped'
+      } else if (action === 'disconnect') {
+        f.input.state = 'disconnected'; session.onStateChange({port: f.input})
+        expected.clear(); mode = 'stopped'
+      } else if (action === 'background' || action === 'foreground') {
+        session.setEnabled(action === 'foreground')
+        if (action === 'background') expected.clear()
+        if (mode !== 'stopped') mode = action === 'foreground' ? 'listening' : 'background'
+      } else {
+        const data = action === 'on' ? [0x90 | channel, note, 100] : action === 'off' ?
+          [0x80 | channel, note, 0] : action === 'zero' ? [0x90 | channel, note, 0] : [0xb0 | channel, 123, 0]
+        if (mode === 'listening') {
+          if (action === 'on') expected.add(key)
+          else if (action === 'panic') expected.clear()
+          else expected.delete(key)
+        }
+        for (const listener of f.listeners) listener({data})
+        if (session.closed) session.boundMessage({data}) // a queued callback after Stop
+        if (mode !== 'listening') assert.equal(f.sounding.size, before, 'inactive input sounded')
+      }
+      assert.deepEqual([...f.sounding].sort(), [...expected].sort(), `step ${index}: sounding notes differ`)
+      assert.equal(f.listeners.size, mode === 'stopped' ? 0 : 1, `step ${index}: listener ownership differs`)
+    }
+  } catch (error) {
+    first = error
+    onFirstFault({error: String(error), mode, sounding: [...f.sounding], expected: [...expected], listeners: f.listeners.size})
+    throw error
+  } finally {
+    try { await session.close() }
+    catch (cleanup) { if (first) { first.cleanupFailure = String(cleanup); throw first } throw cleanup }
+  }
+  assert.equal(f.listeners.size, 0); assert.equal(f.sounding.size, 0)
+}
+
+async function reduceMidiFailure(actions, Session, first) {
+  const signature = error => error.message.replace(/step \d+:/g, 'step:')
+  let reduced = actions.slice()
+  for (let i = 0; i < reduced.length;) {
+    const candidate = reduced.filter((_, at) => at !== i)
+    try { await verifyMidiSequence(candidate, Session); i++ }
+    catch (error) {
+      if (error.code !== 'ERR_ASSERTION' || error.cleanupFailure) throw error
+      if (error.code === 'ERR_ASSERTION' && signature(error) === signature(first)) { reduced = candidate; i = 0 }
+      else i++
+    }
+  }
+  return reduced // deletion-minimal for this failure, not a global shortest-path claim
+}
+
+test('sequence replay removes unrelated steps from a controlled lost Note Off', async t => {
+  class LostOff extends MidiInputSession {
+    onMessage(event) { if ((event.data[0] & 0xf0) !== 0x80) super.onMessage(event) }
+  }
+  const actions = ['start', 'background', 'foreground', 'on', 'off', 'stop'].map(action => ({action}))
+  let first
+  try { await verifyMidiSequence(actions, LostOff) } catch (error) { first = error }
+  assert(first?.code === 'ERR_ASSERTION' && first.message.includes('sounding notes differ'))
+  t.diagnostic(JSON.stringify({controlledFirstFault: first.message, actions}))
+  const reduced = await reduceMidiFailure(actions, LostOff, first)
+  assert.deepEqual(reduced.map(step => step.action), ['start', 'on', 'off'])
+  await verifyMidiSequence(reduced)
+  await assert.rejects(verifyMidiSequence(reduced, LostOff), /sounding notes differ/)
+  t.diagnostic(JSON.stringify({reducedReplay: reduced, healthyControl: 'PASS', injectedFault: 'DETECTED'}))
+})
+
+test('sequence preserves its first assertion before cleanup; cleanup rejection stops shrinking', async () => {
+  class Broken extends MidiInputSession {
+    onMessage(event) { if ((event.data[0] & 0xf0) !== 0x80) super.onMessage(event) }
+    async close() {
+      const owned = Boolean(this.input); await super.close()
+      if (owned) throw Error('controlled cleanup rejection')
+    }
+  }
+  const actions = ['start', 'on', 'off'].map(action => ({action})), observed = []
+  let first
+  try { await verifyMidiSequence(actions, Broken, value => observed.push(value)) } catch (error) { first = error }
+  assert.equal(observed[0].listeners, 1); assert.deepEqual(observed[0].sounding, ['1/60'])
+  assert.equal(first.code, 'ERR_ASSERTION'); assert.match(first.message, /sounding notes differ/)
+  assert.match(first.cleanupFailure, /controlled cleanup rejection/)
+  await assert.rejects(reduceMidiFailure(actions, Broken, first), /controlled cleanup rejection/)
+})
+
+for (const seed of [1, 42, 20261012]) test(`MIDI sequences seed ${seed}`, async t => {
+  let state = seed
+  const next = maximum => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return (state >>> 0) % maximum }
+  const names = ['start', 'on', 'off', 'zero', 'panic', 'background', 'foreground', 'disconnect', 'stop']
+  const actions = ['start', 'on', 'on', 'zero', 'on', 'background', 'on', 'foreground', 'on', 'disconnect', 'start', 'on', 'stop', 'on']
+    .map(action => ({action, channel: 1, note: 60}))
+  const mixed = Array.from({length: 4}, () => names).flat()
+  for (let i = mixed.length - 1; i > 0; i--) { const j = next(i + 1); [mixed[i], mixed[j]] = [mixed[j], mixed[i]] }
+  actions.push(...mixed.map(action => ({action, channel: next(2) + 1, note: [0, 60, 127][next(3)]})), {action: 'stop'})
+  try { await verifyMidiSequence(actions, MidiInputSession,
+    fault => console.error('MIDI_SEQUENCE_FIRSTFAULT', JSON.stringify({seed, actions, ...fault}))) }
+  catch (first) {
+    // Preserve the original failure before trying a smaller deterministic replay.
+    t.diagnostic(JSON.stringify({seed, firstFault: String(first), actions}))
+    if (first.code !== 'ERR_ASSERTION' || first.cleanupFailure) throw first
+    const reduced = await reduceMidiFailure(actions, MidiInputSession, first)
+    t.diagnostic(JSON.stringify({seed, reducedReplay: reduced})); throw first
+  }
+  t.diagnostic(JSON.stringify({seed, steps: actions.length, actions, cleanup: 'CONFIRMED', scope: 'mock MIDI provider; no native input, UI or PCM'}))
 })
 
 test('Biotron calibration recognizes the soft cue and legacy 91/92 pattern', () => {

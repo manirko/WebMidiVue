@@ -687,6 +687,42 @@ async function auditJourneys(browser, origin) {
       } else await step('empty return', `returned-${width}`, async () => {
         await page.locator('#return').click(); await page.waitForURL(/#\/biotron\/play/)
       })
+      if (width === 1440 || width === 320) {
+        const seed = width === 1440 ? 20261012 : 42
+        let random = seed, route = 'Play', running = false
+        const mixed = ['Settings', 'Play', 'Example', 'Stop', 'Settings', 'Play', 'Example', 'Stop']
+        for (let i = mixed.length - 1; i > 0; i--) {
+          random ^= random << 13; random ^= random >>> 17; random ^= random << 5
+          const j = (random >>> 0) % (i + 1); [mixed[i], mixed[j]] = [mixed[j], mixed[i]]
+        }
+        const actions = ['Example', 'Settings', 'Play', 'Stop', ...mixed, 'Play', 'Stop']
+        report.sequences ||= []; report.sequences.push({seed, width, actions, scope: 'Example/route/Stop UI, no native MIDI or PCM assertion'}); write()
+        await page.locator('.sound-lab').evaluate(element => {window.__qaSequencePlayer = element})
+        for (const [index, action] of actions.entries()) await step(`seed${seed}/${index} ${action}${action === 'Stop' && !running ? ' (already closed)' : ''}`,
+          `sequence-${action === 'Play' || action === 'Settings' ? action : route}`, async () => {
+          if (action === 'Play' || action === 'Settings') {
+            await page.getByRole('navigation', {name: 'Biotron tasks'}).getByRole('link', {name: action, exact: true}).click()
+            route = action
+          } else if (action === 'Example') {
+            const palette = page.locator('.sound-palette')
+            if (!await palette.evaluate(element => element.open)) await palette.locator('summary').click()
+            await palette.getByRole('button', {name: running ? 'Stop example' : 'Listen to example', exact: true}).click()
+            running = !running
+          } else if (running) {
+            await page.getByRole('button', {name: 'Stop & release', exact: true}).click(); running = false
+          }
+          const lab = page.locator('.sound-lab')
+          await page.getByRole('heading', {name: route === 'Play' ? 'Plant music' : 'Settings', level: route === 'Play' ? 1 : 2}).waitFor()
+          await page.locator(`.sound-lab[data-audio-state="${running ? 'running' : 'closed'}"][data-example="${running ? 'playing' : 'idle'}"]`).waitFor()
+          assert.equal(await lab.count(), 1); assert(await lab.isVisible())
+          assert(await lab.evaluate(element => element === window.__qaSequencePlayer), 'Internal route replaced the player')
+          assert.equal(await lab.getAttribute('data-tab-lease'), running ? 'held' : 'free')
+          if (!running) {
+            assert.equal(await lab.getAttribute('data-active-voices'), '0')
+            assert.equal(await lab.getAttribute('data-example-timers'), '0')
+          }
+        })
+      }
       assert.deepEqual(report.errors, [])
       if (process.env.BIOTRON_QA_ORIGIN !== undefined) report.identityAfter = await verifyOnlineIdentity(context, origin, root)
       await context.close(); context = null; report.cleanup = 'CONFIRMED: isolated contexts closed'; write()

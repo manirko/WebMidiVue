@@ -113,3 +113,49 @@ only. Exact stylesheet control proved explicit height44 fixes native WebKit sele
 while preserving its arrow. Main DSP/transport/FW/dependencies and source caps remain
 unchanged. Real phone/speaker/Windows/DAW/novice/aesthetic/customer/telemetry delivery/
 retention/BOOT/CapCut finished video are separate OPEN gates.
+
+
+## Contract controls and seeded sequences — 12Oct2026
+
+Existing lanes now test their own sensitivity before reporting green:
+`test:sound` detects lost Note Off, skipped release panic and a stale sensor nonce;
+`test:settings-readback` detects false Saved with a different persisted vector;
+`test:audio-qa` detects a corrupt WAV data length. Each uses the same assertion
+against healthy code first, then one in-memory source mutation. The shared
+`scripts/qa-contract-controls.mjs` imports isolated module fixtures; it never edits
+production files. A survived mutation, missing/ambiguous target, infrastructure
+exception or unrelated assertion fails the test. This is five representative
+controls, not a whole-code mutation score.
+
+`test:sound` runs three fixed seeds (1,42,20261012),51 actions each, against a small
+independent model of sounding notes and input-listener ownership. Start/Stop,
+Note On/Off/velocity0, panic, background/foreground and disconnect/reconnect are
+mixed. An unexpected first fault records the seed, actions and observed state
+before cleanup; deletion-based reduction retains the same assertion. A controlled
+lost Note Off reduces to Start/On/Off, passes healthy code and fails the broken
+provider. Reduction stops on infrastructure/cleanup errors. These are mock MIDI
+callbacks, not browser permission, real USB or DSP-tail evidence.
+
+Settings adds108 vector round-trips,128 nonce acceptance/rejection pairs and225
+invalid wire-byte cases. Audio adds24 exact float-WAV round-trips over sample rate,
+channel and block-size boundaries. The ordinary `test:quick` also runs the existing
+`test:audio-qa`; no new npm lane or library was added.
+
+```sh
+python3 -I scripts/run-biotron-qa.py --output /private/tmp/unique-contract-attempt --only test:sound,test:settings-readback,test:audio-qa,test:architecture --timeout 180
+```
+
+The opt-in existing `QUALITY_BROWSER_JOURNEYS=1` lane adds two fixed UI sequences:
+14 steps each at1440/320px, seed20261012/42. Example, Settings, Play and Stop check
+one preserved player element, expected route/audio/lease state, zero voices and
+example timers after Stop. A Stop step already closed is explicitly a state check,
+not another click. Actions/seeds join the existing journeys.json/audit.html test
+map; browser sequences do not auto-shrink or measure PCM. The unchanged5s limits
+still apply. Use an existing pinned artifact via BIOTRON_QA_DIST_ROOT, explicit
+QUALITY_BROWSER_OUTPUT and the desired BIOTRON_QA_BROWSER. On this bench WebKit/
+Firefox use existing PLAYWRIGHT_BROWSERS_PATH=/private/tmp/biotron-browser-engines;
+no browser downloads or installed OS preferences are needed.
+
+This implementation changes tests only. Published285 and compiled602 stay pinned.
+No new live behavior collection, dependency, Goal, firmware, release, native test
+or deployment is implied. Real user outcomes and hearing remain separate gates.

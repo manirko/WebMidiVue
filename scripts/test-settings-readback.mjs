@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
+import test from 'node:test'
+import {detectedFault} from './qa-contract-controls.mjs'
 import {
   CALMER_PLAY_SETTINGS,
   applyCalmerPlay,
@@ -93,3 +95,43 @@ assert(!commandSource.includes('val % 127'), 'MIDI value 127 must never wrap to 
 assert(commandSource.includes('Math.min(127'), 'outgoing MIDI data must be clamped to the 7-bit maximum')
 
 console.log('settings readback contract: PASS')
+
+// Every wire position and nonce is exercised independently of the serializer.
+for (let index = 0; index < 27; index++) for (const value of [0, 1, 126, 127]) {
+  const vector = [...values]; vector[index] = value
+  const frame = [...response]; frame.splice(19, 27, ...vector)
+  const before = [...frame]
+  const answer = parseSettingsResponse(frame, 42)
+  assert.deepEqual(answer.values, vector)
+  applySettingsVector(commands, answer.values)
+  assert.deepEqual(settingsVectorFromCommands(commands), vector)
+  assert.deepEqual(frame, before, 'readback parser mutated its input')
+}
+for (let nonce = 0; nonce < 128; nonce++) {
+  const frame = [...response]; frame[7] = nonce
+  assert.deepEqual(parseSettingsResponse(frame, nonce).values, values)
+  assert.equal(parseSettingsResponse(frame, (nonce + 1) % 128), null)
+}
+for (let index = 1; index < 46; index++) for (const invalid of [-1, 128, .5, NaN, Infinity]) {
+  const frame = [...response]; frame[index] = invalid
+  assert.equal(parseSettingsResponse(frame, 42), null, `invalid wire byte ${index}/${invalid}`)
+}
+console.log('PASS: 108 vector round-trips, 128 nonce pairs, 225 malformed wire bytes; input preservation')
+
+test('fault control detects Saved with a mismatched persisted vector', async t => {
+  t.mock.timers.enable({apis: ['setTimeout']})
+  t.diagnostic(JSON.stringify(await detectedFault(new URL('../src/biotron/settingsConnection.mjs', import.meta.url),
+    'if (snapshot.dirty || !settingsVectorsEqual(snapshot.values, expected)) {', 'if (false) {',
+    async ({createSettingsConnectionMethods: create}) => {
+      const methods = create({settingsVectorFromCommands: () => [...values], settingsVectorsEqual, savedSettingsMessage})
+      for (const variant of ['same', 'mismatch', 'dirty']) {
+        const persisted = [...values]; if (variant === 'mismatch') persisted[26] ^= 1
+        const device = {}, page = {device, liveVerifyId: 0, settingsState: 'changed',
+          clearLiveVerification() { this.liveVerifyId++ },
+          async readPersistedSettingsWithRetry() { return {values: persisted, dirty: variant === 'dirty'} }}
+        methods.scheduleLiveVerification.call(page, device); t.mock.timers.tick(1500); await Promise.resolve()
+        assert.equal(page.settingsState, variant === 'same' ? 'saved' : 'error', 'Unconfirmed vector reported Saved')
+        assert.deepEqual(persisted, variant === 'mismatch' ? [...values.slice(0, -1), values[26] ^ 1] : values)
+      }
+    }, 'Unconfirmed vector reported Saved')))
+})

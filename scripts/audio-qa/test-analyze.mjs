@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import {detectedFault} from '../qa-contract-controls.mjs'
 import {analyze,wav,SCORE,creatorFixtureMetrics,creatorFixtureHasBoth} from './analyze.mjs'
 assert(!process.argv.includes('--creator-cold-processor-fault') || process.argv.includes('--creator-cold-native'),
   '--creator-cold-processor-fault requires --creator-cold-native')
@@ -56,6 +57,41 @@ assert.throws(() => pcmFidelity([fidelitySample[0].slice(1), fidelitySample[1]],
 assert.throws(() => pcmFidelity([Float32Array.of(NaN)], [Float32Array.of(0)]), /Non-finite/)
 assert.throws(() => pcmFidelity([], []), /Empty/)
 console.log('PASS: exact PCM fidelity; missing/swapped channels, silence, one changed sample, truncation and non-finite controls')
+
+// The bench emits this fixed float-WAV format; this is not a general media decoder.
+function rereadFixtureWav(buffer, reference, sampleRate) {
+  const v = new DataView(buffer), text = (at, n) => String.fromCharCode(...new Uint8Array(buffer, at, n))
+  assert(buffer.byteLength >= 44, 'Truncated WAV header')
+  assert.equal(text(0, 4), 'RIFF'); assert.equal(text(8, 4), 'WAVE')
+  assert.equal(v.getUint32(4, true), buffer.byteLength - 8, 'WAV file length mismatch')
+  assert.equal(text(12, 4), 'fmt '); assert.equal(v.getUint32(16, true), 16)
+  assert.equal(v.getUint16(20, true), 3); assert.equal(v.getUint16(34, true), 32)
+  assert.equal(v.getUint16(22, true), reference.length)
+  assert.equal(v.getUint32(24, true), sampleRate)
+  const stride = reference.length * 4
+  assert.equal(v.getUint16(32, true), stride); assert.equal(v.getUint32(28, true), sampleRate * stride)
+  assert.equal(text(36, 4), 'data')
+  assert.equal(v.getUint32(40, true), buffer.byteLength - 44, 'WAV payload length mismatch')
+  assert.equal((buffer.byteLength - 44) % stride, 0, 'WAV partial frame')
+  const pcm = reference.map((_, channel) => Float32Array.from({length: (buffer.byteLength - 44) / stride},
+    (_, i) => v.getFloat32(44 + i * stride + channel * 4, true)))
+  assert.equal(pcmFidelity(pcm, reference).maxAbsoluteError, 0, 'WAV PCM changed')
+}
+for (const sampleRate of [8000, 44100, 48000]) for (const channels of [1, 2]) for (const length of [1, 127, 128, 129]) {
+  const reference = Array.from({length: channels}, (_, c) => Float32Array.from({length}, (_, i) => ((i + c) % 7 - 3) / 16))
+  rereadFixtureWav(wav(reference, sampleRate), reference, sampleRate)
+}
+const validWav = wav(fidelitySample, 48000)
+assert.throws(() => rereadFixtureWav(validWav.slice(0, 30), fidelitySample, 48000), /Truncated WAV header/)
+assert.throws(() => rereadFixtureWav(validWav.slice(0, -1), fidelitySample, 48000), /file length mismatch/)
+for (const [offset, value, message] of [[4, 0, 'file length'], [40, 0, 'payload length']]) {
+  const broken = validWav.slice(0); new DataView(broken).setUint32(offset, value, true)
+  assert.throws(() => rereadFixtureWav(broken, fidelitySample, 48000), new RegExp(message))
+}
+console.log('WAV fault control:', JSON.stringify(await detectedFault(new URL('./analyze.mjs', import.meta.url),
+  'v.setUint32(40,n*count*4,true)', 'v.setUint32(40,n*count*4-4,true)',
+  ({wav: encode}) => rereadFixtureWav(encode(fidelitySample, 48000), fidelitySample, 48000), 'WAV payload length mismatch')))
+console.log('PASS: 24 sample-exact float-WAV round-trips and corrupt header/payload rejection')
 
 function processCpuDelta(before, after) {
   const index = rows => new Map(rows.map(({id, type, cpuTime}) => {
