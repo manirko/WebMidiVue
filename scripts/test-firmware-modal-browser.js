@@ -8,7 +8,9 @@ const fs = require('node:fs')
 const os = require('node:os')
 const {launchBrowser, createStaticServer} = require('./browser-test-harness')
 
-const server = createStaticServer(path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist')))
+const runtime = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
+const internal = fs.existsSync(path.join(runtime, 'firmware/biotron-1.10.10-internal.uf2'))
+const server = createStaticServer(runtime)
 // Full 1366x768 window and its usual inner viewport in a maximised Windows Chrome.
 const viewports = [{width: 1366, height: 768}, {width: 1366, height: 657}]
 const evidence = fs.mkdtempSync(path.join(process.env.BIOTRON_QA_OUTPUT || os.tmpdir(),
@@ -56,7 +58,10 @@ async function check(browser, origin, viewport) {
   observations.push({viewport, capability})
   write('capabilities.json', observations)
   await page.locator('#UpdateConf.show').waitFor()
-  if (capability.picker) await action.waitFor()
+  if (!internal) {
+    assert.equal(await action.count(), 0, 'Public updater must not prepare firmware without device/version identity')
+    await page.getByText(/Connect Biotron with a USB data cable to check its firmware version/).waitFor()
+  } else if (capability.picker) await action.waitFor()
   else {
     assert.equal(await action.count(), 0, 'No automatic install action without a directory picker')
     await page.getByText('Firmware updates run from a computer with Chrome or Edge.', {exact: false}).waitFor()
@@ -67,7 +72,7 @@ async function check(browser, origin, viewport) {
   const size = `${viewport.width}x${viewport.height}`
   const footer = await checkFooter(page, size)
 
-  if (capability.picker) {
+  if (internal && capability.picker) {
     await action.click()
     await page.getByText(/Firmware 1\.10\.10 is checked and held in this page/).waitFor({timeout: 15000})
     assert.strictEqual(await page.locator('#UpdateConf a[download]').getAttribute('href'),
@@ -82,7 +87,7 @@ async function check(browser, origin, viewport) {
   await page.locator('#UpdateConf .modal-footer').evaluate(element => element.remove())
   await assert.rejects(checkFooter(page, size), /Close button missing or duplicated/)
   await context.close()
-  return `${size}: ${footer.length} footer buttons visible and clickable; automatic directory install ${capability.picker ? 'download/check verified; physical NOT RUN' : 'NOT SUPPORTED; manual recovery UI verified'}`
+  return `${size}: ${footer.length} footer buttons visible and clickable; automatic directory install ${!internal ? 'NOT RUN; disconnected version check has clear USB next step' : capability.picker ? 'download/check verified; physical NOT RUN' : 'NOT SUPPORTED; manual recovery UI verified'}`
 }
 
 ;(async () => {

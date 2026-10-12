@@ -125,6 +125,7 @@ export default {
       <div class="modal-header"><h5 class="modal-title" id="firmware-title">💾 Update firmware</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
       <div class="modal-body">
+        <p v-if="versionAware && !device && !recovery">Connect Biotron with a USB data cable to check its firmware version.</p>
         <p v-if="available" class="firmware-version">Installed <strong>{{ currentVersion }}</strong> <span aria-hidden="true">→</span> {{ internal ? 'Beta update' : 'Available update' }} <strong>{{ latest.version }}</strong></p>
         <p v-if="versionAware && ready" class="alert alert-warning">Before restarting, save settings that actually loaded from Biotron. An update can reset them, even when software BOOT is available.</p><ol v-if="versionAware && ready" class="firmware-steps"><li>Download and verify the file.</li><li>Restart into update mode.</li><li>Choose RPI-RP2 and wait for the version check.</li></ol>
         <p v-if="versionAware && manualBoot" class="alert alert-warning">Software BOOT is not validated here for this version. Save settings that actually loaded from Biotron; older updates may reset them. No software BOOT command will be sent. Confirm your board with support before touching contacts. <a href="https://help.playtronica.com/troubleshooting/firmware-reset/#biotron-recovery" target="_blank" rel="noopener">Biotron recovery help</a>.</p>
