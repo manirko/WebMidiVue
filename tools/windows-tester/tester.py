@@ -255,8 +255,9 @@ def run_autotest(root, run, browser, executable, node, firmware=False):
      rows=json.loads((run/'settings/settings-matrix.json').read_text(encoding='utf-8'))['rows']
      boundaries=json.loads((run/'settings/settings-boundaries.json').read_text(encoding='utf-8'))
      actions=json.loads((run/'settings/settings-actions.json').read_text(encoding='utf-8'))
-     if len({x['field'] for x in rows if x['status']=='PASS'})!=26 or any(x['status'] not in ['PASS','UNCHANGED_BASELINE'] for x in rows) or len(boundaries)!=17 or any(x['status']!='PASS' for x in boundaries) or len(actions)!=10 or any(x['status']!='PASS' for x in actions):
-      fault='Settings suite exited without 26 changed commands, 17 boundary/failure cases and 10 preset/action cases.'
+     required_actions=14 if FIRMWARE_CHANNEL=='public-stable' else 10
+     if len({x['field'] for x in rows if x['status']=='PASS'})!=26 or any(x['status'] not in ['PASS','UNCHANGED_BASELINE'] for x in rows) or len(boundaries)!=17 or any(x['status']!='PASS' for x in boundaries) or len(actions)!=required_actions or any(x['status']!='PASS' for x in actions):
+      fault=f'Settings suite exited without 26 changed commands, 17 boundary/failure cases and {required_actions} preset/action cases.'
     else:
      files=list((run/'firmware').glob('*/journeys.json'))
      if len(files)!=1:raise ValueError('Firmware evidence is missing')

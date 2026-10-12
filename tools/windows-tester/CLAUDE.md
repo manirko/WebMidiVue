@@ -16,7 +16,7 @@ web_commit — неизменное приложение; helper_commit — ин
    Git, WSL, Docker и администратор для helper не нужны.
 3. По выбору Сергея: `py -3 tester.py autotest --browser chrome --firmware`.
    Edge отдельной командой после завершения Chrome. Общий budget600s на три
-   фазы:43 sound cases; Settings26/17/10; пять compiled public updater routes.
+   фазы:43 keyboard observations; Settings26/17/14; пять compiled public updater routes.
    MIDI/диск имитируются, реальный USB/звук/прошивка остаются NOT_RUN.
 4. Ручной ПК: точная онлайн-ссылка или `py -3 tester.py serve --browser chrome`.
    Local creator `/creator.html`, online `/creator`. Stop & release до DAW/creator.

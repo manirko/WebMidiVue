@@ -247,7 +247,7 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
     if mode=='settings_fail':return subprocess.CompletedProcess(command,1)
     tester.write_json(observed/'settings-matrix.json',{'rows':[{'field':str(i),'status':'PASS'} for i in range(25 if mode=='settings_early' else 26)]})
     tester.write_json(observed/'settings-boundaries.json',[{'status':'PASS'} for i in range(17)])
-    tester.write_json(observed/'settings-actions.json',[{'status':'PASS'} for i in range(8 if mode=='settings_old_actions' else 10)])
+    tester.write_json(observed/'settings-actions.json',[{'status':'PASS'} for i in range(8 if mode=='settings_old_actions' else 14 if mode=='settings_public_actions' else 10)])
     return subprocess.CompletedProcess(command,0)
    observed=run/'browser';observed.mkdir()
    tester.write_json(observed/'progress.json',[{'stage':'PASS'}])
@@ -291,6 +291,14 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
   self.assertEqual(calls.call_count,2)
   self.assertEqual(calls.call_args_list[0].kwargs['timeout'],600)
   self.assertEqual(calls.call_args_list[1].kwargs['timeout'],150)
+
+ def test_public_packet_requires_all_fourteen_current_actions(self):
+  for mode in ['settings_public_actions','pass']:
+   run=tester.new_run(self.root,'public-actions')
+   with mock.patch.object(tester,'FIRMWARE_CHANNEL','public-stable'),mock.patch.object(tester.subprocess,'run',side_effect=self.autonomous_fixture(run,mode)):
+    if mode=='settings_public_actions':tester.run_autotest(self.root,run,'chrome','fixture','node')
+    else:
+     with self.assertRaisesRegex(ValueError,'14 preset/action'):tester.run_autotest(self.root,run,'chrome','fixture','node')
 
  def test_optional_firmware_phase_shares_deadline_and_requires_completed_routes(self):
   for complete in ['complete','missing','skipped','duplicate']:
