@@ -1,11 +1,22 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {createHash} from 'node:crypto'
+import fs from 'node:fs'
+import vm from 'node:vm'
 import {AUDITION_BANKS, auditionEvents, auditionDuration, resolveAudition} from '../src/audio/auditionBanks.mjs'
 import {selectSoundExperiment, restoreSoundExperiment, soundSessionState} from '../src/audio/sessionState.mjs'
 import {SOUNDS, toSound} from '../src/audio/elementary/timbres.mjs'
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
+test('native key guard still rejects missing/duplicate/untrusted/cancelled delivery', () => {
+  const source=fs.readFileSync(new URL('./test-audition-browser.js',import.meta.url),'utf8')
+  const guard=source.match(/  assert\.deepEqual\(controlKeys\.map[^\n]+\n  assert\(controlKeys\.every[^\n]+/)[0]
+  const healthy=['ArrowDown','ArrowUp','Enter','Escape','Tab','Space'].map(code=>({code,trusted:true,prevented:false}))
+  const replay=rows=>vm.runInNewContext('const controlKeys=JSON.parse('+JSON.stringify(JSON.stringify(rows))+');'+guard,{assert})
+  replay(healthy)
+  for(const rows of [healthy.slice(0,5),[...healthy.slice(0,5),healthy[0]],healthy.map((row,i)=>i===0?{...row,trusted:false}:row),healthy.map((row,i)=>i===0?{...row,prevented:true}:row)])assert.throws(()=>replay(rows))
+  assert(source.indexOf("fs.writeFileSync(path.join(artifacts,'native-control-keys.json')")<source.indexOf(guard),'key evidence must precede the assertion')
+})
 test('three ten-option banks and six handpan options with unique audible settings and a reference first', () => {
   assert.deepEqual(AUDITION_BANKS.map(bank => bank.variants.length), [10,10,10,6])
   const ids = AUDITION_BANKS.flatMap(bank => bank.variants.map(option => option.id))

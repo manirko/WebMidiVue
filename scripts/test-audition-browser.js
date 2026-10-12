@@ -437,12 +437,23 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   assert.equal(await quality.isChecked(),false)
   assert.equal(await selection().inputValue(),'tone-bass')
   const chord=['KeyA','KeyS','KeyD','KeyF','KeyG','KeyH']
+  const polyphony=[]
   for(const [safe,count] of [[false,6],[true,4]]){
    await quality.setChecked(safe)
    await page.getByRole('button',{name:'Play with keyboard',exact:true}).click()
    await page.locator('.sound-lab[data-audio-state="running"][data-keyboard="on"]').waitFor({state:'attached'})
-   for(const code of chord)await page.dispatchEvent('body','keydown',{code,key:'a'})
+   const gates=[]
+   for(const code of chord){
+    await page.keyboard.down(code);await page.waitForTimeout(25)
+    gates.push(await page.evaluate(()=>window.__comparisonValues.findLast(id=>window.__comparisonProperties.get(id)===1)))
+   }
    await page.locator(`.sound-lab[data-quality="${safe?'safe':'standard'}"][data-active-voices="${count}"]`).waitFor({state:'attached'})
+   const workletVoices=await page.evaluate(gates=>[...new Set(gates)].filter(id=>window.__comparisonProperties.get(id)===1).length,gates)
+   polyphony.push({safe,heldKeys:chord,gates,workletVoices})
+   fs.writeFileSync(path.join(artifacts,'trusted-polyphony.json'),JSON.stringify(polyphony,null,2))
+   assert.equal(workletVoices,count,'held chord did not match the actual worklet gate count')
+   for(const code of chord)await page.keyboard.up(code)
+   await page.locator('.sound-lab[data-active-voices="0"]').waitFor({state:'attached'})
    assert.equal(await page.evaluate(()=>window.__comparisonContexts.filter(context=>context.state!=='closed').length),1)
    if(!safe){await quality.check();await stopped()}
   }
@@ -546,14 +557,17 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
   await page.evaluate(()=>{const event=new KeyboardEvent('keydown',{code:'KeyA',bubbles:true,cancelable:true});event.preventDefault();document.body.dispatchEvent(event)})
   await voices(0)
   await selectBank('Classic');await selection().selectOption('0');await selection().focus()
-  // Headless Chrome on macOS does not operate its native popup with arrows.
-  // Assert trusted delivery without cancellation; physical menu behavior stays separate.
+  // Each probe starts with the OS popup closed; Windows consumes Escape in an open popup.
   await page.evaluate(()=>{window.__controlKeys=[];window.addEventListener('keydown',event=>{if(['ArrowDown','ArrowUp','Enter','Escape','Tab','Space'].includes(event.code))window.__controlKeys.push({code:event.code,trusted:event.isTrusted,prevented:event.defaultPrevented})})})
-  for(const key of ['ArrowDown','ArrowUp','Enter','Escape','Tab','Space']){await selection().focus();await page.keyboard.press(key)}
+  for(const key of ['Escape','ArrowDown','ArrowUp','Enter','Tab','Space']){
+   await page.getByRole('heading',{name:'Plant music',exact:true}).click()
+   await selection().focus();await page.keyboard.press(key)
+   fs.writeFileSync(path.join(artifacts,'native-control-keys.json'),JSON.stringify(await page.evaluate(()=>window.__controlKeys),null,2))
+  }
+  await page.getByRole('heading',{name:'Plant music',exact:true}).click()
   const controlKeys=await page.evaluate(()=>window.__controlKeys)
-  assert.equal(controlKeys.length,6)
+  assert.deepEqual(controlKeys.map(event=>event.code).sort(),['ArrowDown','ArrowUp','Enter','Escape','Tab','Space'].sort())
   assert(controlKeys.every(event=>event.trusted&&!event.prevented),'musical keyboard intercepted native control keys')
-  fs.writeFileSync(path.join(artifacts,'native-control-keys.json'),JSON.stringify(controlKeys,null,2))
   await selection().focus()
   await trustedDown();await voices(1);await trustedUp();await voices(0)
   await page.getByRole('heading',{name:'Plant music',exact:true}).click()
