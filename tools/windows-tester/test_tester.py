@@ -1,5 +1,7 @@
 """Packet safety and Windows path contract; these are not actual Windows acceptance."""
 import importlib.util
+import io
+import contextlib
 import subprocess
 import json
 from pathlib import Path
@@ -241,6 +243,7 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
   (self.root/'automation/scripts/test-audition-browser.js').write_text('// command fixture only')
   (self.root/'automation/scripts/test-sound-browser.js').write_text('// settings fixture only')
   def execute(command, **kwargs):
+   tester.write_json(Path(kwargs['env']['BIOTRON_QA_CLEANUP_FILE']),{'attempt':kwargs['env']['BIOTRON_QA_ATTEMPT'],'browserApiClosed':True,'openBrowsers':0,'globalClaim':False})
    if command[-1]=='--settings-only':
     observed=run/'settings'
     if mode=='settings_timeout':raise subprocess.TimeoutExpired(command,600)
@@ -263,6 +266,61 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
   rows=[{'installed':v,'target':'1.8.2','mode':'normal','bootRequests':boot,'picks':3,'writes':1,'sha256':tester.UF2_SHA,'attempt':'12345678-1234-1234-1234-123456789abc','phases':[{'phase':'select-drive','error':'cancelled'},{'phase':'select-drive','error':'drive_mismatch'},{'phase':'complete','error':None}],'physical':'NOT RUN; synthetic fixture'} for v,boot in [('1.7.3',0),('1.7.4',1)]]
   rows += [{'installed':v,'target':'1.8.2','result':result,'physical':'NOT RUN'} for v,result in [('1.8.2','no downgrade/reinstall'),('1.10.10','no downgrade/reinstall'),('unknown','Check/help; no public install/BOOT')]]
   return rows
+
+ def test_independent_phases_keep_scope_and_complete_evidence(self):
+  for phase in ['sound','settings','firmware']:
+   run=tester.new_run(self.root,'independent-'+phase)
+   execute=self.autonomous_fixture(run,'pass')
+   (self.root/'automation/scripts/test-firmware-modal-browser.js').write_text('// fixture only')
+   def phase_execute(command,**kwargs):
+    tester.write_json(Path(kwargs['env']['BIOTRON_QA_CLEANUP_FILE']),{'attempt':kwargs['env']['BIOTRON_QA_ATTEMPT'],'browserApiClosed':True,'openBrowsers':0,'globalClaim':False})
+    if command[-1].endswith('test-firmware-modal-browser.js'):
+     folder=run/'firmware/fixture';folder.mkdir()
+     tester.write_json(folder/'journeys.json',self.public_routes())
+     return subprocess.CompletedProcess(command,0)
+    return execute(command,**kwargs)
+   with mock.patch.object(tester.subprocess,'run',side_effect=phase_execute) as calls:
+    tester.run_autotest(self.root,run,'chrome','fixture','node',phase=phase)
+   self.assertEqual(calls.call_count,1)
+   summary=json.loads((run/'autotest-summary.json').read_text())
+   self.assertEqual(summary['phases_completed'],[phase])
+   self.assertEqual(summary['phases_requested'],[phase])
+   self.assertEqual(summary['physical_windows_result'],'NOT_RUN')
+
+ def test_progress_reports_real_stage_without_invented_percentage(self):
+  run=tester.new_run(self.root,'progress');(run/'browser').mkdir()
+  tester.write_json(run/'browser/progress.json',[{'stage':'keyboard voices'}])
+  stop=mock.Mock();stop.wait.side_effect=[False,True]
+  output=io.StringIO()
+  with contextlib.redirect_stdout(output),mock.patch.object(tester.time,'monotonic',return_value=15):
+   tester.show_progress(run,'sound',5,stop)
+  self.assertIn('[sound] 10s · keyboard voices',output.getvalue())
+  self.assertNotIn('%',output.getvalue())
+
+ def test_independent_failure_still_preserves_first_fault(self):
+  run=tester.new_run(self.root,'settings-failure')
+  with mock.patch.object(tester.subprocess,'run',side_effect=self.autonomous_fixture(run,'settings_early')) as calls,self.assertRaises(ValueError):
+   tester.run_autotest(self.root,run,'chrome','fixture','node',phase='settings')
+  self.assertEqual(calls.call_count,1)
+  self.assertEqual(json.loads((run/'autotest-summary.json').read_text())['phases_completed'],[])
+  self.assertTrue((run/'first-autotest-fault.json').is_file())
+
+ def test_unconfirmed_or_stale_cleanup_stops_next_phase_even_after_valid_sound(self):
+  for mode in ['missing','stale','open','foreign']:
+   run=tester.new_run(self.root,'cleanup-'+mode);execute=self.autonomous_fixture(run,'pass')
+   def bad_cleanup(command,**kwargs):
+    result=execute(command,**kwargs);file=Path(kwargs['env']['BIOTRON_QA_CLEANUP_FILE'])
+    proof=json.loads(file.read_text())
+    if mode=='missing':file.unlink()
+    else:
+     if mode=='stale':proof['attempt']='previous'
+     if mode=='open':proof.update(openBrowsers=1,browserApiClosed=False)
+     if mode=='foreign':proof['globalClaim']=True
+     tester.write_json(file,proof)
+    return result
+   with mock.patch.object(tester.subprocess,'run',side_effect=bad_cleanup) as calls,self.assertRaises(ValueError):tester.run_autotest(self.root,run,'chrome','fixture','node')
+   self.assertEqual(calls.call_count,1)
+   self.assertEqual(json.loads((run/'autotest-summary.json').read_text())['cleanup'],'NOT_CONFIRMED')
 
  def test_autonomous_command_keeps_browser_identity_and_local_fixture(self):
   for browser in ['chrome','edge']:
@@ -314,6 +372,7 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
    (self.root/'automation/scripts/test-firmware-modal-browser.js').write_text('// fixture only')
    def timed_execute(command,**kwargs):
     if command[-1].endswith('test-firmware-modal-browser.js'):
+     tester.write_json(Path(kwargs['env']['BIOTRON_QA_CLEANUP_FILE']),{'attempt':kwargs['env']['BIOTRON_QA_ATTEMPT'],'browserApiClosed':True,'openBrowsers':0,'globalClaim':False})
      directory=run/'firmware/firmware-modal-fixture';directory.mkdir()
      rows=self.public_routes()
      if complete=='missing':rows=rows[:4]

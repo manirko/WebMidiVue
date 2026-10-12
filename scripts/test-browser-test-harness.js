@@ -205,6 +205,21 @@ function readHttp(url, options = {}) {
   await assert.rejects(browserCall(fake, () => {throw new Error('must not run')}, 'closed'), /disconnected before closed/)
   assert.equal(fake.listenerCount('disconnected'), 0, 'All completed guards release their listener')
   console.log('PASS pending browser call disconnect/deadline/original-fault guards')
+  const cleanupRoot=fs.mkdtempSync(path.join(os.tmpdir(),'biotron-owned-close-'))
+  try {
+    const receipt=path.join(cleanupRoot,'cleanup.json'),executable=path.join(cleanupRoot,'fixture-browser')
+    fs.writeFileSync(executable,'fixture only');let failClose=true
+    const namespace={module:{exports:{}},console:{log(){}},process:{pid:process.pid,env:{CHROME_PATH:executable,BIOTRON_QA_CLEANUP_FILE:receipt,BIOTRON_QA_ATTEMPT:'12345678-1234-1234-1234-123456789abc'}},
+      require:name=>name==='playwright-core'?{chromium:{launch:async()=>({version:()=> 'fixture',newContext:async()=>{},close:async()=>{if(failClose)throw Error('injected close failure')}})}}:require(name)}
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname,'browser-test-harness.js'),'utf8'),namespace)
+    const first=await namespace.module.exports.launchBrowser(),second=await namespace.module.exports.launchBrowser()
+    await assert.rejects(first.close(),/injected close failure/)
+    assert.equal(JSON.parse(fs.readFileSync(receipt)).openBrowsers,2)
+    failClose=false;await first.close();assert.equal(JSON.parse(fs.readFileSync(receipt)).browserApiClosed,false)
+    await second.close();const proof=JSON.parse(fs.readFileSync(receipt))
+    assert.equal(proof.openBrowsers,0);assert.equal(proof.browserApiClosed,true);assert.equal(proof.globalClaim,false)
+    assert.equal(proof.attempt,namespace.process.env.BIOTRON_QA_ATTEMPT)
+  } finally {fs.rmSync(cleanupRoot,{recursive:true,force:true})}
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'biotron-http-fixture-'))
   let server, browser, fault
   try {

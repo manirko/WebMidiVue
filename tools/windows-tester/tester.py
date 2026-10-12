@@ -39,7 +39,7 @@ CASES = {
  'W08': 'Offline reopen and comparison sound, no false ready state',
  'W09': 'Installed/same/legacy firmware presentation, without BOOT or write',
  'W10': 'Physical flash -> rollback -> reflash; screened board/backup/review first',
- 'W11': 'Play: ten timbres/ten upper-note/six handpan; Settings: ten explicitly selected calibration cues',
+ 'W11': 'Play: six quick sounds and sphere; All sounds: ten timbres/ten upper-note/six handpan; Settings: ten calibration cues',
  'W12': 'Independent native details, sliders, local feedback and exact copied diagnostics',
  'W13': 'Physical phone USB/MIDI, sound, settings and recovery (separate platform)',
  'W14': 'FB44 physical active calibration cue: original-channel Note Off, next cue on new channel; DAW/audio',
@@ -236,7 +236,17 @@ def complete_firmware_routes(rows):
  return True
 
 
-def run_autotest(root, run, browser, executable, node, firmware=False):
+def show_progress(run, phase, started, stop):
+ while not stop.wait(2):
+  stage='running; detailed log: '+phase+'.log'
+  try:
+   rows=json.loads((run/'browser/progress.json').read_text(encoding='utf-8'))
+   if phase=='sound' and rows:stage=str(rows[-1]['stage'])[:160]
+  except (OSError,ValueError,KeyError,TypeError):pass
+  print(f'[{phase}] {int(time.monotonic()-started)}s · {stage}',flush=True)
+
+
+def run_autotest(root, run, browser, executable, node, firmware=False, phase='all'):
  # Reuse existing audition and sound/Settings suites; no native MIDI client.
  scripts=[root/'automation/scripts/test-audition-browser.js',root/'automation/scripts/test-sound-browser.js']
  if not all(script.is_file() for script in scripts):raise ValueError('This packet has no complete autonomous suite')
@@ -246,25 +256,34 @@ def run_autotest(root, run, browser, executable, node, firmware=False):
       'AUDITION_BROWSER_OUTPUT':str(run/'browser'), 'AUDITION_BROWSER_TIMEOUT_MS':'540000'}
  env.pop('BIOTRON_QA_ORIGIN',None)
  commands=[[node,str(scripts[0])],[node,str(scripts[1]),'--settings-only']]
- if firmware:
+ if phase not in ['all','sound','settings','firmware']:raise ValueError('Unknown autotest phase')
+ if firmware or phase=='firmware':
   script=root/'automation/scripts/test-firmware-modal-browser.js'
   if not script.is_file():raise ValueError('Compiled firmware route suite is missing')
   commands.append([node,str(script)])
- write_json(run/'autotest-config.json',{'at':utc(),'commands':commands,'browser':browser,'executable':executable,'web_commit':WEB_COMMIT,'native_midi':'NOT_USED; isolated synthetic fixture','physical_result':'NOT_RUN'})
+ lanes=[(index,command) for index,command in enumerate(commands) if phase=='all' or ['sound','settings','firmware'][index]==phase]
+ write_json(run/'autotest-config.json',{'at':utc(),'commands':[command for _,command in lanes],'phase':phase,'browser':browser,'executable':executable,'web_commit':WEB_COMMIT,'native_midi':'NOT_USED; isolated synthetic fixture','physical_result':'NOT_RUN'})
  fault=None;code=None;cleanup='NOT_CHECKED';interrupted=False
  deadline=time.monotonic()+600
- for index,command in enumerate(commands):
+ completed=[]
+ for index,command in lanes:
+  name=['sound','settings','firmware'][index]
+  code=None;cleanup='NOT_CHECKED'
   remaining=deadline-time.monotonic()
   if remaining<=0:
    fault='Autotest reached its total 600-second execution limit; the next suite was not started.'
    break
   lane_env={**env}
+  receipt=run/(name+'-cleanup.json');attempt=str(uuid.uuid4())
+  lane_env.update(BIOTRON_QA_CLEANUP_FILE=str(receipt),BIOTRON_QA_ATTEMPT=attempt)
   if index==1:
    (run/'settings').mkdir()
    lane_env['BIOTRON_TEST_EVIDENCE_DIR']=str(run/'settings')
   if index==2:
    (run/'firmware').mkdir()
    lane_env.update(BIOTRON_QA_OUTPUT=str(run/'firmware'),BIOTRON_QA_STABLE_UF2=str(root/'test-inputs'/('biotron-firmware_v'+FIRMWARE_VERSION+'.uf2')))
+  print(f'[{name}] START · total budget remaining {int(remaining)}s · evidence: {run}',flush=True)
+  stop=threading.Event();watcher=threading.Thread(target=show_progress,args=(run,name,deadline-600,stop),daemon=True);watcher.start()
   with (run/['autotest.log','settings.log','firmware.log'][index]).open('w',encoding='utf-8') as log:
    try:code=subprocess.run(command,cwd=root/'automation',env=lane_env,stdout=log,stderr=subprocess.STDOUT,timeout=remaining).returncode
    except subprocess.TimeoutExpired:
@@ -273,6 +292,14 @@ def run_autotest(root, run, browser, executable, node, firmware=False):
     interrupted=True;cleanup='NOT_CONFIRMED';fault='Suite interrupted. Stop further autotest/capture until owned-process cleanup is confirmed.'
    except OSError as error:
     cleanup='NOT_CONFIRMED';fault='Suite execution error: '+str(error)+'. Stop further autotest/capture until owned-process cleanup is confirmed.'
+   finally:stop.set();watcher.join()
+  if code is not None:
+   try:
+    proof=json.loads(receipt.read_text(encoding='utf-8'))
+    if proof.get('attempt')!=attempt or proof.get('browserApiClosed') is not True or type(proof.get('openBrowsers')) is not int or proof['openBrowsers']!=0 or proof.get('globalClaim') is not False:raise ValueError('Unconfirmed cleanup')
+    cleanup='OWN_BROWSER_API_CLOSED; child terminal; not global ownership'
+   except (OSError,ValueError,TypeError):
+    cleanup='NOT_CONFIRMED';fault=fault or 'Own browser cleanup receipt missing or incomplete; stop further autotest/capture until own cleanup is confirmed.'
   if not fault and time.monotonic()>deadline:
    fault='Autotest results arrived after its total 600-second execution limit; keep the logs.'
   if code!=0:fault=fault or 'Autonomous suite failed; keep the first fault and log.'
@@ -298,11 +325,13 @@ def run_autotest(root, run, browser, executable, node, firmware=False):
       fault='Firmware suite exited without five complete compiled version routes.'
    except (OSError,ValueError,KeyError,IndexError,TypeError):fault='Suite evidence is missing or incomplete.'
   if not fault and time.monotonic()>deadline:fault='Evidence validation exceeded the total 600-second execution limit; keep the logs.'
+  print(f'[{name}] '+('FAIL — preserve first fault; next phase stopped' if fault else 'PASS_SOFTWARE_ONLY'),flush=True)
   if fault:break
+  completed.append(name)
  if fault:write_json(run/'first-autotest-fault.json',{'at':utc(),'message':fault,'suite':index,'exit_code':code,'cleanup':cleanup,'status':'INTERRUPTED' if interrupted else 'FAIL_OR_INCONCLUSIVE; not physical acceptance'})
- write_json(run/'autotest-summary.json',{'at':utc(),'status':'INTERRUPTED' if interrupted else 'FAIL' if fault else 'PASS_SOFTWARE_ONLY','exit_code':code,'cleanup':cleanup,'web_commit':WEB_COMMIT,'browser':browser,'physical_windows_result':'NOT_RUN','customer_release':False,'error':fault})
+ write_json(run/'autotest-summary.json',{'at':utc(),'status':'INTERRUPTED' if interrupted else 'FAIL' if fault else 'PASS_SOFTWARE_ONLY','phases_requested':[ ['sound','settings','firmware'][i] for i,_ in lanes],'phases_completed':completed,'exit_code':code,'cleanup':cleanup,'web_commit':WEB_COMMIT,'browser':browser,'physical_windows_result':'NOT_RUN','customer_release':False,'error':fault})
  if fault:raise ValueError(fault+' Evidence: '+str(run))
- print('Software sound, Settings'+(' and simulated public firmware routes' if firmware else '')+' passed. Real USB, hearing and installation remain for manual acceptance. Evidence:',run)
+ print('Software phases passed: '+', '.join(completed)+'. Real USB, hearing and installation remain for manual acceptance. Evidence:',run)
 
 
 def main():
@@ -315,6 +344,7 @@ def main():
  serve=sub.add_parser('serve'); serve.add_argument('--browser',choices=['chrome','edge','none'],default='none');serve.add_argument('--port',type=int,default=8765)
  capture=sub.add_parser('capture');capture.add_argument('--browser',choices=['chrome','edge'],default='chrome');capture.add_argument('--site',choices=['local','live'],default='local');capture.add_argument('--origin',help='Exact approved HTTPS origin for live capture');capture.add_argument('--minutes',type=float,default=10);capture.add_argument('--port',type=int,default=8765);capture.add_argument('--smoke',action='store_true',help='Automated headless harness check; never a physical PASS')
  autotest=sub.add_parser('autotest');autotest.add_argument('--browser',choices=['chrome','edge'],default='chrome');autotest.add_argument('--firmware',action='store_true',help='Include compiled public updater routes with simulated MIDI/disk; no physical flash')
+ autotest.add_argument('--phase',choices=['all','sound','settings','firmware'],default='all',help='Run only this software phase; default keeps the combined gate')
  record=sub.add_parser('record');record.add_argument('--case',choices=CASES,required=True);record.add_argument('--result',choices=['PASS','FAIL','NOT_RUN','BLOCKED','INCONCLUSIVE'],required=True);record.add_argument('--note',required=True);record.add_argument('--evidence',action='append',default=[])
  args=p.parse_args();root=args.root.resolve()
  if args.command=='cases':print(json.dumps(CASES,ensure_ascii=False,indent=2));return
@@ -338,7 +368,7 @@ def main():
  if args.command=='autotest':
   if not browsers[args.browser]:raise ValueError('Browser not found; set CHROME_PATH or EDGE_PATH')
   if not environment['node_version'] or int(environment['node_version'].lstrip('v').split('.')[0])<20:raise ValueError('Autotest needs Node.js >=20; plain serve only needs Python')
-  run_autotest(root,run,args.browser,browsers[args.browser],environment['node'],firmware=args.firmware);return
+  run_autotest(root,run,args.browser,browsers[args.browser],environment['node'],firmware=args.firmware,phase=args.phase);return
  if not 0<=args.port<=65535:p.error('port must be 0..65535')
  if args.command=='capture' and not 0<args.minutes<=30:p.error('minutes must be >0 and <=30')
  if args.browser!='none' and not browsers[args.browser]:raise ValueError('Browser not found; set CHROME_PATH or EDGE_PATH to its exact executable')

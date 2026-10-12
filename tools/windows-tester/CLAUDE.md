@@ -21,6 +21,9 @@ web_commit — неизменное приложение; helper_commit — ин
    Edge отдельной командой после завершения Chrome. Общий budget600s на три
    фазы:43 keyboard observations; Settings26/17/14; пять compiled public updater routes.
    MIDI/диск имитируются, реальный USB/звук/прошивка остаются NOT_RUN.
+   Доступны --phase sound, --phase settings, --phase firmware. После отказа
+   сохрани first-fault и подтверди именно свой cleanup до новой команды.
+   Следи за этапом/шагом/секундами; не объявляй частичный PASS полным.
 4. Ручной ПК: точная онлайн-ссылка или `py -3 tester.py serve --browser chrome`.
    Local creator `/creator.html`, online `/creator`. Stop & release до DAW/creator.
 5. Телефон — самостоятельный HTTPS-проход W13. localhost на телефоне ведёт на

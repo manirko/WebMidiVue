@@ -55,6 +55,10 @@ Windows PowerShell, из распакованной папки:
 py -3 tester.py verify
 py -3 tester.py doctor
 py -3 tester.py autotest --browser chrome --firmware
+# Отдельные этапы, когда их собственный cleanup подтверждён:
+py -3 tester.py autotest --browser chrome --phase sound
+py -3 tester.py autotest --browser chrome --phase settings
+py -3 tester.py autotest --browser chrome --phase firmware
 # После завершения Chrome, если Edge доступен:
 py -3 tester.py autotest --browser edge --firmware
 ```
@@ -62,6 +66,14 @@ py -3 tester.py autotest --browser edge --firmware
 Если `py` отсутствует, используй подтверждённый `python`. На Mac/Linux —
 `python3`. Для необычного расположения браузера задай `CHROME_PATH` или
 `EDGE_PATH` точным путём к установленному executable. Не используй чужой профиль.
+
+Тестер показывает текущий этап, реальный шаг и прошедшие секунды.
+Процент и время окончания не угадывает. После первого отказа следующие этапы
+останавливаются. Подтверждение собственного browser.close связано с UUID
+этой попытки; отсутствие, старый UUID или открытый браузер дают NOT_CONFIRMED.
+Это не проверка чужих процессов/DAW. При timeout или NOT_CONFIRMED Claude
+сначала проверяет именно свои процессы; новые autotest/capture остановлены.
+Отдельная фаза подтверждает только свой scope, а не весь пакет.
 
 Три автоматические фазы делят **600 секунд**:43 цифровых keyboard-наблюдения;
 Settings26 изменённых команд/17 границ и отказов/14 действий с пресетами;

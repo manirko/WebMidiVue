@@ -74,9 +74,18 @@ function browserConfig(name = process.env.BIOTRON_QA_BROWSER || 'chrome') {
   throw new Error(`Unknown BIOTRON_QA_BROWSER: ${name}`)
 }
 
+const ownedBrowsers = new Set()
 async function launchBrowser(options = {}) {
+  const cleanupFile=process.env.BIOTRON_QA_CLEANUP_FILE, attempt=process.env.BIOTRON_QA_ATTEMPT
+  if(cleanupFile && (!path.isAbsolute(cleanupFile) || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(attempt)))throw new Error('Cleanup receipt needs an absolute file and attempt UUID')
   const config = browserConfig()
   const browser = await require('playwright-core')[config.engine].launch({headless: true, ...options, ...config.options})
+  if(cleanupFile){
+    const close=browser.close.bind(browser)
+    const record=()=>fs.writeFileSync(cleanupFile,JSON.stringify({attempt,pid:process.pid,openBrowsers:ownedBrowsers.size,browserApiClosed:ownedBrowsers.size===0,globalClaim:false}))
+    ownedBrowsers.add(browser);record()
+    browser.close=async(...args)=>{await close(...args);ownedBrowsers.delete(browser);record()}
+  }
   const newContext = browser.newContext.bind(browser)
   browser.newContext = (...args) => browserCall(browser, () => newContext(...args), 'newContext')
     .then(context => guardPages(context, browser))

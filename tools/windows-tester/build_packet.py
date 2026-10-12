@@ -33,11 +33,12 @@ def validate_artifact(runtime,commit):
 
 def main():
  parser=argparse.ArgumentParser(description=__doc__)
- for name in ['web-commit','online-origin']:parser.add_argument('--'+name,required=True)
+ parser.add_argument('--web-commit',required=True)
+ parser.add_argument('--online-origin',help='Exact deployed origin; omit for a local-only packet')
  for name in ['runtime','stable-input','output']:parser.add_argument('--'+name,required=True,type=Path)
  args=parser.parse_args();commit=args.web_commit
  if not re.fullmatch('[0-9a-f]{40}',commit):parser.error('40-hex web commit required')
- if not re.fullmatch(r'https://[0-9a-f]{8}\.biotron-settings-beta\.pages\.dev',args.online_origin):parser.error('Exact immutable beta origin required')
+ if args.online_origin is not None and not re.fullmatch(r'https://[0-9a-f]{8}\.biotron-settings-beta\.pages\.dev',args.online_origin):parser.error('Exact immutable beta origin required')
  if git('status','--porcelain').strip():raise ValueError('Commit own helper/docs before packaging')
  helper=git('rev-parse','HEAD').decode().strip()
  if git('diff','--name-only',commit,helper,'--','src','public','beta-assets','scripts','package.json','package-lock.json','vue.config.js').strip():raise ValueError('App/test inputs changed after exact app gate')
@@ -54,11 +55,15 @@ def main():
  write(packet/'tester.py',data.encode())
  for name in ['capture-browser.cjs','test_tester.py','build_packet.py']:
   write(packet/name,(helper_root/name).read_bytes())
- substitutions={'{{WEB_COMMIT}}':commit,'{{HELPER_COMMIT}}':helper,'{{ONLINE_URL}}':args.online_origin}
+ substitutions={'{{WEB_COMMIT}}':commit,'{{HELPER_COMMIT}}':helper,'{{ONLINE_URL}}':args.online_origin or 'http://127.0.0.1:8765'}
  for source,target in [('PACKET-GUIDE.md','README.md'),('CLAUDE.md','CLAUDE.md'),('START-HERE.html','START-HERE.html')]:
   text=(helper_root/source).read_text(encoding='utf-8')
   for marker,value in substitutions.items():text=text.replace(marker,value)
   if '{{' in text:raise ValueError('Unfilled document marker')
+  if args.online_origin is None:
+   notice='Новый runtime доступен только локально. Запусти tester.py serve --browser chrome. Прежняя HTTPS-ссылка8af87b8f относится к958 и не проверяет этот билд. Новый телефонный проход BLOCKED до отдельной HTTPS-публикации; localhost на телефоне — сам телефон.\n'
+   if target=='START-HERE.html':text=text.replace('<main class="container">','<main class="container"><section class="card"><h2>Запусти новый билд локально</h2><p>'+notice+'</p><pre>py -3 tester.py serve --browser chrome</pre></section>')
+   else:text='# Локальный пакет: публикация и отправка не выполнены\n\n'+notice+'\n'+text
   write(packet/target,text.encode())
  source_hashes={}
  for name in AUTOMATION:
@@ -91,13 +96,13 @@ def main():
  zip_bytes(packet/'source-review.zip',source_rows)
  (packet/'builds').mkdir()
  zip_bytes(packet/'builds'/('Biotron-Web-'+commit[:7]+'.zip'),{n:p.read_bytes() for n,p in files.items()})
- report='# Результат Biotron958\n\nWeb: '+commit+'\nHelper: '+helper+'\n\nКомпьютер/OS/browser: UNKNOWN\nUSB/adapter/audio/board/firmware: UNKNOWN\nТелефон/OS/MIDI-app/adapter: UNKNOWN\nTotal time/help/retries: UNKNOWN\n\n| Case / platform | Result | Expected / actual | Evidence | Backup / restore |\n| --- | --- | --- | --- | --- |\n'
+ report='# Результат Biotron\n\nWeb: '+commit+'\nHelper: '+helper+'\n\nКомпьютер/OS/browser: UNKNOWN\nUSB/adapter/audio/board/firmware: UNKNOWN\nТелефон/OS/MIDI-app/adapter: UNKNOWN\nTotal time/help/retries: UNKNOWN\n\n| Case / platform | Result | Expected / actual | Evidence | Backup / restore |\n| --- | --- | --- | --- | --- |\n'
  for i in range(1,18):report+=f'| W{i:02} | '+('BLOCKED' if i in [10,14] else 'NOT_RUN')+' | | | |\n'
  report+='\nКаждую phone/DAW/CapCut связку писать отдельно. Software PASS не physical acceptance. Первую ошибку и Retry не объединять. Перед передачей проверить screenshots/trace/console и исключить секреты.\n'
  write(packet/'reference/REPORT-TEMPLATE.md',report.encode())
- status={'web_commit':commit,'helper_commit':helper,'online_origin':args.online_origin,'previous_285_delivery':'https://t.me/c/1797899795/32656','previous_b15_delivery':'https://t.me/c/1797899795/32637','software_exact_gate':'PASS12Oct; original Settings reload5000ms causeUNKNOWN/OPEN','windows_phone_daw_hearing_capcut':'NOT_RUN_FOR_THIS_PACKAGE','owner_mobile':'NOT_RUN_FOR_EXACT958','firmware_physical_cycle':'BLOCKED','public_test_input':'1.8.2 official metadata12Oct10:57UTC; no install approval','customer_release':False,'automatic_upload':False,'sent':False}
+ status={'web_commit':commit,'helper_commit':helper,'online_origin':args.online_origin,'previous_285_delivery':'https://t.me/c/1797899795/32656','previous_b15_delivery':'https://t.me/c/1797899795/32637','software_exact_gate':'PASS12Oct; original Settings reload5000ms causeUNKNOWN/OPEN','windows_phone_daw_hearing_capcut':'NOT_RUN_FOR_THIS_PACKAGE','owner_mobile':'NOT_RUN_FOR_EXACT_'+commit[:7],'firmware_physical_cycle':'BLOCKED','public_test_input':'1.8.2 official metadata12Oct10:57UTC; no install approval','customer_release':False,'automatic_upload':False,'sent':False}
  write(packet/'reference/ACCEPTANCE-STATUS.json',(json.dumps(status,ensure_ascii=False,indent=2)+'\n').encode())
- draft='Сергей @L_747, собрали один новый пакет для теста Biotron.\n\n'+args.online_origin+'/#/biotron/play?sound=1\n\nНачни с START-HERE.html: первый звук →Stop→Start. Для Claude есть исходники, точный билд и автоматические команды. Ночь не нужна; телефон отдельно. Прошивку пока не меняем.\n\nРезультат:958 · компьютер/телефон · Wxx · PASS/FAIL/NOT_RUN · наблюдение. Claude соберёт отчёт и логи командой tester.py bundle.\n\nDRAFT/NOT SENT; owner-mobile/scoped staff-send gate separate.\n'
+ draft='Сергей @L_747, собрали один новый пакет для теста Biotron.\n\n'+(args.online_origin+'/#/biotron/play?sound=1' if args.online_origin else 'Новый билд только локально: tester.py serve --browser chrome. Телефон после отдельной HTTPS-публикации.')+'\n\nНачни с START-HERE.html: первый звук →Stop→Start. Для Claude есть исходники, точный билд и автоматические команды. Ночь не нужна; телефон отдельно. Прошивку пока не меняем.\n\nРезультат:'+commit[:7]+' · компьютер/телефон · Wxx · PASS/FAIL/NOT_RUN · наблюдение. Claude соберёт отчёт и логи командой tester.py bundle.\n\nDRAFT/NOT SENT; owner-mobile/scoped staff-send gate separate.\n'
  write(packet/'reference/SERGEY-MESSAGE-DRAFT.md',draft.encode())
  manifest={'schema':'biotron.field-test-packet.v2','web_commit':commit,'helper_commit':helper,'online_url':args.online_origin+'/#/biotron/play?sound=1','firmware_channel':'public-stable','firmware_version':'1.8.2','firmware_source_commit':None,'firmware_sha256':STABLE_SHA,'firmware_test_input_only':True,'runtime_release_sha256':sha((args.runtime/'release-evidence.json').read_bytes()),'source_sha256':source_hashes,'vendor_versions':vendor_versions,'physical_windows_result':'NOT_RUN','physical_phone_result':'NOT_RUN','customer_release':False,'automatic_upload':False,'files':{p.relative_to(packet).as_posix():sha(p.read_bytes()) for p in sorted(packet.rglob('*')) if p.is_file()}}
  write(packet/'packet-manifest.json',(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n').encode())

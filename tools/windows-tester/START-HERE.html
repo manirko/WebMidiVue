@@ -11,8 +11,10 @@
 Давай одно действие и ожидаемый результат.
 Сохраняй first-fault, потом предлагай Retry.</pre><p class="muted">Python3.10+, Node20+, установленный Chrome/Edge. Doctor ничего не устанавливает.</p></section><section class="card"><h2>Запусти автопроход на ПК</h2><pre>py -3 tester.py verify
 py -3 tester.py doctor
-py -3 tester.py autotest --browser chrome --firmware</pre><p>После завершения Chrome можно отдельно выбрать Edge.</p><p class="muted">На Mac: python3 вместо py -3. MIDI и диск имитируются.</p><div class="note">Автотест не прошивает прибор. Реальный звук и USB проверяются вручную.</div></section></div>
+py -3 tester.py autotest --browser chrome --firmware</pre><p>Смотри текущий этап, шаг и прошедшие секунды в терминале. После отказа сохрани first-fault. Подтверди закрытие собственных процессов до новой команды.</p><p class="muted">На Mac: python3 вместо py -3. MIDI и диск имитируются.</p><p>Чтобы проверить один этап:</p><pre>py -3 tester.py autotest --browser chrome --phase sound
+py -3 tester.py autotest --browser chrome --phase settings
+py -3 tester.py autotest --browser chrome --phase firmware</pre><p>Частичный PASS относится только к указанному этапу.</p><div class="note">Автотест не прошивает прибор. Реальный звук и USB проверяются вручную.</div></section></div>
 <section class="card"><h2>Проверь телефон отдельно</h2><p>Освободи порт на компьютере. Открой эту же HTTPS-ссылку на телефоне.</p><p>Запиши OS, browser/MIDI-app и adapter. Следуй W13 из полного плана.</p><p>Настройки проверяй со своим backup и возвратом после каждого изменения.</p><p class="muted">BOOT, установка прошивки и rollback требуют отдельного допуска. Internal111 не включён.</p></section>
 <section class="card"><h2>Сохрани результат</h2><p>Заполни REPORT по шаблону. Каждую платформу запиши отдельно.</p><pre>py -3 tester.py bundle</pre><p>Просмотри отчёт и логи перед передачей. Автоматической отправки нет.</p><p><a href="reference/REPORT-TEMPLATE.md">Открыть шаблон отчёта</a> · <a href="CLAUDE.md">Инструкции Claude</a></p></section>
-<footer>Подготовлено12 октября2026. Packet v2 · Web {{WEB_COMMIT}} · Helper {{HELPER_COMMIT}}.<br>Windows/phone/DAW/CapCut/physical installation: NOT_RUN для этого пакета. Customer release не зарегистрирован.</footer>
+<footer>Подготовлено12 октября2026. Feedback follow-up · Web {{WEB_COMMIT}} · Helper {{HELPER_COMMIT}}.<br>Windows/phone/DAW/CapCut/physical installation: NOT_RUN для этого пакета. Customer release не зарегистрирован.</footer>
 </main></body></html>
