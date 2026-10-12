@@ -363,7 +363,7 @@ export default {
   watch: {
     keyboardOctave() { this.releaseHeldKeyboard() },
     selectedSound() { void this.applySelectedSound() },
-    audition(next, previous) { if (this.examplePlaying && next?.bankId !== previous?.bankId) void this.stop() },
+    audition(next, previous) { if (this.examplePlaying && (next?.bankId || 'classic') !== (previous?.bankId || 'classic')) void this.stop() },
     revealStage(stage) { trace('stage', stage); if (this.revealMode) recordBiotronEvent('play.stage_changed', {stage}) },
     '$route.meta.firstPlay'(play) { if (play) this.watchPlantSignal(); else this.midi?.stopPlantSignalWatch() },
     controlsVisible(visible) { if (visible) this.watchPlantSignal(); else this.midi?.stopPlantSignalWatch() }

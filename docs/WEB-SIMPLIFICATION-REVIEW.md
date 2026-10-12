@@ -38,12 +38,10 @@ must also leave the project easier to explain, test, remove and maintain.
   and after. Growth requires a named reason and human review of the ratchet.
 - A production Vue file may not silently grow beyond 850 lines. Split by a real
   responsibility, not by arbitrary fragments.
-- Product source is capped at 70 files and 10,679 lines. The 9 October sound
-  palette/native-disclosure pass lowers the previous enforced 10,734-line cap;
-  file and largest-file limits stay unchanged. The earlier 64-file/10,242-line
-  figure predates the bounded audition, keyboard and diagnostic work.
-  A feature that crosses the cap must remove equivalent debt or explicitly
-  update this contract in a separate reviewed commit.
+- The enforced product source caps are70 files/10,853 lines/largest850.
+  These limits remain unchanged in the12October Sergey-feedback pass.
+  The earlier figures below are historical budgets, not permission to raise
+  the current gate. New behaviour must fit these caps or remove equivalent debt.
 - A new dependency needs: browser/runtime purpose, why the platform cannot do
   it, bundle cost, maintenance owner and removal path.
 

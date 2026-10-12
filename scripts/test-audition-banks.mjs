@@ -7,6 +7,38 @@ import {AUDITION_BANKS, auditionEvents, auditionDuration, resolveAudition} from 
 import {selectSoundExperiment, restoreSoundExperiment, soundSessionState} from '../src/audio/sessionState.mjs'
 import {SOUNDS, toSound} from '../src/audio/elementary/timbres.mjs'
 
+test('six quick choices and sphere effects reuse the session with bounded/resettable real presets', () => {
+  const source=fs.readFileSync(new URL('../src/components/SoundLab/AudioCompare.vue',import.meta.url),'utf8').split('<script>')[1].split('</script>')[0]
+  const context={AUDITION_BANKS,resolveAudition,soundSessionState,selectSoundExperiment,module:{exports:{}},getSoundController:()=>player}
+  const player={variants:SOUNDS,currentVariant:0,chooseVariant(index){this.currentVariant=index;selectSoundExperiment(null,false)}}
+  vm.runInNewContext(source.replace(/^import .*$/gm,'').replace('export default','module.exports ='),context)
+  const component=context.module.exports, ui={calibrationOnly:false,...component.data()}
+  for(const [key,get] of Object.entries(component.computed))Object.defineProperty(ui,key,{get:()=>get.call(ui)})
+  for(const [key,fn] of Object.entries(component.methods))ui[key]=fn.bind(ui)
+  const previous=soundSessionState.audition
+  try {
+    assert.equal(ui.palette.length,6)
+    const families=new Set()
+    for(const choice of ui.palette){
+      ui.choose(choice.bankId,choice.id)
+      const base=choice.bankId==='classic'?SOUNDS[0]:resolveAudition(choice.bankId,choice.id).variant.preset
+      families.add(base.timbre+':'+base.cv.octave)
+      ui.adjust(-1,1);const dark=soundSessionState.audition.variant.preset
+      ui.adjust(1,1);const bright=soundSessionState.audition.variant.preset
+      assert(bright.fx.cutoff>dark.fx.cutoff)
+      for(const preset of [dark,bright]){
+        assert(Object.values(preset.fx).every(Number.isFinite))
+        assert(preset.fx.delayWet<=.35&&preset.fx.reverbWet<=.3&&preset.fx.delayFeedback<=.72)
+        assert.deepEqual(preset.cv,base.cv,'effect changed excitation/voices')
+      }
+      const last=soundSessionState.audition;ui.adjust('not a number',0);assert.equal(soundSessionState.audition,last)
+      ui.adjust(0,0);assert.deepEqual(JSON.parse(JSON.stringify(soundSessionState.audition.variant.preset)),JSON.parse(JSON.stringify(base)))
+      assert(Array.isArray(soundSessionState.audition.events),'Classic effects lost example phrase')
+    }
+    assert.equal(families.size,6,'quick palette repeats the same excitation/register pair; listening remains separate')
+  } finally { selectSoundExperiment(previous,false) }
+})
+
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 test('native key guard still rejects missing/duplicate/untrusted/cancelled delivery', () => {
   const source=fs.readFileSync(new URL('./test-audition-browser.js',import.meta.url),'utf8')
@@ -16,6 +48,14 @@ test('native key guard still rejects missing/duplicate/untrusted/cancelled deliv
   replay(healthy)
   for(const rows of [healthy.slice(0,5),[...healthy.slice(0,5),healthy[0]],healthy.map((row,i)=>i===0?{...row,trusted:false}:row),healthy.map((row,i)=>i===0?{...row,prevented:true}:row)])assert.throws(()=>replay(rows))
   assert(source.indexOf("fs.writeFileSync(path.join(artifacts,'native-control-keys.json')")<source.indexOf(guard),'key evidence must precede the assertion')
+})
+test('adjusting Classic effects preserves its running example; bank changes still stop', () => {
+  const line=fs.readFileSync(new URL('../src/components/SoundLab/SoundLab.vue',import.meta.url),'utf8').split('\n').find(line=>line.trim().startsWith('audition(next, previous)'))
+  const watch=vm.runInNewContext('('+line.trim().replace(/^audition/,'function').replace(/,$/,'')+')')
+  let stops=0;const player={examplePlaying:true,stop(){stops++}}
+  watch.call(player,{bankId:'classic'},null);assert.equal(stops,0)
+  watch.call(player,{bankId:'timbres'},{bankId:'classic'});assert.equal(stops,1)
+  watch.call(player,{bankId:'timbres'},{bankId:'timbres'});assert.equal(stops,1)
 })
 test('three ten-option banks and six handpan options with unique audible settings and a reference first', () => {
   assert.deepEqual(AUDITION_BANKS.map(bank => bank.variants.length), [10,10,10,6])

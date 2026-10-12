@@ -61,8 +61,13 @@ profiles, keyboard43, visual11, Chrome PWA and production isolation pass on
 ## Project setup
 
 The Biotron beta **Play** page has **Play with keyboard** and **Octave**.
-Open **Sound** below the visual to choose Classic, Timbres, High-note treatments
-or Handpan. **Settings → Experiments** contains calibration cues and the calmer
+Open **Sound** below the visual for six quick choices: Round, Reed, Bass, Pluck,
+Air and Handpan. **All sounds & register effects** keeps the original banks.
+Upper-note processing acts above C5; it is an effect, not a separate instrument.
+**Sound sphere · Experiment** maps horizontal drag to a sound and vertical drag
+to a bounded filter. Buttons/sliders and Reset work without dragging. Space
+uses the existing effects; adjustments survive routes in this session, but reload
+restores the base sound. This palette still needs human listening acceptance. **Settings → Experiments** contains calibration cues and the calmer
 plant response action. Enable keyboard mode on Play before using it in Settings;
 both routes share the same player.
 
@@ -354,6 +359,11 @@ layers, explicit change budget) lives at the top of
 writes stop after device switch, disconnect or close; the browser PWA gate
 measures responsiveness during a complete settings write. The
 same document records the staged simplification plan and rejected rewrites.
+
+The field helper now reports stage/elapsed time and supports --phase sound,
+--phase settings and --phase firmware. The combined gate retains one600s
+budget and stops on first failure. Attempt-bound own-browser close receipts
+are required before continuing; these are not global process/DAW ownership.
 
 The browser lifecycle test uses an installed Chrome/Chromium (`CHROME_PATH` can
 override discovery) and covers service-worker install/control, offline direct

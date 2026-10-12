@@ -241,7 +241,7 @@ async function auditProfile(browser, origin, profile) {
         has: page.locator('summary').filter({hasText: new RegExp('^' + name + '$')})
       })
       assert.equal(await section.count(), 1, `${profile.name}: missing ${name} section`)
-      if (!await section.evaluate(element => element.open)) await section.locator('summary').click()
+      if (!await section.evaluate(element => element.open)) await section.locator(':scope > summary').click()
       await section.locator('input:visible, select:visible').first().waitFor()
       opened.push({name, section})
       for (const previous of opened) {
@@ -357,7 +357,7 @@ async function auditProfile(browser, origin, profile) {
     `${profile.name}: Sound opened without a user request`)
   assert.equal(await sound.locator('.audio-compare').count(), 0,
     `${profile.name}: unopened Sound mounted its lazy controls`)
-  await sound.locator('summary').click()
+  await sound.locator(':scope > summary').click()
   await sound.getByLabel('Sound', {exact: true}).waitFor()
   assert(await sound.evaluate(element => element.open), `${profile.name}: Sound did not open`)
   assert.equal(await sound.getByLabel('Sound', {exact: true}).locator('option').count(), 7,
@@ -405,7 +405,7 @@ async function auditProfile(browser, origin, profile) {
   // Real example playback must keep the same player and sound when Settings opens.
   const nav = page.getByRole('navigation', {name: 'Biotron tasks'})
   const palette = page.locator('.sound-palette')
-  if (!await palette.evaluate(element => element.open)) await palette.locator('summary').click()
+  if (!await palette.evaluate(element => element.open)) await palette.locator(':scope > summary').click()
   await palette.getByRole('button', {name: 'Listen to example', exact: true}).click()
   await page.locator('.sound-lab[data-example="playing"][data-audio-state="running"]').waitFor()
   const playingSound = await page.locator('.sound-lab').getAttribute('data-sound')
@@ -710,7 +710,7 @@ async function auditJourneys(browser, origin) {
             route = action
           } else if (action === 'Example') {
             const palette = page.locator('.sound-palette')
-            if (!await palette.evaluate(element => element.open)) await palette.locator('summary').click()
+            if (!await palette.evaluate(element => element.open)) await palette.locator(':scope > summary').click()
             await palette.getByRole('button', {name: running ? 'Stop example' : 'Listen to example', exact: true}).click()
             running = !running
           } else if (running) {
