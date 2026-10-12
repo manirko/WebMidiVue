@@ -18,12 +18,10 @@ const uuid = () => globalThis.crypto?.randomUUID?.() || null
 let sessionId = null
 let eventsRecorded = 0
 let sessionStarted = false
-
 export function diagnosticSessionId() {
   if (!sessionId) sessionId = uuid()
   return sessionId
 }
-
 function environment() {
   const ua = globalThis.navigator?.userAgent || ''
   return {
@@ -35,7 +33,6 @@ function environment() {
     mobile: /Android|iPhone|iPad/.test(ua)
   }
 }
-
 function safeAttributes(input) {
   const attributes = {}
   if (RESULTS.has(input.result)) attributes.result = input.result
@@ -62,7 +59,6 @@ function safeAttributes(input) {
   }
   return attributes
 }
-
 export function recordSettingsState(state, previous, firmwareVersion) {
   recordBiotronEvent('settings.state_changed', {
     stage: state, firmware_version: firmwareVersion,
@@ -71,7 +67,6 @@ export function recordSettingsState(state, previous, firmwareVersion) {
       previous === 'connecting' ? 'connection_failed' : 'save_unconfirmed' : undefined
   })
 }
-
 export function recordBiotronEvent(eventName, input = {}) {
   if (!beta || !EVENT_NAMES.has(eventName) || eventsRecorded >= 80 ||
       globalThis.navigator?.onLine === false || !globalThis.fetch) return
@@ -95,21 +90,23 @@ export function recordBiotronEvent(eventName, input = {}) {
     } catch { /* Diagnostics must never interrupt play. */ }
   }, 0)
 }
-
-// Local-only bounded evidence. No serials, raw MIDI, paths or error messages.
+// Local-only bounded evidence. Port names may identify a setup; preview before sharing. Never uploaded.
 const KEY = 'biotron.firmware-journal.v1'
 const PHASES = new Set(['idle', 'preparing', 'prepared', 'manual-boot', 'booting', 'select-drive', 'writing', 'reconnecting', 'complete', 'verification-error', 'preflight-error', 'booting-error', 'select-drive-error', 'reconnecting-error'])
-export function recordFirmwarePhase(phase, installed, target) {
+const FIRMWARE_ERRORS = new Set(['metadata_failed', 'download_failed', 'descriptor_invalid', 'size_mismatch', 'checksum_mismatch', 'uf2_invalid', 'drive_mismatch', 'write_failed', 'cancelled', 'permission_denied', 'device_changed', 'reconnect_timeout', 'unknown'])
+const journalVersion = value => /^\d{1,2}\.\d{1,2}\.\d{1,2}$/.test(value || '') ? value : null
+const journalText = value => typeof value === 'string' ? value.replace(/[\x00-\x1f\x7f]/g, '').slice(0, 80) : null
+const journalEntry = entry => ({at: journalText(entry.at), phase: entry.phase, installed: journalVersion(entry.installed), target: journalVersion(entry.target), reported: journalVersion(entry.reported), build: journalText(entry.build),
+  attempt: /^[a-f0-9-]{36}$/i.test(entry.attempt || '') ? entry.attempt : null, port_name: journalText(entry.port_name),
+  channel: ['internal', 'public-stable'].includes(entry.channel) ? entry.channel : null, error: FIRMWARE_ERRORS.has(entry.error) ? entry.error : null})
+export function recordFirmwarePhase(phase, installed, target, context = {}) {
   if (!PHASES.has(phase)) return
   try {
-    const storage = globalThis.localStorage
-    const stored = JSON.parse(storage.getItem(KEY) || '[]')
-    const entries = Array.isArray(stored) ? stored : []
-    const version = value => /^\d{1,2}\.\d{1,2}\.\d{1,2}$/.test(value || '') ? value : null
-    entries.push({at: new Date().toISOString(), phase, installed: version(installed), target: version(target), build: process.env.VUE_APP_BUILD_ID || 'local-build'})
-    storage.setItem(KEY, JSON.stringify(entries.slice(-200)))
+    const entries = exportFirmwareJournal()
+    entries.push(journalEntry({at: new Date().toISOString(), phase, installed, target, reported: context.reported, attempt: context.attempt, port_name: context.device?.name, channel: context.channel, error: context.error, build: process.env.VUE_APP_BUILD_ID || 'local-build'}))
+    globalThis.localStorage.setItem(KEY, JSON.stringify(entries.slice(-200)))
   } catch { /* Logging cannot interrupt a firmware action. */ }
 }
 export function exportFirmwareJournal() {
-  try { return JSON.parse(globalThis.localStorage.getItem(KEY) || '[]') } catch { return [] }
+  try { const entries = JSON.parse(globalThis.localStorage.getItem(KEY) || '[]'); return Array.isArray(entries) ? entries.slice(-200).filter(entry => entry && PHASES.has(entry.phase)).map(journalEntry) : [] } catch { return [] }
 }

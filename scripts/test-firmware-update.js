@@ -15,8 +15,8 @@ const compiled = babel.transformSync(source, {
 
 const digest = 'a'.repeat(64)
 const trustedAsset = {
-  name: 'biotron-firmware_1.8.2.uf2',
-  browser_download_url: 'https://github.com/Playtronica/biotron-firmware/releases/download/1.8.2/biotron-firmware_1.8.2.uf2',
+  name: 'biotron-firmware_v1.8.2.uf2',
+  browser_download_url: 'https://github.com/Playtronica/biotron-firmware/releases/download/1.8.2/biotron-firmware_v1.8.2.uf2',
   digest: `sha256:${digest}`,
   size: 1024
 }
@@ -82,7 +82,7 @@ const arrayBuffer = buffer => buffer.buffer.slice(buffer.byteOffset, buffer.byte
   assert.doesNotMatch(updateComponent, /Unknown or older firmware needs the hardware BOOT|Biotron is now drive RPI-RP2/)
   assert.match(updateComponent, /https:\/\/help\.playtronica\.com\/troubleshooting\/firmware-reset\/#biotron-recovery/)
   assert.match(updateComponent, /Confirm your board with support before touching contacts/)
-  assert.match(updateComponent, /<a v-if="versionAware && !currentVersion && device"[^>]+>Cannot read the version\? Biotron recovery help<\/a>/)
+  assert.match(updateComponent, /<a v-if="versionAware && !knownVersion && device && !prepared"[^>]+>Cannot read the version\? Biotron recovery help<\/a>/)
   assert.match(updateComponent, /An update can reset them, even when software BOOT is available/)
   assert.match(updateComponent, /<p v-if="versionAware && manualBoot" class="alert alert-warning">/)
   assert.match(updateComponent, /Downloading and checking firmware/)
@@ -99,7 +99,7 @@ const arrayBuffer = buffer => buffer.buffer.slice(buffer.byteOffset, buffer.byte
   // W4 (Sergey, 2026-09-08): he went looking for the downloaded file. The page must say it kept the
   // firmware in memory, and must offer the file itself as an equal manual fallback.
   assert.match(updateComponent, /is checked and held in this page — nothing was saved to your computer/)
-  assert.match(updateComponent, /<a :href="latest\.url" :download="latest\.name">save \{\{ latest\.name \}\}<\/a>/)
+  assert.match(updateComponent, /<a :href="firmware\.url" :download="firmware\.name">save \{\{ firmware\.name \}\}<\/a>/)
   assert.match(updateComponent, /copy the saved file onto the disk named RPI-RP2/)
   assert(updateComponent.includes("'Biotron did not report its firmware version.' : 'No Biotron over MIDI.'"))
   assert.doesNotMatch(updateComponent, /public updater is intentionally disabled/i)
@@ -234,7 +234,63 @@ const arrayBuffer = buffer => buffer.buffer.slice(buffer.byteOffset, buffer.byte
     assert.strictEqual(writes[1], 'closed')
   }
 
+  const tampered = {...fetched, buffer: fetched.buffer.slice(0)}
+  new Uint8Array(tampered.buffer)[40] ^= 1
+  let picks = 0
+  await assert.rejects(() => updater.writeFirmware(tampered, firmware, async () => { picks++; return bootDrive('RPI-RP2') }), /changed|checksum/)
+  assert.strictEqual(picks, 0, 'Altered bytes reached the directory boundary')
+
   await assert.rejects(() => updater.writeFirmware(fetched, firmware, null), /computer with Chrome or Edge/)
+
+  // UF2 mutations hit independent trust-boundary checks. Valid out-of-order blocks remain valid.
+  const corruptions = [
+    ['start marker', bytes => bytes.writeUInt32LE(0, 0)], ['end marker', bytes => bytes.writeUInt32LE(0, 508)],
+    ['empty payload', bytes => bytes.writeUInt32LE(0, 16)], ['large payload', bytes => bytes.writeUInt32LE(480, 16)],
+    ['unaligned payload', bytes => bytes.writeUInt32LE(3, 16)], ['unaligned target', bytes => bytes.writeUInt32LE(0x10000001, 12)],
+    ['wrong block count', bytes => bytes.writeUInt32LE(1, 24)], ['bad sequence', bytes => bytes.writeUInt32LE(999999, 20)],
+    ['duplicate sequence', bytes => bytes.writeUInt32LE(0, 512 + 20)], ['wrong family', bytes => bytes.writeUInt32LE(0, 28)],
+    ['no family flag', bytes => bytes.writeUInt32LE(0, 8)], ['not-main-flash flag', bytes => bytes.writeUInt32LE(0x2001, 8)],
+    ['file-container flag', bytes => bytes.writeUInt32LE(0x3000, 8)], ['overlap', bytes => bytes.writeUInt32LE(bytes.readUInt32LE(12), 512 + 12)],
+    ['settings sector', bytes => bytes.writeUInt32LE(0x10080000, 12)]
+  ]
+  for (const [name, mutate] of corruptions) { const bytes = Buffer.from(firmwareBytes); mutate(bytes); assert.throws(() => updater.inspectBiotronUf2(arrayBuffer(bytes)), {name: 'Error'}, name) }
+  const permuted = Buffer.concat([firmwareBytes.subarray(512), firmwareBytes.subarray(0, 512)])
+  assert.strictEqual(updater.inspectBiotronUf2(arrayBuffer(permuted)).blocks, uf2.blocks)
+  for (const bytes of [Buffer.alloc(0), firmwareBytes.subarray(1), firmwareBytes.subarray(0, -512)]) assert.throws(() => updater.inspectBiotronUf2(arrayBuffer(bytes)))
+  await assert.rejects(() => updater.prepareFirmware({...firmware, size: firmware.size + 1}, fetchFirmware, crypto.webcrypto), error => error.firmwareCode === 'size_mismatch')
+  await assert.rejects(() => updater.prepareFirmware(firmware, async () => { throw new Error('private network details') }, crypto.webcrypto), error => error.firmwareCode === 'download_failed' && !error.message.includes('private'))
+  await assert.rejects(() => updater.prepareFirmware(firmware, async () => ({ok: true, arrayBuffer: async () => { throw new Error('partial body') }}), crypto.webcrypto), error => error.firmwareCode === 'download_failed')
+  await assert.rejects(() => updater.prepareFirmware(firmware, fetchFirmware, {}), /verify firmware securely/)
+
+  await assert.rejects(() => updater.writeFirmware(fetched, firmware, async () => { throw new DOMException('picker cancelled', 'AbortError') }), error => error.firmwareCode === 'cancelled', 'Native picker AbortError lost its cancellation classification')
+
+  const ioResults = []
+  for (const failAt of ['pick', 'create', 'open', 'write', 'close', 'abort']) {
+    const events = [], ioError = Object.assign(new Error(`fixture-${failAt}`), {name: failAt === 'pick' ? 'NotAllowedError' : 'AbortError'})
+    const volume = {name: '\\', getFileHandle: async (name, options) => {
+      if (name === 'INFO_UF2.TXT') return {getFile: async () => ({text: async () => INFO_UF2})}
+      events.push('create'); if (failAt === 'create') throw ioError
+      assert.strictEqual(options.create, true)
+      return {createWritable: async () => {
+        events.push('open'); if (failAt === 'open') throw ioError
+        return {write: async bytes => {events.push('write'); assert.strictEqual(bytes.length, firmware.size); if (failAt === 'write' || failAt === 'abort') throw ioError},
+          close: async () => {events.push('close'); if (failAt === 'close') throw ioError},
+          abort: async () => {events.push('abort'); if (failAt === 'abort') throw new Error('abort unavailable')}}
+      }}
+    }}
+    await assert.rejects(() => updater.writeFirmware(fetched, firmware, async () => {if (failAt === 'pick') throw ioError; return volume}), error => error.firmwareCode === (failAt === 'pick' ? 'permission_denied' : 'write_failed'))
+    assert(!events.includes('close') || failAt === 'close'); if (['write', 'close', 'abort'].includes(failAt)) assert(events.includes('abort'))
+    ioResults.push({failAt, events, result: 'rejected; no copy-success claim'})
+  }
+  // Copy a private snapshot: mutation while the asynchronous directory picker is open cannot change written bytes.
+  const duringPick = {...fetched, buffer: fetched.buffer.slice(0)}; writes.length = 0
+  await updater.writeFirmware(duringPick, firmware, async () => {new Uint8Array(duringPick.buffer)[40] ^= 1; return bootDrive('RPI-RP2')})
+  assert(writes[0].equals(firmwareBytes))
+  for (const asset of [{...trustedAsset, name: 'biotron-firmware_v1.9.0.uf2'}, {...trustedAsset, browser_download_url: trustedAsset.browser_download_url.replace('/1.8.2/', '/1.9.0/')}]) {
+    const result = await runLegacy({online: true, response: {ok: true, json: async () => ({tag_name: '1.8.2', assets: [asset]})}})
+    assert(result.error); assert.deepStrictEqual(result.events, [])
+  }
+  console.log(JSON.stringify({uf2FaultsRejected: corruptions.length + 3, ioFailures: ioResults, writeSnapshotAndHash: 'PASS', assetVersionMismatch: 'held'}, null, 2))
 
   console.log('Firmware update verified: exact beta UF2 is hash/size/structure checked before BOOT; only RPI-RP2 receives bytes; failures stay fail-closed.')
 })().catch(error => {
@@ -247,6 +303,8 @@ function contextForHelpers() {
     exports: {},
     module: {exports: {}},
     navigator: {onLine: true},
+    crypto: crypto.webcrypto,
+    AbortSignal,
     require: () => ({bootDevice: async () => {}})
   }
   helperContext.exports = helperContext.module.exports
@@ -265,7 +323,10 @@ async function testComponentStateMachine(componentSource) {
   const calls = []
   const busyOwners = new Set()
   let writeFailure = null
+  let bootFailure = null
   let writeGate = null
+  let prepareFailure = null, prepareGate = null
+  const journal = []
   const prepared = {buffer: new ArrayBuffer(512), sha256: '38c7fd35ef5e456d86b03f50f380d499519835fa84b7516fbd7b1cd1012b91da'}
   const context = {
     exports: {},
@@ -281,6 +342,7 @@ async function testComponentStateMachine(componentSource) {
     window: {
       addEventListener: () => {},
       removeEventListener: () => {},
+      crypto: crypto.webcrypto,
       showDirectoryPicker: async () => ({name: 'RPI-RP2'})
     },
     setTimeout: fn => {
@@ -289,7 +351,7 @@ async function testComponentStateMachine(componentSource) {
     },
     clearTimeout: id => calls.push(['clear', id]),
     require: name => {
-      if (name === '@/biotron/telemetry.mjs') return {recordFirmwarePhase: () => {}}
+      if (name === '@/biotron/telemetry.mjs') return {recordFirmwarePhase: (phase, installed, target, context) => journal.push({phase, installed, target, ...context})}
       if (name === '@/appUpdateSafety.mjs') return {setFirmwareUpdateBusy: (owner, busy) => {
         if (busy) busyOwners.add(owner)
         else busyOwners.delete(owner)
@@ -297,10 +359,13 @@ async function testComponentStateMachine(componentSource) {
       if (name === '@/assets/js/LoadFirmware') {
         return {
           compareFirmwareVersions: contextForHelpers().compareFirmwareVersions,
+          isFirmwareVersion: contextForHelpers().isFirmwareVersion,
           GetLatestFirmware: async () => {},
           LoadFirmware: async () => {},
           prepareFirmware: async firmware => {
             calls.push(['prepare', firmware.version])
+            if (prepareFailure) throw prepareFailure
+            if (prepareGate) await prepareGate
             return prepared
           },
           writeFirmware: async (value, firmware) => {
@@ -311,7 +376,7 @@ async function testComponentStateMachine(componentSource) {
         }
       }
       if (name === '@/assets/js/SysExCommand') {
-        return {bootDevice: async device => calls.push(['boot', device])}
+        return {bootDevice: async device => { calls.push(['boot', device]); if (bootFailure) throw bootFailure }}
       }
       throw new Error(`Unexpected import: ${name}`)
     }
@@ -320,7 +385,7 @@ async function testComponentStateMachine(componentSource) {
   vm.runInNewContext(compiledComponent, context)
   const definition = context.module.exports.default
   const build = props => {
-    const instance = {...definition.data(), repo: 'Playtronica/biotron-firmware', versionAware: true, ...props}
+    const instance = {...definition.data(), $emit: (...event) => calls.push(['emit', ...event]), repo: 'Playtronica/biotron-firmware', versionAware: true, ...props}
     let phase = instance.phase
     Object.defineProperty(instance, 'phase', {get: () => phase, set: value => {
       phase = value
@@ -348,11 +413,13 @@ async function testComponentStateMachine(componentSource) {
   assert.match(instance.message, drive)
   assert.match(instance.message, /request sent\. Check that RPI-RP2 appears/)
   assert.doesNotMatch(instance.message, /is now drive/)
+  instance.device = null; instance.currentVersion = ''
   await instance.runStep()
   assert.strictEqual(instance.phase, 'reconnecting')
   assert(busyOwners.has(instance), 'Version verification did not guard against app reload')
   assert.strictEqual(calls[2][0], 'write')
-  definition.watch.currentVersion.call(instance, '1.9.8')
+  instance.device = 'selected-midi-output'; instance.currentVersion = '1.9.8'
+  definition.watch.currentVersion.call(instance, instance.currentVersion)
   assert.strictEqual(instance.phase, 'complete')
   assert.strictEqual(instance.prepared, null)
   assert(!busyOwners.has(instance), 'A verified update left the app reload guard stuck')
@@ -388,7 +455,8 @@ async function testComponentStateMachine(componentSource) {
   await lost.runStep()
   assert.strictEqual(lost.phase, 'reconnecting')
   assert.deepStrictEqual(calls.map(call => call[0]), ['prepare', 'write', 'timer'])
-  definition.watch.currentVersion.call(lost, '1.9.8')
+  lost.device = {id: 'recovered-port', name: 'Biotron'}; lost.currentVersion = '1.9.8'
+  definition.watch.currentVersion.call(lost, lost.currentVersion)
   assert.strictEqual(lost.phase, 'complete')
 
   // Device visible but version unknown: the button asks the parent to check firmware, the modal path is not taken.
@@ -408,7 +476,7 @@ async function testComponentStateMachine(componentSource) {
   writeFailure = new Error('Select the RPI-RP2 drive. No file was written.')
   await retry.runStep()
   assert.strictEqual(retry.phase, 'select-drive')
-  assert.strictEqual(retry.error, 'Select the RPI-RP2 drive. No file was written.')
+  assert.match(retry.error, /^Select the RPI-RP2 drive\. No file was written\./)
   assert.strictEqual(retry.actionDisabled, false)
   writeFailure = null
   await retry.runStep()
@@ -446,6 +514,22 @@ async function testComponentStateMachine(componentSource) {
   assert.strictEqual(stable.phase, 'prepared')
   await stable.runStep()
   assert.deepStrictEqual(calls.map(call => call[0]), ['prepare', 'boot'])
+  // BOOT removes the normal MIDI ports: the selected, verified target must survive the version clearing.
+  stable.device = null
+  stable.currentVersion = ''
+  assert.strictEqual(stable.ready, true, 'Public route lost its verified target when BOOT disconnected MIDI')
+  await stable.runStep()
+  assert.strictEqual(stable.phase, 'reconnecting')
+  assert.strictEqual(calls.filter(call => call[0] === 'write').length, 1)
+
+  // The BOOT transport can fail as MIDI disappears. Keep the checked file and an explicit drive/recovery step.
+  bootFailure = new Error('Port disconnected')
+  const bootError = build({device: 'stable-output', currentVersion: '1.7.4', latest: internalFirmwareForTest()})
+  await bootError.runStep()
+  await bootError.runStep()
+  assert.strictEqual(bootError.phase, 'select-drive', 'BOOT error stranded a checked update without an action')
+  assert.match(bootError.message, /RPI-RP2/)
+  bootFailure = null
   for (const version of ['1.8.2', '1.10.10']) {
     calls.length = 0
     const current = build({device: 'current-output', currentVersion: version, latest: internalFirmwareForTest()})
@@ -460,6 +544,84 @@ async function testComponentStateMachine(componentSource) {
   assert.strictEqual(dropped.phase, 'prepared')
   dropped.device = null
   assert.strictEqual(dropped.actionDisabled, true)
+
+  const matrix = []
+  // These are program routes based on the retained source/version gate, not installed customer binaries.
+  const versions = ['1.1.0', '1.2.1', '1.2.2', '1.2.5', '1.3.0', '1.4.0', '1.5.0', '1.6.4', '1.7.3', '1.7.4', '1.8.2', '1.9.8', '1.10.9', '1.10.10', '1.10.11']
+  for (const target of ['1.8.2', '1.10.10']) for (const installed of versions) {
+    calls.length = 0
+    const device = {id: `fixture-${installed}`, name: 'Biotron Port 1'}
+    const item = build({device, currentVersion: installed, latest: {...internalFirmwareForTest(), version: target, internal: target === '1.10.10'}})
+    const newer = contextForHelpers().compareFirmwareVersions(target, installed) > 0
+    assert.strictEqual(item.available, newer, `${installed} → ${target}`)
+    await item.runStep()
+    if (!newer) { assert.deepStrictEqual(calls, []); assert.strictEqual(item.ready, false) }
+    else {
+      assert.strictEqual(item.phase, 'prepared')
+      await item.runStep()
+      assert.strictEqual(item.phase, 'select-drive')
+      assert.strictEqual(calls.filter(call => call[0] === 'boot').length, installed === '1.7.4' || contextForHelpers().compareFirmwareVersions(installed, '1.7.4') > 0 ? 1 : 0)
+      assert.strictEqual(item.actionDisabled, true, 'MIDI-visible unit must not write to some other RP2040 drive')
+      await item.runStep(); assert.strictEqual(item.phase, 'select-drive'); assert.strictEqual(item.fault, 'device_changed')
+      assert.strictEqual(calls.filter(call => call[0] === 'write').length, 0)
+      item.device = null; item.currentVersion = ''; item.online = false
+      assert.strictEqual(item.actionDisabled, false, 'Checked offline file got stranded after BOOT')
+      await item.runStep(); assert.strictEqual(item.phase, 'reconnecting')
+      assert.strictEqual(item.buttonText, 'Continue firmware update')
+      const timer = calls.findLast(call => call[0] === 'timer')[1]
+      // Same version on another MIDI identity is insufficient.
+      item.device = {id: 'another-unit', name: 'Biotron Port 1'}; item.currentVersion = target
+      definition.watch.currentVersion.call(item, target); assert.strictEqual(item.phase, 'reconnecting')
+      timer(); assert.strictEqual(item.phase, 'verification-error'); assert.strictEqual(item.fault, 'reconnect_timeout')
+      await item.runStep(); assert(calls.some(call => call[0] === 'emit' && call[1] === 'check_firmware'))
+      item.device = {...device}; definition.watch.device.call(item, item.device)
+      assert.strictEqual(item.phase, 'complete'); assert(!busyOwners.has(item)); assert.strictEqual(item.prepared, null)
+    }
+    matrix.push({installed, target, route: newer ? contextForHelpers().compareFirmwareVersions(installed, '1.7.4') < 0 ? 'identified-board/help; no software BOOT' : 'software request, disconnected drive, reported-version check' : 'no downgrade/reinstall'})
+    definition.beforeUnmount.call(item)
+  }
+  for (const version of ['', '1.7', '1.8.2-beta', 'unknown', 'NaN', '1.2.9007199254740993']) {
+    calls.length = 0
+    const item = build({device: {id: 'unknown-unit'}, currentVersion: version, latest: internalFirmwareForTest()})
+    assert.strictEqual(item.knownVersion, false); assert.strictEqual(item.ready, false)
+    assert.strictEqual(item.buttonText, 'Check firmware'); await item.runStep(); assert.deepStrictEqual(calls, [])
+    definition.beforeUnmount.call(item)
+  }
+  // Download errors/cancellation never become the drive-selection step.
+  prepareFailure = Object.assign(new Error('network timed out'), {name: 'AbortError', firmwareCode: 'download_failed'})
+  const interrupted = build({device: {id: 'fixture'}, currentVersion: '1.9.7'})
+  await interrupted.runStep(); assert.strictEqual(interrupted.phase, 'preflight-error'); assert.strictEqual(interrupted.prepared, null)
+  assert.strictEqual(interrupted.fault, 'download_failed'); assert.match(interrupted.actionText, /Try again/)
+  prepareFailure = null; await interrupted.runStep(); assert.strictEqual(interrupted.phase, 'prepared')
+  interrupted.device = {id: 'replacement'}
+  calls.length = 0; await interrupted.runStep()
+  assert.strictEqual(interrupted.prepared, null); assert.strictEqual(interrupted.phase, 'preflight-error')
+  assert.deepStrictEqual(calls, [], 'Replacement device received a BOOT command'); definition.beforeUnmount.call(interrupted)
+
+  // A metadata change cannot replace a checked attempt's target during copy.
+  const pinned = build({device: null, currentVersion: ''}); await pinned.runStep()
+  pinned.latest = {...pinned.latest, version: '1.10.10'}
+  calls.length = 0; await pinned.runStep()
+  assert.strictEqual(calls.find(call => call[0] === 'write')[2], '1.9.8'); definition.beforeUnmount.call(pinned)
+
+  // Duplicate actions are rejected at the method boundary, even if the DOM has not disabled yet.
+  let finishPrepare
+  prepareGate = new Promise(resolve => { finishPrepare = resolve })
+  const double = build({device: null, currentVersion: ''}); calls.length = 0
+  const firstPrepare = double.runStep(); await double.runStep(); assert.strictEqual(double.runStepPending, true, 'Duplicate action released pending operation guard'); assert.strictEqual(calls.filter(call => call[0] === 'prepare').length, 1)
+  finishPrepare(); await firstPrepare; prepareGate = null
+  let finishDouble
+  writeGate = new Promise(resolve => { finishDouble = resolve }); calls.length = 0
+  const firstWrite = double.runStep(); await double.runStep(); assert.strictEqual(calls.filter(call => call[0] === 'write').length, 1)
+  // Firmware replies can arrive before close() resolves: do not lose the only version event.
+  double.device = {id: 'returned', name: 'Biotron'}; double.currentVersion = '1.9.8'
+  definition.watch.currentVersion.call(double, double.currentVersion)
+  assert.strictEqual(double.phase, 'writing')
+  finishDouble(); await firstWrite; writeGate = null
+  assert.strictEqual(double.phase, 'complete'); assert(!busyOwners.has(double)); definition.beforeUnmount.call(double)
+  const before = calls.length; await double.runStep(); assert.strictEqual(calls.length, before, 'Unmounted updater performed another action')
+  assert(journal.some(entry => entry.error === 'reconnect_timeout' && entry.reported === entry.target && entry.attempt), 'Failure did not retain its attempt/version context')
+  console.log(JSON.stringify({firmwareVersionRoutes: matrix, malformedVersionsHeld: 6, controls: ['MIDI loss', 'wrong unit', 'still-MIDI guard', 'offline checked file', 'download timeout/retry', 'pre-BOOT replacement', 'pinned target', 'double prepare/write', 'early reported version', 'unmount']}, null, 2))
 }
 
 function internalFirmwareForTest() { return {version: '1.8.2', ...trustedAsset, url: trustedAsset.browser_download_url, sha256: digest} }

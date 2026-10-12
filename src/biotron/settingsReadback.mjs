@@ -1,6 +1,5 @@
 import {withMidiWriteSession} from "../assets/js/timing.mjs"
-import {diagnosticSessionId} from "./telemetry.mjs"
-
+import {diagnosticSessionId, exportFirmwareJournal} from "./telemetry.mjs"
 export const SETTINGS_QUERY_ID = 123
 export const SETTINGS_PROTOCOL_VERSION = 1
 export const SETTINGS_SCHEMA_VERSION = 1
@@ -11,7 +10,6 @@ export const CALMER_PLAY_SETTINGS = [
   ["performance", 1],
   ["same_note_plant", 2]
 ]
-
 const FIELD_NAMES = [
   'lightBpm', 'noteOffPercent', 'noteDistance', 'firstValue', 'smoothness',
   'scale', 'minPlantVelocity', 'maxPlantVelocity', 'minLightVelocity',
@@ -21,17 +19,13 @@ const FIELD_NAMES = [
   'performance', 'middle_plant_note', 'plant_midi_channel',
   'light_midi_channel', 'swing_first_note_percent', 'button_mode_state'
 ]
-
 const u7 = value => Math.max(0, Math.min(127, Math.round(Number(value) || 0)))
-
 export function buildSettingsQuery(requestId, source = SETTINGS_SOURCE_PERSISTED) {
   return [0xf0, 0x14, 0x0d, SETTINGS_QUERY_ID, u7(source), u7(requestId), 0xf7]
 }
-
 function decodeU35(bytes) {
   return bytes.reduce((value, byte, index) => value + (byte * (2 ** (7 * index))), 0)
 }
-
 export function parseSettingsResponse(input, expectedRequestId) {
   const data = Array.from(input || [])
   if (data.length !== 47 || data[0] !== 0xf0 || data[1] !== 0x14 ||
@@ -39,7 +33,6 @@ export function parseSettingsResponse(input, expectedRequestId) {
   if (data.slice(1, -1).some(byte => !Number.isInteger(byte) || byte < 0 || byte > 0x7f)) return null
   if (data[4] !== SETTINGS_PROTOCOL_VERSION || data[5] !== SETTINGS_SCHEMA_VERSION ||
       data[6] !== SETTINGS_SOURCE_PERSISTED || data[7] !== u7(expectedRequestId)) return null
-
   const flags = data[8]
   if (flags & ~3) return null
   return {
@@ -50,14 +43,12 @@ export function parseSettingsResponse(input, expectedRequestId) {
     values: data.slice(19, 46)
   }
 }
-
 export function settingsVectorFromCommands(commands) {
   const bpm = Math.max(0, Math.min(16383, Math.round(Number(commands.plantBpm.value) || 0)))
   const values = [bpm & 0x7f, (bpm >> 7) & 0x7f]
   for (const name of FIELD_NAMES) values.push(u7(commands[name].value))
   return values
 }
-
 export function applySettingsVector(commands, values) {
   if (!Array.isArray(values) || values.length !== SETTINGS_VECTOR_LENGTH) {
     throw new Error('Unsupported Biotron settings response.')
@@ -65,13 +56,11 @@ export function applySettingsVector(commands, values) {
   commands.plantBpm.set_value(values[0] | (values[1] << 7))
   FIELD_NAMES.forEach((name, index) => commands[name].set_value(values[index + 2]))
 }
-
 export function settingsVectorsEqual(left, right) {
   return Array.isArray(left) && Array.isArray(right) &&
     left.length === SETTINGS_VECTOR_LENGTH && right.length === SETTINGS_VECTOR_LENGTH &&
     left.every((value, index) => value === right[index])
 }
-
 export function savedSettingsMessage(lastChangedSetting) {
   if (lastChangedSetting === "noteOffPercent") {
     return "Saved on Biotron. Note Hold changes note length, not the LEDs."
@@ -81,7 +70,6 @@ export function savedSettingsMessage(lastChangedSetting) {
   }
   return "Saved on Biotron."
 }
-
 export async function sendBiotronSettings(output, commands) {
   if (!output) return
   output.send([240, 11, 20, 13, 126, 247])
@@ -96,7 +84,6 @@ export async function sendBiotronSettings(output, commands) {
   await output.wait(100)
   commands.plantBpm.sendToMidi(output)
 }
-
 export async function applyCalmerPlay(device, getCurrentDevice, commands) {
   for (const [name, value] of CALMER_PLAY_SETTINGS) commands[name].set_value(value)
   return withMidiWriteSession(device, getCurrentDevice, async output => {
@@ -106,9 +93,8 @@ export async function applyCalmerPlay(device, getCurrentDevice, commands) {
     }
   })
 }
-
+const portText = value => typeof value === 'string' ? value.replace(/[\x00-\x1f\x7f]/g, '').slice(0, 80) : null
 const diagnosticText = (value, fallback = "unknown") => String(value || "").trim() || fallback
-
 export function buildBiotronDiagnosticPacket(state, environment = {}) {
   const navigatorRef = environment.navigator || globalThis.navigator || {}
   const locationRef = environment.location || globalThis.location || {}
@@ -135,6 +121,9 @@ export function buildBiotronDiagnosticPacket(state, environment = {}) {
       midi_port_name: state.device ? diagnosticText(state.device.name) : null,
       firmware_semantic_version: state.firmwareVersion || null,
     },
+    midi_ports: (state.midiPorts || []).slice(0, 16).map(port => ({name: portText(port.name), manufacturer: portText(port.manufacturer), type: ['input', 'output'].includes(port.type) ? port.type : null, state: ['connected', 'disconnected'].includes(port.state) ? port.state : null})),
+    midi_ports_truncated: (state.midiPorts || []).length > 16,
+    firmware_updates: exportFirmwareJournal().slice(-30),
     workflow: {
       settings_state: diagnosticText(state.settingsState, "idle"),
       calibration_state: diagnosticText(state.calibrationState, "idle"),
@@ -142,7 +131,6 @@ export function buildBiotronDiagnosticPacket(state, environment = {}) {
     },
   }
 }
-
 export function buildBiotronPlayDiagnosticPacket(state, environment = {}) {
   const navigatorRef = environment.navigator || globalThis.navigator || {}
   const documentRef = environment.document || globalThis.document || {}
@@ -180,15 +168,13 @@ export function buildBiotronPlayDiagnosticPacket(state, environment = {}) {
     environment: {...base.environment, online: navigatorRef.onLine !== false},
   }
 }
-
 export function buildSettingsDiagnostic(page, buildId) {
   return buildBiotronDiagnosticPacket({
     buildId, route: page.$route.path, device: page.device, firmwareVersion: page.firmwareVersion,
     settingsState: page.settingsState, calibrationState: page.calibrationState,
-    soundRunning: page.soundSession.running,
+    soundRunning: page.soundSession.running, midiPorts: [...(page.$refs?.deviceSelector?.midiAccess?.inputs?.values() || []), ...(page.$refs?.deviceSelector?.midiAccess?.outputs?.values() || [])],
   })
 }
-
 export function formatBiotronDiagnostic(packet) {
   return `Biotron diagnostics\nBrowser, connection and workflow details for support\n---\n${JSON.stringify(packet, null, 2)}`
 }

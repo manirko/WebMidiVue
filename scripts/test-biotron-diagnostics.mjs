@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import {buildBiotronDiagnosticPacket, buildBiotronPlayDiagnosticPacket, formatBiotronDiagnostic} from "../src/biotron/settingsReadback.mjs"
+import {buildBiotronDiagnosticPacket, buildBiotronPlayDiagnosticPacket, buildSettingsDiagnostic, formatBiotronDiagnostic} from "../src/biotron/settingsReadback.mjs"
 
 const packet = buildBiotronDiagnosticPacket({
   buildId: "abc123def456",
@@ -58,3 +58,14 @@ assert.deepEqual(JSON.parse(report.split('\n---\n')[1]), playPacket)
 assert(!report.includes('no personal data'), 'Manual report contains browser and device identifiers')
 
 console.log("Biotron diagnostics contract: PASS")
+
+const aliases = ['Biotron', 'Biotron Port 1', 'Biotron Port 2', 'MIDIIN2 (Biotron)', 'MIDIOUT2 (Biotron)', 'Biotron MIDI 1', 'Biotron MIDI 2', 'Biotron\u0000Custom', 'Other synth']
+const inventory = aliases.map((name, index) => ({name, manufacturer: 'fixture', type: index % 2 ? 'input' : 'output', state: 'connected', id: 'OPAQUE_PRIVATE_ID', serial: 'PRIVATE_SERIAL'}))
+const detailed = buildSettingsDiagnostic({$route: {path: '/biotron'}, device: inventory[0], soundSession: {running: false}, $refs: {deviceSelector: {midiAccess: {inputs: new Map(inventory.filter(port => port.type === 'input').map((port, i) => [i, port])), outputs: new Map(inventory.filter(port => port.type === 'output').map((port, i) => [i, port]))}}}}, 'fixture')
+assert.equal(detailed.midi_ports.length, aliases.length)
+assert(detailed.midi_ports.some(port => port.name === 'BiotronCustom'))
+assert(!JSON.stringify(detailed).includes('OPAQUE_PRIVATE_ID'))
+assert(!JSON.stringify(detailed).includes('PRIVATE_SERIAL'))
+const capped = buildBiotronDiagnosticPacket({midiPorts: Array(30).fill({name: 'x'.repeat(200), type: 'output', state: 'connected'})})
+assert.equal(capped.midi_ports.length, 16); assert.equal(capped.midi_ports[0].name.length, 80); assert.equal(capped.midi_ports_truncated, true)
+console.log('Manual diagnostics PASS: 9 port-name variants retained without identity inference; 16-port/80-character bounds, no opaque IDs or serial fields')

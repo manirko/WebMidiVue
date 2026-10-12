@@ -1,7 +1,7 @@
 <template>
   <div class="diagnostic-copy-panel">
     <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="preparing" @click="copy">{{ label }}</button>
-    <small>Includes browser, device port, firmware version and current workflow state. No preset values or plant readings. Copying does not send the report.</small>
+    <small>Includes browser, MIDI port names, firmware version, local update attempts and current workflow state. Review before sharing. No preset values or plant readings. Copying does not send the report.</small>
     <details @toggle="togglePreview">
       <summary>Show what will be copied</summary>
       <textarea aria-label="Diagnostic report" :value="text" readonly rows="8" @focus="$event.target.select()"></textarea>

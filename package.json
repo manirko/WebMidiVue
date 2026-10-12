@@ -30,7 +30,7 @@
     "test:listeners": "node --test scripts/test-listener-scope.mjs",
     "test:midi-timing": "node --test scripts/test-midi-timing.mjs",
     "test:settings-readback": "node scripts/test-settings-readback.mjs && node scripts/test-biotron-settings-connection.js",
-    "test:diagnostics": "node scripts/test-biotron-diagnostics.mjs",
+    "test:diagnostics": "node scripts/test-biotron-diagnostics.mjs && node scripts/test-firmware-journal.mjs",
     "test:telemetry": "node scripts/test-telemetry.mjs",
     "test:release-evidence": "node --test scripts/test-biotron-candidate.mjs",
     "test:preview-guard": "PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3 -m unittest scripts.test_biotron_preview_guard",

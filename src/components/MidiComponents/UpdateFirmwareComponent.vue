@@ -2,7 +2,7 @@
 import {recordFirmwarePhase} from '@/biotron/telemetry.mjs'
 import {setFirmwareUpdateBusy} from '@/appUpdateSafety.mjs'
 import {bootDevice} from '@/assets/js/SysExCommand'
-import {compareFirmwareVersions, DESKTOP_ONLY, GetLatestFirmware, LoadFirmware, prepareFirmware, writeFirmware} from '@/assets/js/LoadFirmware'
+import {compareFirmwareVersions, isFirmwareVersion, DESKTOP_ONLY, GetLatestFirmware, LoadFirmware, prepareFirmware, writeFirmware} from '@/assets/js/LoadFirmware'
 const target = process.env.VUE_APP_BIOTRON_FIRMWARE_TARGET
 const internalFirmware = target ? {version: target, internal: true,
   name: process.env.VUE_APP_BIOTRON_FIRMWARE_NAME, url: process.env.VUE_APP_BIOTRON_FIRMWARE_URL,
@@ -13,20 +13,24 @@ export default {
   props: {repo: String, device: Object, currentVersion: {type: String, default: ''},
     versionAware: {type: Boolean, default: false}, text: {type: String, default: 'Update firmware'}},
   data: () => ({online: navigator.onLine, latest: internalFirmware, phase: 'idle', message: '', error: '', pick: PICK, desktopOnly: DESKTOP_ONLY,
-    prepared: null, checking: false, reconnectTimer: null, updaterUnmounted: false, runStepPending: false}),
+    prepared: null, attempt: null, fault: null, checking: false, reconnectTimer: null, updaterUnmounted: false, runStepPending: false}),
   computed: {
-    available() { return Boolean(this.currentVersion && this.latest?.version && compareFirmwareVersions(this.latest.version, this.currentVersion) > 0) },
-    current() { return Boolean(this.currentVersion && this.latest?.version && !this.available) },
-    internal() { return Boolean(this.latest?.internal) },
-    manualBoot() { return Boolean(this.device && (!this.currentVersion || compareFirmwareVersions(this.currentVersion, '1.7.4') < 0)) },
+    firmware() { return this.attempt?.firmware || this.latest },
+    knownVersion() { return isFirmwareVersion(this.currentVersion) },
+    sameDevice() { return !this.attempt?.device || this.device === this.attempt.device || Boolean(this.device?.id && this.device.id === this.attempt.device.id) },
+    available() { return Boolean(this.knownVersion && this.latest?.version && compareFirmwareVersions(this.latest.version, this.currentVersion) > 0) },
+    current() { return Boolean(this.knownVersion && this.latest?.version && !this.available && !this.prepared) },
+    internal() { return Boolean(this.firmware?.internal) },
+    manualBoot() { return Boolean(this.device && (!this.knownVersion || compareFirmwareVersions(this.currentVersion, '1.7.4') < 0)) },
     canInstall() { return Boolean(window.showDirectoryPicker) },
     // No MIDI answer: Biotron may already sit in update mode as the RPI-RP2 drive (page reloaded or USB replugged mid-update).
-    recovery() { return this.internal && this.versionAware && !this.currentVersion },
-    ready() { return this.available || this.recovery },
+    recovery() { return this.internal && this.versionAware && !this.knownVersion },
+    ready() { return this.available || this.recovery || Boolean(this.prepared) },
     busy() { return ['preparing', 'booting', 'writing', 'reconnecting'].includes(this.phase) },
     buttonText() {
+      if (this.prepared) return 'Continue firmware update'
       if (this.checking) return 'Checking firmware…'
-      if (this.versionAware && !this.currentVersion) return this.device ? 'Check firmware' : this.internal ? 'Already see RPI-RP2? Recover firmware' : 'Connect Biotron to check firmware'
+      if (this.versionAware && !this.knownVersion) return this.device ? 'Check firmware' : this.internal ? 'Already see RPI-RP2? Recover firmware' : 'Connect Biotron to check firmware'
       if (this.current) return compareFirmwareVersions(this.currentVersion, this.latest.version) > 0 ? `Firmware ${this.currentVersion} · newer than ${this.internal ? 'this beta' : 'published firmware'}` : `Firmware ${this.currentVersion} ✓`
       if (this.available) return `Update to ${this.latest.version}`
       return this.text
@@ -34,9 +38,9 @@ export default {
     actionText() {
       if (!this.versionAware) return 'Update'
       return {idle: '⬇️ Download & check', 'preflight-error': '🔁 Try again', prepared: this.manualBoot ? 'Continue to drive selection' : '🔄 Restart Biotron',
-        'select-drive': '💾 Choose RPI-RP2 → install'}[this.phase] || ''
+        'select-drive': '💾 Choose RPI-RP2 → install', 'verification-error': 'Check connected firmware'}[this.phase] || ''
     },
-    actionDisabled() { return this.busy || !this.online || (this.versionAware ? this.phase === 'prepared' && !this.device : !this.device) }
+    actionDisabled() { return this.busy || (this.phase === 'idle' || this.phase === 'preflight-error') && !this.online || (this.versionAware ? this.phase === 'prepared' && (!this.device || !this.sameDevice) || this.phase === 'select-drive' && Boolean(this.device) : !this.device) }
   },
   mounted() {
     window.addEventListener('online', this.syncOnline)
@@ -51,27 +55,30 @@ export default {
     clearTimeout(this.reconnectTimer)
   },
   watch: {phase: {immediate: true, flush: 'sync', handler(value) {
-    recordFirmwarePhase(value, this.currentVersion, this.latest?.version)
+    this.recordPhase(value)
     setFirmwareUpdateBusy(this, ['preparing', 'booting', 'select-drive', 'writing', 'reconnecting'].includes(value))
   }}, currentVersion(value) {
     if (this.versionAware && value && !this.latest) this.refresh()
-    if (this.phase === 'reconnecting' && value === this.latest?.version) {
-      clearTimeout(this.reconnectTimer); this.prepared = null; this.phase = 'complete'
-      this.message = `🎉 Firmware ${value} installed and verified.`
-    }
-  }},
+    this.verifyReconnect()
+  }, device() { this.recordPhase(this.phase); this.verifyReconnect() }},
   methods: {
+    recordPhase(phase) { recordFirmwarePhase(phase, this.attempt?.installed || this.currentVersion, this.attempt?.firmware.version || this.latest?.version, {attempt: this.attempt?.id, channel: this.attempt?.firmware.internal || this.internal ? 'internal' : 'public-stable', device: this.attempt?.device || this.device, reported: this.currentVersion, error: this.fault}) },
+    verifyReconnect() {
+      if (!['reconnecting', 'verification-error'].includes(this.phase) || this.currentVersion !== this.attempt?.firmware.version || !this.device || !this.sameDevice) return
+      clearTimeout(this.reconnectTimer); this.prepared = null; this.fault = null; this.phase = 'complete'
+      this.message = `🎉 Firmware ${this.currentVersion} installed and verified by its reported version. Check saved settings next.`; this.error = ''
+    },
     syncOnline() { this.online = navigator.onLine; if (this.online && this.versionAware && this.currentVersion && !this.latest) this.refresh() },
     async refresh() {
       if (!this.online || this.checking) return
       this.checking = true
       try { this.latest = await GetLatestFirmware(this.repo); this.error = '' }
-      catch (error) { this.error = error.message }
+      catch (error) { this.fault = 'metadata_failed'; this.error = error.message; this.recordPhase('preflight-error') }
       finally { this.checking = false }
     },
     async runStep() {
-      if (this.versionAware && !this.ready) return
-      this.error = ''
+      if (this.runStepPending || this.updaterUnmounted || this.versionAware && !this.ready) return
+      this.error = ''; this.fault = null
       this.runStepPending = true
       if (!this.versionAware) {
         setFirmwareUpdateBusy(this, true)
@@ -82,10 +89,12 @@ export default {
       try {
         if (['idle', 'preflight-error'].includes(this.phase)) {
           if (!this.canInstall) throw new Error(DESKTOP_ONLY)
+          this.attempt = {id: window.crypto?.randomUUID?.(), installed: this.currentVersion, firmware: {...this.latest}, device: this.device}
           this.phase = 'preparing'; this.message = '⬇️ Downloading and checking firmware…'
-          this.prepared = await prepareFirmware(this.latest); this.phase = this.device ? 'prepared' : 'select-drive'
-          this.message = `✅ Firmware ${this.latest.version} is checked and held in this page — nothing was saved to your computer. ${this.device ? 'Biotron not restarted yet.' : PICK}`
+          this.prepared = await prepareFirmware(this.attempt.firmware); this.phase = this.device ? 'prepared' : 'select-drive'
+          this.message = `✅ Firmware ${this.firmware.version} is checked and held in this page — nothing was saved to your computer. ${this.device ? 'Biotron not restarted yet.' : PICK}`
         } else if (this.phase === 'prepared') {
+          if (!this.device || !this.sameDevice || this.currentVersion !== this.attempt.installed) throw Object.assign(new Error('Biotron changed after the file check. Reconnect the original device and check its version.'), {firmwareCode: 'device_changed'})
           if (this.manualBoot) {
             this.phase = 'select-drive'
             this.message = `Software BOOT is not validated for this version in this updater. Confirm your board with support before touching contacts. Older updates may reset settings. If RPI-RP2 appears, ${PICK}`
@@ -94,18 +103,24 @@ export default {
           this.phase = 'booting'; this.message = '🔄 Restarting Biotron…'; await bootDevice(this.device)
           this.phase = 'select-drive'; this.message = `🔄 Update-mode request sent. Check that RPI-RP2 appears on your computer. ${PICK}`
         } else if (this.phase === 'select-drive') {
-          this.phase = 'writing'; await writeFirmware(this.prepared, this.latest); this.phase = 'reconnecting'
+          this.phase = 'writing'
+          if (this.device) throw Object.assign(new Error('Biotron is still connected over MIDI. Check its version before retrying; choose a drive only after the original device enters update mode.'), {firmwareCode: 'device_changed'})
+          await writeFirmware(this.prepared, this.attempt.firmware); this.phase = 'reconnecting'
           if (this.updaterUnmounted) return
-          this.message = `📤 Copied. ⏳ Waiting for Biotron ${this.latest.version}…`
-          this.reconnectTimer = setTimeout(() => {
+          this.message = `📤 Copied. ⏳ Waiting for Biotron ${this.firmware.version}…`
+          this.verifyReconnect()
+          if (this.phase === 'reconnecting') this.reconnectTimer = setTimeout(() => {
             if (this.phase !== 'reconnecting') return
-            this.phase = 'verification-error'; this.error = 'Expected firmware did not reconnect. Reconnect USB and check its version before retrying.'
+            this.fault = 'reconnect_timeout'; this.phase = 'verification-error'; this.error = 'Expected firmware did not reconnect. Reconnect USB and check its version before retrying.'
           }, 30000)
-        }
+        } else if (this.phase === 'verification-error') { this.$emit('check_firmware'); this.verifyReconnect() }
       } catch (error) {
-        if (error?.name === 'AbortError') { this.phase = 'select-drive'; this.message = `❌ No drive chosen. ${PICK}`; return }
-        if (this.phase === 'writing') { this.phase = 'select-drive'; this.error = error.message; return }
-        this.error = error.message; this.phase = ['idle', 'preparing', 'preflight-error'].includes(this.phase) ? 'preflight-error' : `${this.phase}-error`
+        this.fault = error?.firmwareCode || (error?.name === 'AbortError' ? 'cancelled' : error?.name === 'NotAllowedError' ? 'permission_denied' : 'unknown')
+        if (this.phase === 'booting') { this.phase = 'select-drive'; this.error = 'The update-mode request could not be confirmed. Check whether RPI-RP2 appeared before choosing a drive.'; this.message = PICK; return }
+        if (this.fault === 'cancelled' && this.phase === 'writing') { this.phase = 'select-drive'; this.message = `❌ No drive chosen. ${PICK}`; return }
+        if (this.phase === 'writing') { this.phase = 'select-drive'; this.error = `${error.message} If MIDI returned, check firmware before retrying.`; return }
+        if (this.phase === 'prepared') { this.prepared = null; this.attempt = null }
+        this.error = error.message; this.phase = ['idle', 'preparing', 'prepared', 'preflight-error'].includes(this.phase) ? 'preflight-error' : `${this.phase}-error`
       } finally {
         this.runStepPending = false
         if (this.updaterUnmounted) setFirmwareUpdateBusy(this, false)
@@ -115,35 +130,36 @@ export default {
 }
 </script>
 <template>
-  <button v-if="versionAware && !currentVersion && device" type="button" class="btn btn-primary" :class="$attrs.class"
+  <button v-if="versionAware && !knownVersion && device && !prepared" type="button" class="btn btn-primary" :class="$attrs.class"
           @click="$emit('check_firmware')">{{ buttonText }}</button>
   <button v-else data-bs-toggle="modal" data-bs-target="#UpdateConf" class="btn" :class="[recovery ? 'btn-outline-secondary' : 'btn-primary', $attrs.class]"
           :disabled="checking || current">{{ buttonText }}</button>
-  <a v-if="versionAware && !currentVersion && device" href="https://help.playtronica.com/troubleshooting/firmware-reset/#biotron-recovery" target="_blank" rel="noopener">Cannot read the version? Biotron recovery help</a>
+  <a v-if="versionAware && !knownVersion && device && !prepared" href="https://help.playtronica.com/troubleshooting/firmware-reset/#biotron-recovery" target="_blank" rel="noopener">Cannot read the version? Biotron recovery help</a>
   <div class="modal fade" id="UpdateConf" tabindex="-1" aria-labelledby="firmware-title" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
       <div class="modal-header"><h5 class="modal-title" id="firmware-title">💾 Update firmware</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
       <div class="modal-body">
-        <p v-if="versionAware && !device && !recovery">Connect Biotron with a USB data cable to check its firmware version.</p>
-        <p v-if="available" class="firmware-version">Installed <strong>{{ currentVersion }}</strong> <span aria-hidden="true">→</span> {{ internal ? 'Beta update' : 'Available update' }} <strong>{{ latest.version }}</strong></p>
+        <p v-if="versionAware && !device && !recovery && !prepared">Connect Biotron with a USB data cable to check its firmware version.</p>
+        <p v-if="available" class="firmware-version">Installed <strong>{{ currentVersion }}</strong> <span aria-hidden="true">→</span> {{ internal ? 'Beta update' : 'Available update' }} <strong>{{ firmware.version }}</strong></p>
         <p v-if="versionAware && ready" class="alert alert-warning">Before restarting, save settings that actually loaded from Biotron. An update can reset them, even when software BOOT is available.</p><ol v-if="versionAware && ready" class="firmware-steps"><li>Download and verify the file.</li><li>Restart into update mode.</li><li>Choose RPI-RP2 and wait for the version check.</li></ol>
         <p v-if="versionAware && manualBoot" class="alert alert-warning">Software BOOT is not validated here for this version. Save settings that actually loaded from Biotron; older updates may reset them. No software BOOT command will be sent. Confirm your board with support before touching contacts. <a href="https://help.playtronica.com/troubleshooting/firmware-reset/#biotron-recovery" target="_blank" rel="noopener">Biotron recovery help</a>.</p>
-        <p v-if="recovery">🔌 {{ device ? 'Biotron did not report its firmware version.' : 'No Biotron over MIDI.' }} 💾 Drive <strong>RPI-RP2</strong> on your computer? → Install {{ latest.version }} now.</p>
+        <p v-if="recovery">🔌 {{ device ? 'Biotron did not report its firmware version.' : 'No Biotron over MIDI.' }} 💾 Drive <strong>RPI-RP2</strong> on your computer? → Install {{ firmware.version }} now.</p>
         <p v-if="versionAware && ready && !canInstall">{{ desktopOnly }}</p>
         <p v-if="versionAware && ready && canInstall">✅ File is checked first. 💾 Then you choose drive RPI-RP2.</p>
         <p v-if="versionAware && ready && canInstall" class="small text-muted">{{ pick }} 🍎 Tip: ⌘⇧G → /Volumes/RPI-RP2</p>
         <p v-if="versionAware && ready" class="small text-muted">
-          Or do it by hand: <a :href="latest.url" :download="latest.name">save {{ latest.name }}</a>, then copy the saved file onto the disk named RPI-RP2.
+          Or do it by hand: <a :href="firmware.url" :download="firmware.name">save {{ firmware.name }}</a>, then copy the saved file onto the disk named RPI-RP2.
         </p>
-        <p v-if="current" class="alert alert-success mb-0">Firmware {{ currentVersion }} is already installed. {{ internal ? 'This beta' : 'The latest published release' }} offers {{ latest.version }}; no downgrade is offered.</p>
-        <p v-if="!online" class="alert alert-warning mb-0">Connect to the internet for firmware updates. Settings remain available offline.</p>
-        <p v-if="error" class="alert alert-danger mb-0" role="alert">{{ error }}</p>
+        <p v-if="current" class="alert alert-success mb-0">Firmware {{ currentVersion }} is already installed. {{ internal ? 'This beta' : 'The latest published release' }} offers {{ firmware.version }}; no downgrade is offered.</p>
+        <p v-if="!online" class="alert alert-warning mb-0">Connect to the internet to download firmware. A checked file held in this page can still be installed offline.</p>
+        <p v-if="error" class="alert alert-danger mb-0" role="alert">{{ error }}</p><a v-if="versionAware" href="/firmware-journal.html" target="_blank" rel="noopener">Local update diagnostics — review before sharing</a>
         <p v-if="message" class="alert alert-info mb-0" role="status" aria-live="polite">{{ message }} <a v-if="phase === 'select-drive' || error" href="https://help.playtronica.com/troubleshooting/firmware-reset/#biotron-recovery" target="_blank" rel="noopener">No RPI-RP2 drive? Get recovery help</a>.</p>
       </div>
       <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
         <button v-if="ready && actionText && (!versionAware || canInstall)" type="button" class="btn btn-primary" :disabled="actionDisabled" @click="runStep">{{ actionText }}</button>
         <button v-if="versionAware && currentVersion && !latest && online" type="button" class="btn btn-primary" :disabled="checking" @click="refresh">{{ checking ? 'Checking firmware…' : 'Retry version check' }}</button>
+        <button v-if="prepared && phase === 'select-drive' && device" type="button" class="btn btn-secondary" @click="$emit('check_firmware')">Check connected firmware</button>
         <button v-if="busy" type="button" class="btn btn-primary" disabled>⏳ Working…</button></div>
     </div></div>
   </div>
