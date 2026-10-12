@@ -27,6 +27,7 @@ async function runLegacy({online, response}) {
     exports: {},
     module: {exports: {}},
     navigator: {onLine: online},
+    AbortSignal,
     fetch: async () => response,
     window: {location: {assign: url => events.push(['download', url])}},
     require: name => {
@@ -58,7 +59,7 @@ const arrayBuffer = buffer => buffer.buffer.slice(buffer.byteOffset, buffer.byte
   assert.strictEqual(compareFirmwareVersions('1.8.2', '1.9.8'), -1)
 
   const generalEnvironment = fs.readFileSync('.env.biotron-beta', 'utf8')
-  assert.match(generalEnvironment, /^VUE_APP_BIOTRON_FIRMWARE_TEST_ENABLED=false$/m)
+  assert.match(generalEnvironment, /^VUE_APP_BIOTRON_FIRMWARE_TEST_ENABLED=true$/m)
   assert.doesNotMatch(generalEnvironment, /VUE_APP_BIOTRON_FIRMWARE_TARGET/)
   const betaEnvironment = fs.readFileSync('.env.biotron-firmware-beta', 'utf8')
   assert.match(betaEnvironment, /^VUE_APP_BIOTRON_FIRMWARE_TEST_ENABLED=true$/m)
@@ -83,16 +84,16 @@ const arrayBuffer = buffer => buffer.buffer.slice(buffer.byteOffset, buffer.byte
   assert.match(updateComponent, /Confirm your board with support before touching contacts/)
   assert.match(updateComponent, /<a v-if="versionAware && !currentVersion && device"[^>]+>Cannot read the version\? Biotron recovery help<\/a>/)
   assert.match(updateComponent, /An update can reset them, even when software BOOT is available/)
-  assert.match(updateComponent, /<p v-if="internal && manualBoot" class="alert alert-warning">/)
+  assert.match(updateComponent, /<p v-if="versionAware && manualBoot" class="alert alert-warning">/)
   assert.match(updateComponent, /Downloading and checking firmware/)
   assert.match(updateComponent, /💾 Choose RPI-RP2 → install/)
   assert.match(updateComponent, /@click="\$emit\('check_firmware'\)"/)
   // F2 (2026-09-04): the folder picker opens in Documents; the drive must be named before and during the step.
   assert.match(updateComponent, /💾 Choose drive RPI-RP2 → Select\. 🍎 Mac: left sidebar · 🪟 Windows: This PC\./)
-  assert.match(updateComponent, /<p v-if="internal && ready && canInstall" class="small text-muted">\{\{ pick \}\} 🍎 Tip: ⌘⇧G → \/Volumes\/RPI-RP2<\/p>/)
+  assert.match(updateComponent, /<p v-if="versionAware && ready && canInstall" class="small text-muted">\{\{ pick \}\} 🍎 Tip: ⌘⇧G → \/Volumes\/RPI-RP2<\/p>/)
   // 3b (2026-09-05): no folder picker (Android Chrome) — one honest phrase instead of a step that throws.
-  assert.match(updateComponent, /<p v-if="internal && ready && !canInstall">\{\{ desktopOnly \}\}<\/p>/)
-  assert.match(updateComponent, /v-if="ready && actionText && \(!internal \|\| canInstall\)"/)
+  assert.match(updateComponent, /<p v-if="versionAware && ready && !canInstall">\{\{ desktopOnly \}\}<\/p>/)
+  assert.match(updateComponent, /v-if="ready && actionText && \(!versionAware \|\| canInstall\)"/)
   // F3 (2026-09-04): page reloaded while Biotron sits in update mode — no MIDI, only the RPI-RP2 drive.
   assert.match(updateComponent, /Already see RPI-RP2\? Recover firmware/)
   // W4 (Sergey, 2026-09-08): he went looking for the downloaded file. The page must say it kept the
@@ -112,20 +113,20 @@ const arrayBuffer = buffer => buffer.buffer.slice(buffer.byteOffset, buffer.byte
   assert.match(result.error.message, /503/)
   assert.deepStrictEqual(result.events, [])
 
-  result = await runLegacy({online: true, response: {ok: true, json: async () => ({assets: []})}})
+  result = await runLegacy({online: true, response: {ok: true, json: async () => ({tag_name: '1.8.2', assets: []})}})
   assert.match(result.error.message, /exactly one verified/)
   assert.deepStrictEqual(result.events, [])
 
   result = await runLegacy({
     online: true,
-    response: {ok: true, json: async () => ({assets: [{...trustedAsset, digest: null}]})}
+    response: {ok: true, json: async () => ({tag_name: '1.8.2', assets: [{...trustedAsset, digest: null}]})}
   })
   assert.match(result.error.message, /no trusted SHA-256/)
   assert.deepStrictEqual(result.events, [])
 
   result = await runLegacy({
     online: true,
-    response: {ok: true, json: async () => ({assets: [trustedAsset]})}
+    response: {ok: true, json: async () => ({tag_name: '1.8.2', assets: [trustedAsset]})}
   })
   assert.ifError(result.error)
   assert.deepStrictEqual(result.events, [
@@ -133,6 +134,12 @@ const arrayBuffer = buffer => buffer.buffer.slice(buffer.byteOffset, buffer.byte
     ['boot-done', 'device'],
     ['download', trustedAsset.browser_download_url]
   ])
+
+  for (const release of [{tag_name: '1.8.2', prerelease: true}, {tag_name: '1.8.2', draft: true}, {tag_name: '1.8.2-beta'}, {name: '1.8.2'}]) {
+    result = await runLegacy({online: true, response: {ok: true, json: async () => ({...release, assets: [trustedAsset]})}})
+    assert.match(result.error.message, /stable, numbered release/)
+    assert.deepStrictEqual(result.events, [])
+  }
 
   const updater = contextForHelpers()
   const firmwarePath = path.resolve('beta-assets/firmware/biotron-1.9.8-beta08-organic-led.uf2')
@@ -430,6 +437,23 @@ async function testComponentStateMachine(componentSource) {
   assert.strictEqual(newer.available, false)
   assert.strictEqual(newer.ready, false)
 
+  // Public stable releases use the verified state machine too, never legacy BOOT-before-download.
+  calls.length = 0
+  const stable = build({device: 'stable-output', currentVersion: '1.7.4', latest: {...internalFirmwareForTest(), internal: false}})
+  assert.strictEqual(stable.buttonText, 'Update to 1.8.2')
+  await stable.runStep()
+  assert.deepStrictEqual(calls.map(call => call[0]), ['prepare'])
+  assert.strictEqual(stable.phase, 'prepared')
+  await stable.runStep()
+  assert.deepStrictEqual(calls.map(call => call[0]), ['prepare', 'boot'])
+  for (const version of ['1.8.2', '1.10.10']) {
+    calls.length = 0
+    const current = build({device: 'current-output', currentVersion: version, latest: internalFirmwareForTest()})
+    assert.strictEqual(current.ready, false)
+    await current.runStep()
+    assert.deepStrictEqual(calls, [], `Current/newer ${version} was prepared or restarted`)
+  }
+
   // Device lost between verify and restart: restart needs MIDI, the action waits instead of guessing.
   const dropped = build({device: 'selected-midi-output', currentVersion: '1.9.7'})
   await dropped.runStep()
@@ -437,3 +461,5 @@ async function testComponentStateMachine(componentSource) {
   dropped.device = null
   assert.strictEqual(dropped.actionDisabled, true)
 }
+
+function internalFirmwareForTest() { return {version: '1.8.2', ...trustedAsset, url: trustedAsset.browser_download_url, sha256: digest} }

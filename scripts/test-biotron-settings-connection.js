@@ -169,7 +169,7 @@ assert.equal(pair.sent.length, rangeWrites, 'blank range endpoint must not write
   legacy.readPersistedSettingsWithRetry = () => { throw new Error('legacy must not query unsupported readback') }
   await legacy.loadPersistedSettings(legacy.device)
   assert.equal(legacy.settingsState, 'error')
-  assert.match(legacy.settingsMessage, /Update firmware/)
+  assert.match(legacy.settingsMessage, /Check the firmware offer/)
   assert.equal(component.computed.legacyFirmware.call({firmwareVersion:'1.9.8'}), false)
   const loading = page()
   let finishRead

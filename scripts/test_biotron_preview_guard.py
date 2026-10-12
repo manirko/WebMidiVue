@@ -35,7 +35,7 @@ class BiotronPreviewGuardTests(unittest.TestCase):
     def sha(path: Path) -> str:
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
-    def prepare(self, *, firmware_enabled: bool = False) -> tuple[Path, str]:
+    def prepare(self, *, firmware_enabled: bool = False, channel: str | None = None) -> tuple[Path, str]:
         files = {
             "index.html": f"<body>{self.build_id}</body>",
             "manifest.json": '{"name":"Biotron Settings Offline Beta"}',
@@ -71,6 +71,7 @@ database_id = "0d385f91-f646-4f8c-b508-344b4b2f8a6e"
             "build_id": self.build_id,
             "source_clean": True,
             "firmware_update_enabled": firmware_enabled,
+            "firmware_update_channel": channel,
             "file_count": len(manifest),
             "files": manifest,
         }
@@ -116,7 +117,18 @@ database_id = "0d385f91-f646-4f8c-b508-344b4b2f8a6e"
 
     def test_rejects_firmware_enabled_candidate(self) -> None:
         _, digest = self.prepare(firmware_enabled=True)
-        with self.assertRaisesRegex(CandidateError, "firmware_disabled"):
+        with self.assertRaisesRegex(CandidateError, "firmware_channel"):
+            self.verify(digest)
+
+    def test_accepts_public_stable_offer(self) -> None:
+        _, digest = self.prepare(firmware_enabled=True, channel="public-stable")
+        result = self.verify(digest)
+        self.assertTrue(result["firmware_update_enabled"])
+        self.assertEqual(result["firmware_update_channel"], "public-stable")
+
+    def test_rejects_internal_firmware_channel(self) -> None:
+        _, digest = self.prepare(firmware_enabled=True, channel="internal")
+        with self.assertRaisesRegex(CandidateError, "firmware_channel"):
             self.verify(digest)
 
     def test_rejects_production_branch(self) -> None:

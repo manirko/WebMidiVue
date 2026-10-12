@@ -202,7 +202,8 @@ def verify_candidate(
         "commit": isinstance(commit, str) and re.fullmatch(r"[0-9a-f]{40}", commit),
         "commit_prefix": isinstance(commit, str) and commit.startswith(build_id),
         "source_clean": outer_release.get("source_clean") is True,
-        "firmware_disabled": outer_release.get("firmware_update_enabled") is False,
+        "firmware_channel": (outer_release.get("firmware_update_enabled") is False or
+            (outer_release.get("firmware_update_enabled") is True and outer_release.get("firmware_update_channel") == "public-stable")),
     }
     failed = [name for name, passed in checks.items() if not passed]
     if failed:
@@ -253,7 +254,8 @@ def verify_candidate(
         "file_count": len(outer_release["files"]),
         "served_file_count": sum(item["path"] not in {"_headers", "_worker.js"} for item in outer_release["files"]),
         "config_file_count": sum(item["path"] in {"_headers", "_worker.js"} for item in outer_release["files"]),
-        "firmware_update_enabled": False,
+        "firmware_update_enabled": outer_release["firmware_update_enabled"],
+        "firmware_update_channel": outer_release.get("firmware_update_channel"),
         "dist": str(dist),
         "deploy_cwd": str(extract_root),
         "confirmation_token": token,

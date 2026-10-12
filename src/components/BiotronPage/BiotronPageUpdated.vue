@@ -160,7 +160,6 @@
       </template>
     </BootstrapCollapse>
   </div>
-
   <div>
     <BootstrapCollapse name_of_collapse="More fun">
       <template v-slot:objects>
@@ -176,7 +175,6 @@
             />
           </template>
         </GroupOfCommands>
-
         <GroupOfCommands name-of-group="Buttons mode">
           <template v-slot:objects>
             <SwitchComponent
@@ -184,11 +182,9 @@
                 description="Enable the upper touch pad on Biotron. Touch it to mute notes; touch it again to resume."
                 :command-object="this.commands_data.button_mode_state"
                 @input-changed="this.sys_ex_changed"
-
             />
           </template>
         </GroupOfCommands>
-
         <GroupOfCommands name-of-group="Rhythm">
           <template v-slot:objects>
             <SliderCommand
@@ -201,7 +197,6 @@
             />
           </template>
         </GroupOfCommands>
-
         <GroupOfCommands name-of-group="Note velocity">
           <template v-slot:objects>
             <div :class="betaBuild ? 'row beta-command' : 'row m-2'">
@@ -211,7 +206,6 @@
                     description="Varies note velocity between the minimum and maximum values. The minimum value only has an effect while Humanize is on."
                     :command-object="this.commands_data.randomPlantVelocity"
                     @input-changed="this.sys_ex_changed"
-
                 />
               </div>
             </div>
@@ -530,7 +524,7 @@ export default  {
     },
     checkFirmware() { this.$refs.deviceSelector?.requestFirmwareVersion() },
     async loadPersistedSettings(device) {
-      if (this.legacyFirmware) { this.settingsState = "error"; this.settingsMessage = "This firmware cannot report saved settings. Update firmware below to unlock Settings; reconnecting will not add this feature."; return }
+      if (this.legacyFirmware) { this.settingsState = "error"; this.settingsMessage = "This firmware cannot report saved settings. Settings stay locked. Check the firmware offer below; reconnecting cannot add readback support."; return }
       const loadId = ++this.settingsLoadId
       this.settingsState = "loading"
       this.settingsMessage = "Reading saved settings from Biotron…"

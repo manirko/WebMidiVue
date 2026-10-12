@@ -66,8 +66,10 @@ if a.online_origin or a.artifact_root:
   p.error('Hosted quality requires --journeys (SW-free/write-protected)')
  a.artifact_root = a.artifact_root.resolve()
  release = a.artifact_root/'release-evidence.json'
- if not release.is_file() or json.loads(release.read_text()).get('firmware_update_enabled') is not False:
-  p.error('Pinned artifact with disabled firmware update required')
+ if not release.is_file(): p.error('Pinned release evidence required')
+ firmware = json.loads(release.read_text())
+ if not (firmware.get('firmware_update_enabled') is False or (firmware.get('firmware_update_enabled') is True and firmware.get('firmware_update_channel') == 'public-stable')):
+  p.error('Pinned artifact with disabled or public-stable firmware channel required')
  required_builds.clear()
 selected = set(selected) | required_builds if selected else set(TESTS)
 run_id = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+uuid.uuid4().hex[:8]

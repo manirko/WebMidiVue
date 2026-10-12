@@ -17,8 +17,9 @@ production merge.
 - Confirm `npm run test:production-isolation` passes.
 - Build with an explicit visible `VUE_APP_BUILD_ID` matching the commit.
 - Build the general customer candidate with
-  `VUE_APP_BIOTRON_FIRMWARE_TEST_ENABLED=false`; its output must contain no
-  firmware directory and the Biotron page must show no updater action.
+  `VUE_APP_BIOTRON_FIRMWARE_TEST_ENABLED=true` (12Oct owner request); its output
+  must contain no firmware directory. The updater offers only newer verified
+  public stable releases; physical firmware acceptance remains separate.
 - Deploy only to the isolated beta Pages project and save its immutable URL.
 - Confirm the remote response includes `X-Frame-Options: DENY`,
   `Content-Security-Policy: frame-ancestors 'none'`, the beta

@@ -133,8 +133,8 @@ async function verifyOnlineIdentity(context, origin, root) {
     throw new Error('Online runtime metadata differs from the pinned artifact')
   }
   const release = JSON.parse(expected)
-  if (!/^[0-9a-f]{40}$/.test(release.commit) || release.firmware_update_enabled !== false) {
-    throw new Error('Online software lane requires a pinned customer artifact with firmware updates disabled')
+  if (!/^[0-9a-f]{40}$/.test(release.commit) || !(release.firmware_update_enabled === false || (release.firmware_update_enabled === true && release.firmware_update_channel === 'public-stable'))) {
+    throw new Error('Online software lane requires a pinned disabled or public-stable firmware channel')
   }
   return {origin, commit: release.commit, buildId: release.build_id, byteIdenticalMetadata: true}
 }

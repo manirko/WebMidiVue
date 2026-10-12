@@ -3,7 +3,7 @@ const UF2 = {block: 512, start0: 0x0a324655, start1: 0x9e5d5157, end: 0x0ab16f30
     familyFlag: 0x2000, rp2040: 0xe48bff56, flash: 0x10000000, settings: 0x10080000}
 const asHex = bytes => [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('')
 export function compareFirmwareVersions(left = '', right = '') {
-    const parse = value => String(value).replace(/^v/, '').split('.').map(part => Number(part) || 0)
+    const parse = value => String(value).replace(/^v/i, '').split('.').map(part => Number(part) || 0)
     const [a, b] = [parse(left), parse(right)]
     for (let index = 0; index < Math.max(a.length, b.length); index++) {
         const difference = (a[index] || 0) - (b[index] || 0)
@@ -13,18 +13,22 @@ export function compareFirmwareVersions(left = '', right = '') {
 }
 export async function GetLatestFirmware(repo) {
     if (!navigator.onLine) throw new Error('Firmware updates require an internet connection.')
-    const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {headers: {
+    const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {signal: AbortSignal.timeout(10000), headers: {
         Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'}})
     if (!response.ok) throw new Error(`Could not load the firmware release (${response.status}).`)
     const release = await response.json()
+    if (release.draft || release.prerelease || !/^v?\d+\.\d+\.\d+$/i.test(release.tag_name || ''))
+        throw new Error('The latest firmware must be a stable, numbered release.')
     const prefix = `https://github.com/${repo}/releases/download/`
     const assets = (release.assets || []).filter(asset => asset.name?.toLowerCase().endsWith('.uf2') &&
         asset.browser_download_url?.startsWith(prefix))
     if (assets.length !== 1) throw new Error('The latest release must contain exactly one verified .uf2 firmware file.')
     const [asset] = assets
     if (!/^sha256:[a-f0-9]{64}$/i.test(asset.digest || '')) throw new Error('The firmware release has no trusted SHA-256 checksum.')
-    return {version: String(release.tag_name || release.name || '').replace(/^v/i, ''), name: asset.name,
+    const firmware = {version: release.tag_name.replace(/^v/i, ''), name: asset.name,
         url: asset.browser_download_url, sha256: asset.digest.slice(7).toLowerCase(), size: asset.size}
+    validDescriptor(firmware)
+    return firmware
 }
 function validDescriptor(firmware) {
     if (!/^\d+\.\d+\.\d+$/.test(firmware?.version || '') || !/^[a-z0-9._-]+\.uf2$/i.test(firmware?.name || '') ||

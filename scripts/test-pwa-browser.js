@@ -52,6 +52,7 @@ async function openProfile(online, denyMidiOnce = false) {
     window.__midiRequestOptions = []
     window.__midiSent = []
     window.__respondSettings = true
+    window.__firmwareReplyVersion = null
     window.__denyMidiOnce = initiallyDenyMidi
     Object.defineProperty(navigator, 'onLine', {
       configurable: true,
@@ -87,6 +88,11 @@ async function openProfile(online, denyMidiOnce = false) {
       send(data) {
         const message = Array.from(data)
         window.__midiSent.push(message)
+        if (window.__firmwareReplyVersion && message[0] === 0xf0 && message[3] === 126 && message.length === 6) {
+          const response = [0xf0, 0x0b, 126, message[4], ...window.__firmwareReplyVersion, 0xf7]
+          setTimeout(() => input.onmidimessage?.({data: Uint8Array.from(response)}), 0)
+        }
+
         const persistedIndex = persistedIndexByCommand[message[3]]
         if (message.length === 6 && message[0] === 0xf0 && message[1] === 20 &&
             message[2] === 13 && persistedIndex !== undefined && message[5] === 0xf7) {
@@ -138,6 +144,11 @@ async function openProfile(online, denyMidiOnce = false) {
     window.__emitFirstPlayMidi = data => midiMessageListener?.({data: Uint8Array.from(data)})
     window.__emitSettingsMidi = data => input.onmidimessage?.({data: Uint8Array.from(data)})
   }, { initiallyOnline: online, initiallyDenyMidi: denyMidiOnce })
+  await context.route('https://api.github.com/repos/Playtronica/biotron-firmware/releases/latest', route => route.fulfill({
+    json: {tag_name: '1.8.2', draft: false, prerelease: false, assets: [{name: 'biotron-firmware_v1.8.2.uf2',
+      browser_download_url: 'https://github.com/Playtronica/biotron-firmware/releases/download/1.8.2/biotron-firmware_v1.8.2.uf2',
+      digest: 'sha256:' + 'a'.repeat(64), size: 99840}]}
+  }))
   await context.setOffline(!online)
   return context.pages()[0] || await context.newPage()
 }
@@ -419,19 +430,37 @@ async function controllerVersion(page) {
 
   await page.evaluate(() => window.__emitSettingsMidi([0xf0, 0x0b, 126, 0, 1, 9, 3, 0xf7]))
   assert.strictEqual(await page.getByRole('button', {name: /Update to 1\.9\.8|Update Firmware/}).count(), 0,
-    'general customer beta exposed a firmware update action')
+    'offline version check offered an unverified update')
   assert.strictEqual(await page.evaluate(() => window.__midiSent.some(message =>
     JSON.stringify(message) === JSON.stringify([240, 11, 127, 247]) ||
     JSON.stringify(message) === JSON.stringify([240, 11, 20, 13, 127, 247])
   )), false,
     'general customer beta entered BOOT')
-  console.log('4/7 general customer beta keeps firmware update isolated')
+  console.log('4/7 offline firmware check sent no BOOT')
 
   await context.setOffline(false)
   await page.evaluate(() => {
     window.__testOnline = true
     window.dispatchEvent(new Event('online'))
   })
+  await page.getByRole('button', {name: 'Firmware 1.9.3 · newer than published firmware', exact: true}).waitFor()
+  await page.evaluate(() => { window.__firmwareReplyVersion = [1, 7, 4] })
+  await page.getByRole('button', {name: 'Release device for DAW', exact: true}).click()
+  await page.getByRole('button', {name: 'Reconnect settings', exact: true}).click()
+  await page.getByRole('button', {name: 'Update to 1.8.2', exact: true}).click()
+  await page.locator('#UpdateConf.show').waitFor()
+  await page.getByText('Available update', {exact: false}).waitFor()
+  assert.strictEqual(await page.evaluate(() => window.__midiSent.some(message =>
+    JSON.stringify(message) === JSON.stringify([240, 11, 127, 247]) ||
+    JSON.stringify(message) === JSON.stringify([240, 11, 20, 13, 127, 247])
+  )), false, 'Reading the update offer rebooted Biotron')
+  await page.locator('#UpdateConf .modal-footer').getByRole('button', {name: 'Close', exact: true}).click()
+  await page.locator('#UpdateConf').waitFor({state: 'hidden'})
+  await page.evaluate(() => { window.__firmwareReplyVersion = [1, 9, 3] })
+  await page.getByRole('button', {name: 'Release device for DAW', exact: true}).click()
+  await page.getByRole('button', {name: 'Reconnect settings', exact: true}).click()
+  await page.getByRole('button', {name: 'Firmware 1.9.3 · newer than published firmware', exact: true}).waitFor()
+  console.log('Stable version offer: older firmware offered update; newer firmware offered no downgrade; no BOOT')
   if (!remotePreview) {
     serviceWorkerVersion = 2
     await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update())
@@ -515,7 +544,7 @@ async function controllerVersion(page) {
   if (evidence) fs.writeFileSync(path.join(evidence, 'pwa-online-identity.json'), JSON.stringify({remotePreview, workerBytesChecked, onlineIdentities}, null, 2))
   console.log('7/7 Retry repairs offline setup and the same profile launches offline again')
 
-  console.log(`Browser PWA verified across persistent-profile restarts: offline app shell, simulated permission/retry and MIDI setting write, firmware isolation. Controlled update: ${remotePreview ? 'NOT RUN on immutable remote origin' : 'local fixture verified'}. ${installabilityChecked ? 'CDP manifest/installability checks ran; OS installation NOT RUN.' : context.browser().browserType().name() === 'chromium' ? 'CDP manifest checked; installability oracle NOT SUPPORTED; OS installation NOT RUN.' : 'CDP installability oracle NOT SUPPORTED; OS installation NOT RUN.'}`)
+  console.log(`Browser PWA verified across persistent-profile restarts: offline app shell, simulated permission/retry and MIDI setting write, stable firmware offer without downgrade. Controlled update: ${remotePreview ? 'NOT RUN on immutable remote origin' : 'local fixture verified'}. ${installabilityChecked ? 'CDP manifest/installability checks ran; OS installation NOT RUN.' : context.browser().browserType().name() === 'chromium' ? 'CDP manifest checked; installability oracle NOT SUPPORTED; OS installation NOT RUN.' : 'CDP installability oracle NOT SUPPORTED; OS installation NOT RUN.'}`)
 })().catch(async error => {
   if (evidence) {
     const prefix = path.join(evidence, 'pwa-first-fault')

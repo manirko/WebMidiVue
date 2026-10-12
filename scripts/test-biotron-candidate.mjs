@@ -30,7 +30,8 @@ test("release evidence is complete, sorted and bound to the exact commit", () =>
       builtAt: "2026-09-30T23:00:00Z",
     })
     assert.equal(manifest.build_id, "abc123def456")
-    assert.equal(manifest.firmware_update_enabled, false)
+    assert.equal(manifest.firmware_update_enabled, true)
+    assert.equal(manifest.firmware_update_channel, "public-stable")
     assert.equal(manifest.deploy_config.path, "wrangler.toml")
     assert.deepEqual(manifest.files.map(file => file.path), ["index.html", "js/app.js"])
     assert(manifest.files.every(file => file.sha256.length === 64))

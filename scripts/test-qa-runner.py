@@ -169,6 +169,11 @@ with tempfile.TemporaryDirectory(prefix='biotron-runner-test-') as temporary:
  (artifact/'release-evidence.json').write_text(json.dumps({'firmware_update_enabled':False}))
  online_args=['--browser','--online-origin','https://bdaaf113.biotron-settings-beta.pages.dev','--artifact-root',str(artifact),'--journeys','--only','test:quality:browser']
  npm.write_text('#!/bin/sh\necho "origin=$BIOTRON_QA_ORIGIN artifact=$BIOTRON_QA_DIST_ROOT journeys=$QUALITY_BROWSER_JOURNEYS"\n')
+ for descriptor, accepted in [({'firmware_update_enabled':True,'firmware_update_channel':'public-stable'},True),({'firmware_update_enabled':True,'firmware_update_channel':'internal'},False),({'firmware_update_enabled':True},False)]:
+  (artifact/'release-evidence.json').write_text(json.dumps(descriptor))
+  channel_run=subprocess.run([sys.executable,str(runner),'--output',str(output),*online_args],env=environment,capture_output=True,text=True,timeout=10)
+  assert channel_run.returncode==(0 if accepted else 2),channel_run.stdout+channel_run.stderr
+ (artifact/'release-evidence.json').write_text(json.dumps({'firmware_update_enabled':False}))
  online=subprocess.run([sys.executable,str(runner),'--output',str(output),*online_args],env=environment,capture_output=True,text=True,timeout=10)
  assert online.returncode==0,online.stdout+online.stderr
  latest=max(output.iterdir(),key=lambda p:p.stat().st_mtime_ns)

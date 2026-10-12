@@ -75,7 +75,7 @@ export function createTestEvidence({commit, buildId, testedAt, environment}) {
     ],
     notes: [
       "This gate validates software only. Physical Biotron acceptance remains a separate gate.",
-      "The candidate keeps customer firmware updates disabled.",
+      "The candidate offers newer verified stable firmware; physical update acceptance is separate.",
       "The archive is created only after the full release gate passes and is verified before use.",
     ],
   }
@@ -97,7 +97,7 @@ archive ID \`${buildId}\` separately. Do not use an older beta URL.
 Use one known USB data cable and current Chrome or Edge on a computer. Close
 DAWs, MIDI monitors and other Settings tabs. Connect both plant contact cables
 to Biotron and clip the two contacts to separate points on the same plant. Do
-not update firmware; this candidate intentionally disables it.
+not update firmware as part of this software acceptance pass.
 
 Stop at the first failure:
 
@@ -206,7 +206,8 @@ export function createReleaseEvidence(distDir, {commit, branch, builtAt}) {
     branch,
     built_at: builtAt,
     source_clean: true,
-    firmware_update_enabled: false,
+    firmware_update_enabled: true,
+    firmware_update_channel: "public-stable",
     release_gate: "npm run test:biotron",
     deploy_config: {path: "wrangler.toml", bytes: statSync(resolve(root, "wrangler.toml")).size, sha256: sha256File(resolve(root, "wrangler.toml"))},
     files,

@@ -220,12 +220,16 @@ function readHttp(url, options = {}) {
     assert.equal((await verifyOnlineIdentity(identityContext(200, metadata()), origin, root)).byteIdenticalMetadata, true)
     await assert.rejects(verifyOnlineIdentity(identityContext(302, metadata()), origin, root), /metadata differs/)
     await assert.rejects(verifyOnlineIdentity(identityContext(200, Buffer.from('{}')), origin, root), /metadata differs/)
-    for (const bad of [{...release, commit: null}, {...release, commit: 'old'}, {...release, firmware_update_enabled: true}]) {
+    const stable = {...release, firmware_update_enabled: true, firmware_update_channel: 'public-stable'}
+    fs.writeFileSync(path.join(root, 'release-evidence.json'), JSON.stringify(stable))
+    assert.equal((await verifyOnlineIdentity(identityContext(200, Buffer.from(JSON.stringify(stable))), origin, root)).commit, release.commit)
+    fs.writeFileSync(path.join(root, 'release-evidence.json'), metadata())
+    for (const bad of [{...release, commit: null}, {...release, commit: 'old'}, {...release, firmware_update_enabled: true}, {...release, firmware_update_enabled: true, firmware_update_channel: 'internal'}]) {
       const bytes = Buffer.from(JSON.stringify(bad))
       fs.writeFileSync(path.join(root, 'release-evidence.json'), bytes)
-      await assert.rejects(verifyOnlineIdentity(identityContext(200, bytes), origin, root), /updates disabled/)
+      await assert.rejects(verifyOnlineIdentity(identityContext(200, bytes), origin, root), /firmware channel/)
     }
-    console.log('PASS 12 immutable-origin and 6 pinned online-identity controls; no network in these controls')
+    console.log('PASS immutable-origin and pinned online-identity controls, including stable-only and rejected internal firmware; no network in these controls')
     for (const {name, body} of fixtures) fs.writeFileSync(path.join(root, name), body)
     const before = fixtures.map(({name}) => crypto.createHash('sha256').update(fs.readFileSync(path.join(root, name))).digest('hex'))
     server = createStaticServer(root)

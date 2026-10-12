@@ -115,8 +115,9 @@ npm run build
 The ordinary production build keeps the current website behaviour and does not
 install a service worker. The dedicated Biotron beta below is an installable
 PWA: after one successful online visit, its settings UI and hash routes are
-cached for offline use. The general customer beta does not contain or expose a
-firmware updater.
+cached for offline use. The general beta checks the latest public stable firmware and offers it only
+when it is newer than the connected unit. It contains no bundled UF2. Updates
+verify hash, size and UF2 structure before BOOT; physical acceptance is separate.
 
 When a new PWA build is waiting, **Update app** appears in Settings and Play.
 Discovery never reloads a page. The explicit action stops the persistent sound
@@ -206,7 +207,7 @@ deploying the checkout or its mutable `dist` directory:
 
 The default is offline verification only. It checks the outer archive hash,
 safe archive paths, every release-manifest byte and SHA-256, the exact clean
-commit/build, the full test evidence, disabled firmware updates, security
+commit/build, the full test evidence, disabled or public-stable firmware channel, security
 headers and absence of a production CNAME. It then prints one build-specific
 confirmation token. Only a second run with `--execute`, an already-installed
 Wrangler executable and that exact token can upload the extracted immutable
@@ -224,7 +225,8 @@ The hardware-confirmed firmware research build is separate:
 npm run build:biotron-firmware-beta
 ```
 
-Only that build copies the pinned internal 1.10.10 artifact (with 1.10.9 rollback) and shows the Biotron updater.
+Only that build copies the pinned internal 1.10.10 artifact (with 1.10.9 rollback).
+The general beta instead checks the public stable release; it never offers a downgrade.
 It must not be sent to an unscreened customer segment. Firmware installation is
 desktop Chrome/Edge plus internet only, and each board revision must be
 confirmed before receiving its link.
