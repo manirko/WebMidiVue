@@ -82,6 +82,13 @@ and confirmed Return. WebKit's full traversal uses Alt+Tab only after an explici
 nativeHTML Tab-vs-Alt+Tab control; no OS preference changes. `journeys.json` and
 self-contained `audit.html` separate functional transitions from audit FAILs.
 They map executed test paths, not live people, heatmaps, demand or sales.
+Cold Play, fresh-tab readback and creator wait for their actual ready marker,
+not network silence. Navigation and marker share one unchanged5s deadline.
+The existing HTTP regression keeps an ancillary fetch pending while a usable
+view passes; a view delayed beyond the combined deadline still fails. This
+fixes a reproduced tester false negative, not the cause of every historical
+cold-load or Settings-click timeout. Changed waiting times are not a product
+speed improvement.
 Flat computed RGB/alpha contrast uses4.5 normal/3 large; gradients/group opacity
 remain unmeasured. Existing design targets44px primary controls/24px ranges are
 geometry budgets, not a blanket WCAG failure rule. `QUALITY_JOURNEY_FAULT=contrast`

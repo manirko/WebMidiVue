@@ -87,6 +87,18 @@ async function launchBrowser(options = {}) {
   return browser
 }
 
+// Background traffic is not UI readiness. Navigation and the actual ready
+// marker share the existing 5-second deadline; neither gets a fresh allowance.
+async function gotoReady(page, url, ready) {
+  const began = Date.now()
+  return browserCall(page.context().browser(), async () => {
+    await page.goto(url, {waitUntil: 'domcontentloaded', timeout: 5000})
+    const remaining = 5000 - (Date.now() - began)
+    if (remaining <= 0) throw new Error('UI readiness exceeded 5000ms')
+    await ready(remaining)
+  }, 'UI readiness', 5000)
+}
+
 async function launchPersistentContext(profile, options) {
   const config = browserConfig()
   const context = await require('playwright-core')[config.engine].launchPersistentContext(profile,
@@ -191,4 +203,4 @@ function createStaticServer(root, options = {}) {
   })
 }
 
-module.exports = {chromePath, browserNames, browserConfig, browserCall, launchBrowser, launchPersistentContext, contextOptions, qaOrigin, verifyOnlineIdentity, verifyOnlineArtifact, isolateOnlineWrites, createStaticServer}
+module.exports = {chromePath, browserNames, browserConfig, browserCall, launchBrowser, gotoReady, launchPersistentContext, contextOptions, qaOrigin, verifyOnlineIdentity, verifyOnlineArtifact, isolateOnlineWrites, createStaticServer}

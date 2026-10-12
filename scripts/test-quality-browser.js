@@ -2,7 +2,7 @@ const assert = require('assert')
 const path = require('path')
 const fs = require('node:fs')
 const {devices} = require('playwright-core')
-const {launchBrowser, contextOptions, qaOrigin, verifyOnlineIdentity, verifyOnlineArtifact, isolateOnlineWrites, createStaticServer} = require('./browser-test-harness')
+const {launchBrowser, gotoReady, contextOptions, qaOrigin, verifyOnlineIdentity, verifyOnlineArtifact, isolateOnlineWrites, createStaticServer} = require('./browser-test-harness')
 
 const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirname, '..', 'dist'))
 const server = createStaticServer(root)
@@ -605,8 +605,8 @@ async function auditJourneys(browser, origin) {
       page = await context.newPage(); currentPage = page; currentProfile = `journey-${width}`
       page.on('pageerror', error => report.errors.push({url: page.url(), error: error.message}))
       await step('cold Play', `play-${width}`, async () => {
-        await page.goto(origin + '/#/biotron/play?sound=1', {waitUntil: 'networkidle'})
-        await page.locator('.sound-lab:visible').waitFor(); await surface(`Play${width}`)
+        await gotoReady(page, origin + '/#/biotron/play?sound=1', timeout => page.locator('.sound-lab:visible').waitFor({timeout}))
+        await surface(`Play${width}`)
       })
       if (width === 1440) {
         const focus = []
@@ -632,8 +632,7 @@ async function auditJourneys(browser, origin) {
         })
         const fresh = await context.newPage()
         await step('fresh second tab readback', 'two-tabs37', async () => {
-          await fresh.goto(origin + '/#/biotron/play?sound=1', {waitUntil: 'networkidle'})
-          await fresh.locator('.sound-lab[data-volume="37"]').waitFor()
+          await gotoReady(fresh, origin + '/#/biotron/play?sound=1', timeout => fresh.locator('.sound-lab[data-volume="37"]').waitFor({timeout}))
         })
         await fresh.close()
       }
@@ -646,8 +645,8 @@ async function auditJourneys(browser, origin) {
         await page.getByRole('heading', {name: 'Plant music', level: 1}).waitFor()
       })
       await step('creator cold load', `creator-${width}`, async () => {
-        await page.goto(origin + '/creator.html', {waitUntil: 'networkidle'})
-        await page.waitForFunction(() => document.querySelector('#sound')?.options.length > 0); await surface(`Creator${width}`)
+        await gotoReady(page, origin + '/creator.html', timeout => page.waitForFunction(() => document.querySelector('#sound')?.options.length > 0, null, {timeout}))
+        await surface(`Creator${width}`)
       })
       if (width === 1440) {
         await step('record example and finish', 'take-kept', async () => {

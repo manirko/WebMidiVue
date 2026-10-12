@@ -7,7 +7,7 @@ const path = require('node:path')
 const vm = require('node:vm')
 const {EventEmitter} = require('node:events')
 const {chromium} = require('playwright-core')
-const {chromePath, browserConfig, browserCall, qaOrigin, verifyOnlineIdentity, verifyOnlineArtifact, isolateOnlineWrites, createStaticServer} = require('./browser-test-harness')
+const {chromePath, browserConfig, browserCall, gotoReady, qaOrigin, verifyOnlineIdentity, verifyOnlineArtifact, isolateOnlineWrites, createStaticServer} = require('./browser-test-harness')
 
 assert.throws(() => browserConfig('safari'), /Unknown BIOTRON_QA_BROWSER/,
   'Safari must never silently run Chrome or Playwright WebKit')
@@ -276,6 +276,29 @@ function readHttp(url, options = {}) {
     assert.equal(fallback.headers['content-type'], 'text/html; charset=utf-8')
     assert.deepEqual(fallback.body, fixtures[0].body)
     console.log('PASS static tester HTTP/browser bytes, UTF8 CSS and SVG; local fixtures only')
+
+    // Same page/actions/deadline: a pending ancillary fetch must not reject an
+    // already usable view. A late view must still fail within the total budget.
+    let backgroundRequests = 0
+    await context.route(localOrigin + '/readiness-background', () => {backgroundRequests++})
+    await context.route(localOrigin + '/readiness-view', route => route.fulfill({contentType:'text/html',
+      body:'<button id="ready">Play</button><script>fetch("/readiness-background").catch(()=>{})</script>'}))
+    const readiness = await context.newPage()
+    const oldStarted = Date.now()
+    await assert.rejects(readiness.goto(localOrigin + '/readiness-view', {waitUntil:'networkidle',timeout:5000}), /Timeout 5000ms/)
+    assert(Date.now() - oldStarted < 5500); assert(await readiness.locator('#ready').isVisible()); assert.equal(backgroundRequests, 1)
+    await gotoReady(readiness, localOrigin + '/readiness-view', timeout => readiness.locator('#ready').waitFor({timeout}))
+    assert.equal(backgroundRequests, 2)
+    await context.route(localOrigin + '/readiness-late', async route => {
+      await new Promise(resolve => setTimeout(resolve, 1100))
+      await route.fulfill({contentType:'text/html', body:'<script>setTimeout(()=>document.body.innerHTML="<button id=ready>Play</button>",4300)</script>'})
+    })
+    const lateStarted = Date.now()
+    await assert.rejects(gotoReady(readiness, localOrigin + '/readiness-late', timeout => readiness.locator('#ready').waitFor({timeout})), /timed out|Timeout/)
+    assert(Date.now() - lateStarted < 5500, 'Navigation plus view readiness received two deadlines')
+    assert.equal(await readiness.locator('#ready').count(), 0, 'Late view was accepted')
+    await readiness.close()
+    console.log('PASS ready UI with pending background traffic; late view rejects within one unchanged 5s deadline')
 
     // A self-generated X glyph; no system font, download or runtime dependency.
     const font = Buffer.from('AAEAAAAKAIAAAwAgT1MvMkUAREwAAAEoAAAAYGNtYXAAogBFAAABkAAAADxnbHlmVl1WWwAAAdQAAAA0aGVhZGFsQ5wAAACsAAAANmhoZWEE2gIyAAAA5AAAACRobXR4AlgAAAAAAYgAAAAIbG9jYQANACcAAAHMAAAACG1heHAABQAGAAABCAAAACBuYW1lDWPUCAAAAggAAAG2cG9zdAAIADsAAAPAAAAAKAABAAAAAQAAgWEvX18PPPUAAQPoAAAAAAAAAAAAAAAAAAAAAABQAAACCAK8AAAAAwACAAAAAAAAAAEAAAMg/zgAAAJYAAAAoAG4AAEAAAAAAAAAAAAAAAAAAAABAAEAAAADAAQAAQAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAwJYAZAABQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAPz8/PwAAACAAWAMg/zgAAAMgAMgAAAAAAAAAAAAAAAAAAAAgAAACWAAAAAAAAAAAAAIAAAADAAAAFAADAAEAAAAUAAQAKAAAAAYABAABAAIAIABY//8AAAAgAFj////h/6oAAQAAAAAAAAAAAA0ADQAaAAEAUAAAAggCvAADAAAzIREhUAG4/kgCvAAAAQBQAAACCAK8AAMAADMhESFQAbj+SAK8AAAAAAwAlgABAAAAAAABAAoAAAABAAAAAAACAAcACgABAAAAAAADACEAEQABAAAAAAAEABIAMgABAAAAAAAFAAsARAABAAAAAAAGABEATwADAAEECQABABQAYAADAAEECQACAA4AdAADAAEECQADAEIAggADAAEECQAEACQAxAADAAEECQAFABYA6AADAAEECQAGACIA/kJpb3Ryb24gUUFSZWd1bGFyQmlvdHJvbi1RQS1zZWxmLWdlbmVyYXRlZC1maXh0dXJlQmlvdHJvbiBRQSBSZWd1bGFyVmVyc2lvbiAxLjBCaW90cm9uUUEtUmVndWxhcgBCAGkAbwB0AHIAbwBuACAAUQBBAFIAZQBnAHUAbABhAHIAQgBpAG8AdAByAG8AbgAtAFEAQQAtAHMAZQBsAGYALQBnAGUAbgBlAHIAYQB0AGUAZAAtAGYAaQB4AHQAdQByAGUAQgBpAG8AdAByAG8AbgAgAFEAQQAgAFIAZQBnAHUAbABhAHIAVgBlAHIAcwBpAG8AbgAgADEALgAwAEIAaQBvAHQAcgBvAG4AUQBBAC0AUgBlAGcAdQBsAGEAcgAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAMAOw==', 'base64')
