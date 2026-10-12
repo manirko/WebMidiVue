@@ -593,9 +593,11 @@ async function testComponentStateMachine(componentSource) {
   await interrupted.runStep(); assert.strictEqual(interrupted.phase, 'preflight-error'); assert.strictEqual(interrupted.prepared, null)
   assert.strictEqual(interrupted.fault, 'download_failed'); assert.match(interrupted.actionText, /Try again/)
   prepareFailure = null; await interrupted.runStep(); assert.strictEqual(interrupted.phase, 'prepared')
+  const failedAttempt = interrupted.attempt.id
   interrupted.device = {id: 'replacement'}
   calls.length = 0; await interrupted.runStep()
   assert.strictEqual(interrupted.prepared, null); assert.strictEqual(interrupted.phase, 'preflight-error')
+  assert.strictEqual(interrupted.attempt?.id, failedAttempt, 'Changed-device failure lost its update attempt correlation')
   assert.deepStrictEqual(calls, [], 'Replacement device received a BOOT command'); definition.beforeUnmount.call(interrupted)
 
   // A metadata change cannot replace a checked attempt's target during copy.

@@ -119,7 +119,7 @@ export default {
         if (this.phase === 'booting') { this.phase = 'select-drive'; this.error = 'The update-mode request could not be confirmed. Check whether RPI-RP2 appeared before choosing a drive.'; this.message = PICK; return }
         if (this.fault === 'cancelled' && this.phase === 'writing') { this.phase = 'select-drive'; this.message = `❌ No drive chosen. ${PICK}`; return }
         if (this.phase === 'writing') { this.phase = 'select-drive'; this.error = `${error.message} If MIDI returned, check firmware before retrying.`; return }
-        if (this.phase === 'prepared') { this.prepared = null; this.attempt = null }
+        if (this.phase === 'prepared') this.prepared = null
         this.error = error.message; this.phase = ['idle', 'preparing', 'prepared', 'preflight-error'].includes(this.phase) ? 'preflight-error' : `${this.phase}-error`
       } finally {
         this.runStepPending = false

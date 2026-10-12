@@ -118,7 +118,7 @@ export function buildBiotronDiagnosticPacket(state, environment = {}) {
     },
     device: {
       connected: Boolean(state.device),
-      midi_port_name: state.device ? diagnosticText(state.device.name) : null,
+      midi_port_name: state.device ? portText(state.device.name) || 'unknown' : null,
       firmware_semantic_version: state.firmwareVersion || null,
     },
     midi_ports: (state.midiPorts || []).slice(0, 16).map(port => ({name: portText(port.name), manufacturer: portText(port.manufacturer), type: ['input', 'output'].includes(port.type) ? port.type : null, state: ['connected', 'disconnected'].includes(port.state) ? port.state : null})),

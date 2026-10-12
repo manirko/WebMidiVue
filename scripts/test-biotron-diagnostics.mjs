@@ -69,3 +69,6 @@ assert(!JSON.stringify(detailed).includes('PRIVATE_SERIAL'))
 const capped = buildBiotronDiagnosticPacket({midiPorts: Array(30).fill({name: 'x'.repeat(200), type: 'output', state: 'connected'})})
 assert.equal(capped.midi_ports.length, 16); assert.equal(capped.midi_ports[0].name.length, 80); assert.equal(capped.midi_ports_truncated, true)
 console.log('Manual diagnostics PASS: 9 port-name variants retained without identity inference; 16-port/80-character bounds, no opaque IDs or serial fields')
+
+const named = buildBiotronDiagnosticPacket({device: {name: '\u0000' + 'x'.repeat(200)}})
+assert.equal(named.device.midi_port_name, 'x'.repeat(80), 'Selected port name escaped the manual diagnostics bounds')
