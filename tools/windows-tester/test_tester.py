@@ -245,17 +245,24 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
     observed=run/'settings'
     if mode=='settings_timeout':raise subprocess.TimeoutExpired(command,600)
     if mode=='settings_fail':return subprocess.CompletedProcess(command,1)
-    tester.write_json(observed/'settings-matrix.json',{'rows':[{'field':str(i),'status':'PASS'} for i in range(25 if mode=='settings_early' else 26)]})
-    tester.write_json(observed/'settings-boundaries.json',[{'status':'PASS'} for i in range(17)])
-    tester.write_json(observed/'settings-actions.json',[{'status':'PASS'} for i in range(8 if mode=='settings_old_actions' else 14 if mode=='settings_public_actions' else 10)])
+    fields=sorted(tester.SETTINGS_FIELDS)
+    tester.write_json(observed/'settings-matrix.json',{'rows':[{'field':field,'status':'PASS'} for field in (fields[:25] if mode=='settings_early' else fields)]})
+    tester.write_json(observed/'settings-boundaries.json',[{'case':'boundary '+str(i),'status':'PASS'} for i in range(17)])
+    tester.write_json(observed/'settings-actions.json',[{'case':'action '+str(i),'status':'PASS'} for i in range(8 if mode=='settings_old_actions' else 14 if mode=='settings_public_actions' else 10)])
     return subprocess.CompletedProcess(command,0)
    observed=run/'browser';observed.mkdir()
    tester.write_json(observed/'progress.json',[{'stage':'PASS'}])
-   tester.write_json(observed/'keyboard-observations.json',[{'bank':'fixture','id':str(i)} for i in range(43 if mode=='pass' or mode.startswith('settings_') else 42)])
+   keys=[{'bank':bank,'id':ident,'rms':.02,'nonFinite':0} for bank,ident in sorted(tester.KEYBOARD_CASES)]
+   tester.write_json(observed/'keyboard-observations.json',keys if mode=='pass' or mode.startswith('settings_') else keys[:42])
    if mode=='timeout':raise subprocess.TimeoutExpired(command,600)
    if mode=='fail':tester.write_json(observed/'failure.json',{'error':'original product fault'})
    return subprocess.CompletedProcess(command,1 if mode=='fail' else 0)
   return execute
+
+ def public_routes(self):
+  rows=[{'installed':v,'target':'1.8.2','mode':'normal','bootRequests':boot,'picks':3,'writes':1,'sha256':tester.UF2_SHA,'attempt':'12345678-1234-1234-1234-123456789abc','phases':[{'phase':'select-drive','error':'cancelled'},{'phase':'select-drive','error':'drive_mismatch'},{'phase':'complete','error':None}],'physical':'NOT RUN; synthetic fixture'} for v,boot in [('1.7.3',0),('1.7.4',1)]]
+  rows += [{'installed':v,'target':'1.8.2','result':result,'physical':'NOT RUN'} for v,result in [('1.8.2','no downgrade/reinstall'),('1.10.10','no downgrade/reinstall'),('unknown','Check/help; no public install/BOOT')]]
+  return rows
 
  def test_autonomous_command_keeps_browser_identity_and_local_fixture(self):
   for browser in ['chrome','edge']:
@@ -308,7 +315,7 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
    def timed_execute(command,**kwargs):
     if command[-1].endswith('test-firmware-modal-browser.js'):
      directory=run/'firmware/firmware-modal-fixture';directory.mkdir()
-     rows=[{'installed':v,'target':'1.8.2','physical':'NOT RUN'} for v in ['1.7.3','1.7.4','1.8.2','1.10.10','unknown']]
+     rows=self.public_routes()
      if complete=='missing':rows=rows[:4]
      if complete=='skipped':rows[0]['result']='NOT RUN: missing UF2'
      if complete=='duplicate':rows[4]=rows[0].copy()
@@ -375,6 +382,52 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
    fault=json.loads((run/'first-autotest-fault.json').read_text())
    self.assertNotIn('Close only its test window',fault['message'])
    if cleanup=='NOT_CONFIRMED':self.assertIn('Stop further autotest/capture',fault['message'])
+
+ def test_completed_routes_require_write_hash_boot_and_terminal_journal(self):
+  self.assertTrue(tester.complete_firmware_routes(self.public_routes()))
+  for field,value in [('result','FAIL'),('writes',0),('writes',True),('picks',2),('bootRequests',1),('sha256','wrong'),('attempt',''),('physical','PASS'),('phases',[]),('phases',[{'phase':'complete','error':'write_failed'}])]:
+   rows=self.public_routes();rows[0][field]=value
+   with self.subTest(field=field,value=value):self.assertFalse(tester.complete_firmware_routes(rows))
+  for installed in ['1.8.2','1.10.10','unknown']:
+   for value in [None,'','FAIL','NOT RUN']:
+    rows=self.public_routes();next(r for r in rows if r['installed']==installed)['result']=value
+    with self.subTest(installed=installed,value=value):self.assertFalse(tester.complete_firmware_routes(rows))
+
+ def test_corrupted_evidence_cannot_pass_or_launch_the_next_phase(self):
+  for control in ['keyboard_duplicate','keyboard_foreign','audio_missing','audio_nan','audio_silent','audio_nonfinite','fields_foreign','boundaries_duplicate','actions_duplicate','malformed_actions']:
+   run=tester.new_run(self.root,'corrupt-'+control);execute=self.autonomous_fixture(run,'pass')
+   def corrupted(command,**kwargs):
+    result=execute(command,**kwargs)
+    if control.startswith(('keyboard','audio')) and command[-1]!='--settings-only':
+     file=run/'browser/keyboard-observations.json';rows=json.loads(file.read_text())
+     if control=='keyboard_duplicate':rows.append(rows[0].copy())
+     if control=='keyboard_foreign':rows[0]['id']='foreign'
+     if control=='audio_missing':rows[0].pop('rms')
+     if control=='audio_nan':rows[0]['rms']=float('nan')
+     if control=='audio_silent':rows[0]['rms']=.001
+     if control=='audio_nonfinite':rows[0]['nonFinite']=1
+     tester.write_json(file,rows)
+    elif command[-1]=='--settings-only':
+     file=run/'settings'/('settings-matrix.json' if control=='fields_foreign' else 'settings-boundaries.json' if control=='boundaries_duplicate' else 'settings-actions.json');data=json.loads(file.read_text())
+     if control=='fields_foreign':data['rows'][0]['field']='foreign'
+     elif control=='malformed_actions':data[-1]='not an object'
+     else:data[-1]=data[0].copy()
+     tester.write_json(file,data)
+    return result
+   with self.subTest(control=control),mock.patch.object(tester.subprocess,'run',side_effect=corrupted) as calls,self.assertRaises(ValueError):tester.run_autotest(self.root,run,'chrome','fixture','node')
+   self.assertEqual(calls.call_count,1 if control.startswith(('keyboard','audio')) else 2)
+   self.assertEqual(json.loads((run/'autotest-summary.json').read_text())['status'],'FAIL')
+   self.assertTrue((run/'first-autotest-fault.json').is_file())
+
+ def test_final_evidence_read_cannot_overrun_the_shared_budget(self):
+  run=tester.new_run(self.root,'late-evidence');execute=self.autonomous_fixture(run,'pass');clock=[0.0];read=Path.read_text
+  def delayed(file,*args,**kwargs):
+   body=read(file,*args,**kwargs)
+   if file==run/'settings/settings-actions.json':clock[0]=601
+   return body
+  with mock.patch.object(Path,'read_text',delayed),mock.patch.object(tester.time,'monotonic',side_effect=lambda:clock[0]),mock.patch.object(tester.subprocess,'run',side_effect=execute),self.assertRaisesRegex(ValueError,'Evidence validation exceeded'):
+   tester.run_autotest(self.root,run,'chrome','fixture','node')
+  self.assertTrue((run/'first-autotest-fault.json').is_file())
 
 class PackagingTests(unittest.TestCase):
  def setUp(self):

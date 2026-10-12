@@ -6,6 +6,7 @@ import hashlib
 import http.server
 import json
 import mimetypes
+import math
 import os
 from pathlib import Path, PurePosixPath
 import platform
@@ -46,6 +47,18 @@ CASES = {
  'W16': 'Real plant WAV: record, listen, save, external reopen and clean handoff',
  'W17': 'Camera + WAV -> CapCut import, reopen, export and view outside editor',
 }
+SETTINGS_FIELDS = set(('scale plantBpm noteOffPercent middle_plant_note plant_midi_channel '
+ 'button_mode_state swing_first_note_percent randomness performance same_note_plant '
+ 'firstValue noteDistance smoothness plant_no_velocity randomPlantVelocity minPlantVelocity '
+ 'maxPlantVelocity light_no_velocity randomLightVelocity minLightVelocity maxLightVelocity '
+ 'light_midi_channel light_pitch_mode lightBpm same_note_light range_light_note').split())
+KEYBOARD_CASES = {(bank,ident) for bank,ids in {
+ 'classic':'0 1 2 3 4 5 6',
+ 'timbres':'tone-reference tone-soft tone-glass tone-hollow tone-reed tone-bass tone-pluck tone-string tone-air tone-dry',
+ 'calibration':'cue-reference cue-current cue-gentle cue-present cue-soft cue-glass cue-pluck cue-warm cue-air cue-dry',
+ 'high-notes':'high-reference high-soft high-quiet high-filter high-dark high-resonance high-clear high-pluck high-balanced high-three',
+ 'handpan':'pan-clear pan-soft pan-breath pan-expressive pan-space pan-bold',
+}.items() for ident in ids.split()}
 
 
 def utc():
@@ -204,6 +217,25 @@ def node_version(executable):
  except (OSError,subprocess.SubprocessError): return None
 
 
+def complete_cases(rows, count):
+ if not isinstance(rows,list) or len(rows)!=count or any(not isinstance(row,dict) or row.get('status')!='PASS' or not isinstance(row.get('case'),str) or not row['case'] for row in rows):return False
+ return len({(row['case'],row.get('entered')) for row in rows})==count
+
+
+def complete_firmware_routes(rows):
+ if not isinstance(rows,list) or len(rows)!=5 or any(not isinstance(row,dict) for row in rows):return False
+ if {row.get('installed') for row in rows}!={'1.7.3','1.7.4','1.8.2','1.10.10','unknown'}:return False
+ for row in rows:
+  if row.get('target')!='1.8.2' or not isinstance(row.get('physical'),str) or not row['physical'].startswith('NOT RUN'):return False
+  if row['installed'] in ['1.7.3','1.7.4']:
+   phases=row.get('phases')
+   if row.get('result') is not None or row.get('mode')!='normal' or any(type(row.get(key)) is not int for key in ['writes','picks','bootRequests']) or row.get('writes')!=1 or row.get('picks')!=3 or row.get('bootRequests')!=(0 if row['installed']=='1.7.3' else 1) or row.get('sha256')!=UF2_SHA or not re.fullmatch(r'[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}',str(row.get('attempt',''))):return False
+   if not isinstance(phases,list) or not phases or any(not isinstance(phase,dict) for phase in phases):return False
+   if phases[-1]!={'phase':'complete','error':None} or sum(phase.get('phase')=='complete' for phase in phases)!=1 or not {'cancelled','drive_mismatch'}<={phase.get('error') for phase in phases}:return False
+  elif row.get('result')!=('Check/help; no public install/BOOT' if row['installed']=='unknown' else 'no downgrade/reinstall'):return False
+ return True
+
+
 def run_autotest(root, run, browser, executable, node, firmware=False):
  # Reuse existing audition and sound/Settings suites; no native MIDI client.
  scripts=[root/'automation/scripts/test-audition-browser.js',root/'automation/scripts/test-sound-browser.js']
@@ -249,24 +281,25 @@ def run_autotest(root, run, browser, executable, node, firmware=False):
     if index==0:
      progress=json.loads((run/'browser/progress.json').read_text(encoding='utf-8'))
      keys=json.loads((run/'browser/keyboard-observations.json').read_text(encoding='utf-8'))
-     if progress[-1]['stage']!='PASS' or len({(x['bank'],x['id']) for x in keys})!=43:
+     if progress[-1]['stage']!='PASS' or len(keys)!=43 or {(x['bank'],x['id']) for x in keys}!=KEYBOARD_CASES or any(type(x.get('rms')) not in [int,float] or not math.isfinite(x['rms']) or x['rms']<=.001 or type(x.get('nonFinite')) is not int or x['nonFinite']!=0 for x in keys):
       fault='Suite exited without complete PASS and 43 keyboard observations.'
     elif index==1:
      rows=json.loads((run/'settings/settings-matrix.json').read_text(encoding='utf-8'))['rows']
      boundaries=json.loads((run/'settings/settings-boundaries.json').read_text(encoding='utf-8'))
      actions=json.loads((run/'settings/settings-actions.json').read_text(encoding='utf-8'))
      required_actions=14 if FIRMWARE_CHANNEL=='public-stable' else 10
-     if len({x['field'] for x in rows if x['status']=='PASS'})!=26 or any(x['status'] not in ['PASS','UNCHANGED_BASELINE'] for x in rows) or len(boundaries)!=17 or any(x['status']!='PASS' for x in boundaries) or len(actions)!=required_actions or any(x['status']!='PASS' for x in actions):
+     if {x['field'] for x in rows if x['status']=='PASS'}!=SETTINGS_FIELDS or any(x['field'] not in SETTINGS_FIELDS or x['status'] not in ['PASS','UNCHANGED_BASELINE'] for x in rows) or not complete_cases(boundaries,17) or not complete_cases(actions,required_actions):
       fault=f'Settings suite exited without 26 changed commands, 17 boundary/failure cases and {required_actions} preset/action cases.'
     else:
      files=list((run/'firmware').glob('*/journeys.json'))
      if len(files)!=1:raise ValueError('Firmware evidence is missing')
      rows=json.loads(files[0].read_text(encoding='utf-8'))
-     if len(rows)!=5 or {row.get('installed') for row in rows}!={'1.7.3','1.7.4','1.8.2','1.10.10','unknown'} or any(row.get('target')!='1.8.2' or 'NOT RUN' in row.get('result','') for row in rows):
+     if not complete_firmware_routes(rows):
       fault='Firmware suite exited without five complete compiled version routes.'
    except (OSError,ValueError,KeyError,IndexError,TypeError):fault='Suite evidence is missing or incomplete.'
+  if not fault and time.monotonic()>deadline:fault='Evidence validation exceeded the total 600-second execution limit; keep the logs.'
   if fault:break
- if fault:write_json(run/'first-autotest-fault.json',{'at':utc(),'message':fault,'exit_code':code,'cleanup':cleanup,'status':'INTERRUPTED' if interrupted else 'FAIL_OR_INCONCLUSIVE; not physical acceptance'})
+ if fault:write_json(run/'first-autotest-fault.json',{'at':utc(),'message':fault,'suite':index,'exit_code':code,'cleanup':cleanup,'status':'INTERRUPTED' if interrupted else 'FAIL_OR_INCONCLUSIVE; not physical acceptance'})
  write_json(run/'autotest-summary.json',{'at':utc(),'status':'INTERRUPTED' if interrupted else 'FAIL' if fault else 'PASS_SOFTWARE_ONLY','exit_code':code,'cleanup':cleanup,'web_commit':WEB_COMMIT,'browser':browser,'physical_windows_result':'NOT_RUN','customer_release':False,'error':fault})
  if fault:raise ValueError(fault+' Evidence: '+str(run))
  print('Software sound, Settings'+(' and simulated public firmware routes' if firmware else '')+' passed. Real USB, hearing and installation remain for manual acceptance. Evidence:',run)

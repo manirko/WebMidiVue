@@ -52,7 +52,8 @@ def main():
   data,count=re.subn(r'^'+name+r' = .*$',name+' = '+value,data,flags=re.M)
   if count!=1:raise ValueError('Helper packaging marker differs: '+name)
  write(packet/'tester.py',data.encode())
- write(packet/'capture-browser.cjs',(helper_root/'capture-browser.cjs').read_bytes())
+ for name in ['capture-browser.cjs','test_tester.py','build_packet.py']:
+  write(packet/name,(helper_root/name).read_bytes())
  substitutions={'{{WEB_COMMIT}}':commit,'{{HELPER_COMMIT}}':helper,'{{ONLINE_URL}}':args.online_origin}
  for source,target in [('PACKET-GUIDE.md','README.md'),('CLAUDE.md','CLAUDE.md'),('START-HERE.html','START-HERE.html')]:
   text=(helper_root/source).read_text(encoding='utf-8')
