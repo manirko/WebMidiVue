@@ -67,6 +67,16 @@ def main():
  if json.loads((vendor/'package.json').read_text())['version']!='1.62.1':raise ValueError('Pinned Playwright1.62.1 required')
  if any(p.is_symlink() for p in vendor.rglob('*')):raise ValueError('Vendor links are not portable')
  shutil.copytree(vendor,packet/'vendor/playwright-core')
+ # Node ESM ignores NODE_PATH; preserve the existing small dependency closure locally.
+ lock=json.loads(git('show',commit+':package-lock.json'))['packages'];vendor_versions={}
+ for name in ['@elemaudio/core','invariant','shallowequal','loose-envify','js-tokens']:
+  source=ROOT/'node_modules'/name
+  for metadata in source.rglob('package.json'):
+   relative=metadata.parent.relative_to(ROOT).as_posix();version=json.loads(metadata.read_text())['version']
+   if lock.get(relative,{}).get('version')!=version:raise ValueError('Unpinned existing dependency: '+relative)
+   vendor_versions[relative]=version
+  if any(p.is_symlink() for p in source.rglob('*')):raise ValueError('Dependency links are not portable')
+  shutil.copytree(source,packet/'automation/node_modules'/name)
  source_rows={};excluded={}
  for name in git('ls-tree','-r','--name-only',commit).decode().splitlines():
   body=git('show',commit+':'+name)
@@ -88,7 +98,7 @@ def main():
  write(packet/'reference/ACCEPTANCE-STATUS.json',(json.dumps(status,ensure_ascii=False,indent=2)+'\n').encode())
  draft='Сергей @L_747, собрали один новый пакет для теста Biotron.\n\n'+args.online_origin+'/#/biotron/play?sound=1\n\nНачни с START-HERE.html: первый звук →Stop→Start. Для Claude есть исходники, точный билд и автоматические команды. Ночь не нужна; телефон отдельно. Прошивку пока не меняем.\n\nРезультат:958 · компьютер/телефон · Wxx · PASS/FAIL/NOT_RUN · наблюдение. Claude соберёт отчёт и логи командой tester.py bundle.\n\nDRAFT/NOT SENT; owner-mobile/scoped staff-send gate separate.\n'
  write(packet/'reference/SERGEY-MESSAGE-DRAFT.md',draft.encode())
- manifest={'schema':'biotron.field-test-packet.v2','web_commit':commit,'helper_commit':helper,'online_url':args.online_origin+'/#/biotron/play?sound=1','firmware_channel':'public-stable','firmware_version':'1.8.2','firmware_source_commit':None,'firmware_sha256':STABLE_SHA,'firmware_test_input_only':True,'runtime_release_sha256':sha((args.runtime/'release-evidence.json').read_bytes()),'source_sha256':source_hashes,'physical_windows_result':'NOT_RUN','physical_phone_result':'NOT_RUN','customer_release':False,'automatic_upload':False,'files':{p.relative_to(packet).as_posix():sha(p.read_bytes()) for p in sorted(packet.rglob('*')) if p.is_file()}}
+ manifest={'schema':'biotron.field-test-packet.v2','web_commit':commit,'helper_commit':helper,'online_url':args.online_origin+'/#/biotron/play?sound=1','firmware_channel':'public-stable','firmware_version':'1.8.2','firmware_source_commit':None,'firmware_sha256':STABLE_SHA,'firmware_test_input_only':True,'runtime_release_sha256':sha((args.runtime/'release-evidence.json').read_bytes()),'source_sha256':source_hashes,'vendor_versions':vendor_versions,'physical_windows_result':'NOT_RUN','physical_phone_result':'NOT_RUN','customer_release':False,'automatic_upload':False,'files':{p.relative_to(packet).as_posix():sha(p.read_bytes()) for p in sorted(packet.rglob('*')) if p.is_file()}}
  write(packet/'packet-manifest.json',(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n').encode())
  print(json.dumps({'packet':str(packet),'web_commit':commit,'helper_commit':helper,'payload_files':len(manifest['files']),'compiled_files':len(files),'excluded_internal_uf2':len(excluded),'manifest_sha256':sha((packet/'packet-manifest.json').read_bytes()),'sent':False}))
 
