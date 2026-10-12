@@ -8,7 +8,7 @@ const root = path.resolve(process.env.BIOTRON_QA_DIST_ROOT || path.join(__dirnam
 const server = createStaticServer(root)
 const artifacts = process.env.QUALITY_BROWSER_OUTPUT || path.join(process.env.BIOTRON_QA_OUTPUT || require('node:os').tmpdir(), `biotron-quality-${Date.now()}`)
 fs.mkdirSync(artifacts, {recursive: true})
-let currentPage, currentProfile
+let currentPage, currentProfile, currentHint
 
 const profiles = [
   {name: 'desktop', options: {viewport: {width: 1440, height: 900}}, midi: true, heading: 'Settings'},
@@ -95,10 +95,13 @@ async function auditHints(page, profile) {
   const originalControls = await controls()
   assert(await hints.count() > 0, `${profile.name}: no settings explanations checked`)
   for (let index = 0; index < await hints.count(); index++) {
+    currentHint = {index, phase: 'open'}
     const hint = hints.nth(index), trigger = hint.locator('summary')
     if (profile.options.hasTouch) await trigger.tap(); else await trigger.click()
     const text = hint.locator('[role="tooltip"], .hint-text')
+    currentHint.phase = 'scroll'
     await text.scrollIntoViewIfNeeded()
+    currentHint.phase = 'read-and-close'
     const reading = await text.evaluate(element => {
       const style = getComputedStyle(element), rect = element.getBoundingClientRect()
       return {text: element.textContent, rect: rect.toJSON(), viewport: document.documentElement.clientWidth,
@@ -120,6 +123,7 @@ async function auditHints(page, profile) {
   }
   // Text enlargement and an unbroken token must remain readable in the same real disclosure.
   const firstHint = hints.first()
+  currentHint = {index: 0, phase: 'enlarged-and-keyboard'}
   await firstHint.locator('summary').click()
   await firstHint.locator('[role="tooltip"], .hint-text').evaluate(element => {
     element.textContent = 'Long explanation\n' + 'x'.repeat(200)
@@ -145,6 +149,7 @@ async function auditHints(page, profile) {
     await page.keyboard.press('Space')
     assert.equal(await first.evaluate(element => element.open), false, `${profile.name}: Space did not close help`)
   }
+  currentHint = null
   return readings.length
 }
 
@@ -785,7 +790,8 @@ async function auditJourneys(browser, origin) {
     }
     console.log(`Responsive quality verified — ${results.join('; ')}`)
   } catch (error) {
-    if (!fs.existsSync(path.join(artifacts, 'failure.json'))) fs.writeFileSync(path.join(artifacts, 'failure.json'), JSON.stringify({profile: currentProfile, error: error.message}, null, 2))
+    if (!fs.existsSync(path.join(artifacts, 'failure.json'))) fs.writeFileSync(path.join(artifacts, 'failure.json'), JSON.stringify({profile: currentProfile, hint: currentHint, error: error.message}, null, 2))
+    await currentPage?.locator('body').innerText({timeout: 1000}).then(text => fs.writeFileSync(path.join(artifacts, 'failure-dom.txt'), text)).catch(() => {})
     await currentPage?.screenshot({path: path.join(artifacts, 'failure.png'), timeout: 1000}).catch(() => {})
     throw error
   } finally {
