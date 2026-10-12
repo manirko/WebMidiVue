@@ -2,7 +2,7 @@ const {execFileSync} = require('child_process')
 const path = require('path')
 
 const biotronBeta = process.env.VUE_APP_BIOTRON_PWA_BETA === 'true'
-const biotronFirmwareBeta = process.env.VUE_APP_BIOTRON_FIRMWARE_TEST_ENABLED === 'true'
+const biotronFirmwareBeta = process.env.VUE_APP_BIOTRON_FIRMWARE_TEST_ENABLED === 'true' && Boolean(process.env.VUE_APP_BIOTRON_FIRMWARE_TARGET)
 let sourceRevision = process.env.CF_PAGES_COMMIT_SHA || process.env.GITHUB_SHA || ''
 if (!sourceRevision) {
   try {
