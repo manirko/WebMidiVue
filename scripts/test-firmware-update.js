@@ -212,6 +212,21 @@ const arrayBuffer = buffer => buffer.buffer.slice(buffer.byteOffset, buffer.byte
   await assert.rejects(() => updater.writeFirmware(fetched, firmware, async () => bootDrive('RPI-RP2', 'Board-ID: RP2350')),
     /Nothing was written/)
 
+  // A bootrom ID is an exact field, not a prefix or text quoted elsewhere in the file.
+  for (const info of ['Board-ID: RPI-RP2350\n', 'Board-ID: RPI-RP2-other\n',
+    'Not-Board-ID: RPI-RP2\n', 'Board-ID: RPI-RP2\nBoard-ID: RP2350\n']) {
+    writes.length = 0
+    await assert.rejects(() => updater.writeFirmware(fetched, firmware, async () => bootDrive('RPI-RP2', info)),
+      /Nothing was written/, `Unconfirmed board marker accepted: ${JSON.stringify(info)}`)
+    assert.deepStrictEqual(writes, [], 'Invalid board identity reached the write boundary')
+  }
+  for (const info of [INFO_UF2.replace(/\n/g, '\r\n'), 'Board-ID: RPI-RP2', '\tboard-id:\tRPI-RP2 \r\n']) {
+    writes.length = 0
+    const result = await updater.writeFirmware(fetched, firmware, async () => bootDrive('RPI-RP2', info))
+    assert.strictEqual(result.bytes, firmware.size)
+    assert.strictEqual(writes[1], 'closed')
+  }
+
   await assert.rejects(() => updater.writeFirmware(fetched, firmware, null), /computer with Chrome or Edge/)
 
   console.log('Firmware update verified: exact beta UF2 is hash/size/structure checked before BOOT; only RPI-RP2 receives bytes; failures stay fail-closed.')

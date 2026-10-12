@@ -69,11 +69,11 @@ export async function writeFirmware(prepared, firmware, pickDirectory = window.s
     if (!prepared?.buffer || prepared.sha256 !== firmware.sha256.toLowerCase()) throw new Error('Verify firmware again before writing.')
     if (!pickDirectory) throw new Error(DESKTOP_ONLY)
     const directory = await pickDirectory({mode: 'readwrite'})
-    // The name cannot identify the drive: Chromium names a handle after the path basename and strips the
-    // Windows drive letter, so the root of D: arrives as '\\'. The bootrom always serves INFO_UF2.TXT.
+    // On Windows D: arrives as '\\'; identify the boot drive by INFO_UF2.TXT, not its directory name.
     const info = await directory?.getFileHandle('INFO_UF2.TXT')
         .then(handle => handle.getFile()).then(file => file.text()).catch(() => '')
-    if (!/Board-ID:\s*RPI-RP2/i.test(info))
+    const boardIds = info.split(/[\r\n]+/).filter(line => /^[ \t]*Board-ID:/i.test(line))
+    if (boardIds.length !== 1 || !/^[ \t]*Board-ID:[ \t]*RPI-RP2[ \t]*$/i.test(boardIds[0]))
         throw new Error(`You opened ${JSON.stringify(directory?.name ?? '')}. Nothing was written. Open the disk named RPI-RP2 instead.`)
     const file = await directory.getFileHandle(firmware.name, {create: true})
     const writable = await file.createWritable({keepExistingData: false})
