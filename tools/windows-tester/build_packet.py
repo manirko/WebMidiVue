@@ -5,7 +5,7 @@ from pathlib import Path, PurePosixPath
 
 ROOT=Path(__file__).resolve().parents[2]
 STABLE_SHA='d2406d66225f76779331714b0a9df814d1c72d7f3640178f29adc9d3b45b4251'
-AUTOMATION=['scripts/test-audition-browser.js','scripts/test-sound-browser.js','scripts/test-firmware-modal-browser.js','scripts/browser-test-harness.js','src/audio/auditionBanks.mjs','src/audio/elementary/timbres.mjs','src/audio/elementary/fx/srvb.mjs','src/audio/elementary/fx/LICENSE-chromatone.txt']
+AUTOMATION=['scripts/test-audition-browser.js','scripts/test-sound-browser.js','scripts/test-firmware-modal-browser.js','scripts/browser-test-harness.js','scripts/audio-qa/analyze.mjs','src/audio/auditionBanks.mjs','src/audio/elementary/timbres.mjs','src/audio/elementary/fx/srvb.mjs','src/audio/elementary/fx/LICENSE-chromatone.txt']
 
 def sha(body):return hashlib.sha256(body).hexdigest()
 def git(*args):return subprocess.check_output(['git',*args],cwd=ROOT)

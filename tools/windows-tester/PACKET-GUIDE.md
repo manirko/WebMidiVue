@@ -29,7 +29,7 @@ Helper не открывает свой MIDI-клиент, не пишет пр�
 | runtime/ | Готовая публичная сборка958, без внутренних UF2 |
 | builds/Biotron-Web-95855bd.zip | Те же75 файлов для отдельной передачи приложения |
 | source-review.zip | Исходники958 и source-manifest, все UF2 исключены |
-| automation/ | Существующие8 файлов тестов/аудио/лицензии, pinned к958 |
+| automation/ | Существующие9 файлов тестов/аудио/лицензии, pinned к958 |
 | vendor/playwright-core/ | Версия1.62.1 и лицензии; браузер внутрь не включён |
 | test-inputs/biotron-firmware_v1.8.2.uf2 | Официальные bytes для имитации диска, НЕ инструкция прошивать |
 | reference/REPORT-TEMPLATE.md | Отчёт по W01–W17 и отдельным платформам |
@@ -261,4 +261,3 @@ Full `npm run test:biotron` содержит Mac/shell-команды и interna
 hearing/DAW/CapCut/physical firmware/customer acceptance. Owner-mobile exact958
 ещё NOT_RUN; отдельный допуск передачи не подразумевается. Security41/privacy/
 rights/telemetry delivery и прежние слуховые gates остаются OPEN.
-

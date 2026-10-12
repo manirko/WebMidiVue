@@ -378,6 +378,9 @@ class PackagingTests(unittest.TestCase):
   self.release={'commit':self.commit,'firmware_update_enabled':True,'firmware_update_channel':'public-stable','files':[{'path':'index.html','sha256':tester.digest(self.root/'index.html')}]}
   self.save()
  def save(self):tester.write_json(self.root/'release-evidence.json',self.release)
+ def test_default_audition_pcm_writer_is_in_portable_inputs(self):
+  self.assertIn('scripts/audio-qa/analyze.mjs',self.builder.AUTOMATION)
+  self.assertEqual(len(self.builder.AUTOMATION),len(set(self.builder.AUTOMATION)))
  def test_exact_public_artifact_and_stale_identity(self):
   self.assertEqual(len(self.builder.validate_artifact(self.root,self.commit)[1]),2)
   for key,value in [('commit','4'*40),('firmware_update_enabled',False),('firmware_update_channel','internal')]:
