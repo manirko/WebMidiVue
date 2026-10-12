@@ -1,7 +1,7 @@
 <template>
   <section class="audio-compare" :data-variant="variant.id">
     <template v-if="!calibrationOnly">
-      <p>Choose a sound, then play with Biotron or your keyboard.</p>
+      <p>Choose a sound. Play it with Biotron or listen to an example.</p>
       <div class="compare-groups" role="group" aria-label="Quick sounds"><button v-for="sound in palette" :key="sound.id" type="button" class="btn btn-outline-primary" :aria-pressed="variantId === sound.id && bankId === sound.bankId" @click="choose(sound.bankId, sound.id)">{{ sound.label }}</button>
       </div><details class="sound-orbit">
         <summary>Sound sphere · Experiment</summary>
