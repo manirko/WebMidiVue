@@ -26,7 +26,7 @@ class PacketTests(unittest.TestCase):
   # Synthetic bytes exercise verification; never claim a real UF2/platform result.
   fixtures={'biotron-1.10.11-internal.uf2':b'test-only candidate', 'biotron-1.10.10-internal.uf2':b'test-only frozen', 'biotron-1.10.9-clean.uf2':b'test-only rollback'}
   for name,body in fixtures.items():(runtime/'firmware'/name).write_bytes(body)
-  patch=mock.patch.multiple(tester,WEB_COMMIT='1'*40,UF2_SHA=tester.digest(runtime/'firmware/biotron-1.10.11-internal.uf2'),FROZEN_SHA=tester.digest(runtime/'firmware/biotron-1.10.10-internal.uf2'),ROLLBACK_SHA=tester.digest(runtime/'firmware/biotron-1.10.9-clean.uf2'))
+  patch=mock.patch.multiple(tester,WEB_COMMIT='1'*40,FIRMWARE_CHANNEL='internal',UF2_SHA=tester.digest(runtime/'firmware/biotron-1.10.11-internal.uf2'),FROZEN_SHA=tester.digest(runtime/'firmware/biotron-1.10.10-internal.uf2'),ROLLBACK_SHA=tester.digest(runtime/'firmware/biotron-1.10.9-clean.uf2'))
   patch.start();self.addCleanup(patch.stop)
   (runtime/'release-evidence.json').write_text(json.dumps({'source_commit':tester.WEB_COMMIT}))
   self.manifest={'web_commit':tester.WEB_COMMIT,'firmware_version':tester.FIRMWARE_VERSION,'firmware_source_commit':tester.FIRMWARE_SOURCE,'files':{x.relative_to(self.root).as_posix():tester.digest(x) for x in runtime.rglob('*') if x.is_file()}}
@@ -83,8 +83,41 @@ class PacketTests(unittest.TestCase):
    with self.subTest(name=name),self.assertRaisesRegex(ValueError,message):tester.verify(self.root)
    file.write_bytes(original);self.manifest['files']['runtime/firmware/'+name]=tester.digest(file)
  def test_case_inventory_keeps_physical_cue_gate(self):
-  self.assertEqual(len(tester.CASES),15)
+  self.assertEqual(len(tester.CASES),17)
   self.assertIn('FB44',tester.CASES['W14'])
+  self.assertIn('WAV',tester.CASES['W16'])
+  self.assertIn('CapCut',tester.CASES['W17'])
+
+ def public_packet(self):
+  for file in (self.root/'runtime/firmware').iterdir():file.unlink()
+  target=self.root/'test-inputs/biotron-firmware_v1.8.2.uf2'
+  target.parent.mkdir();target.write_bytes(b'official-input-fixture-only')
+  self.manifest.update(firmware_channel='public-stable',firmware_version='1.8.2',firmware_source_commit=None)
+  tester.write_json(self.root/'runtime/release-evidence.json',{'commit':tester.WEB_COMMIT,'firmware_update_enabled':True,'firmware_update_channel':'public-stable'})
+  self.manifest['files']={p.relative_to(self.root).as_posix():tester.digest(p) for directory in ['runtime','test-inputs'] for p in (self.root/directory).rglob('*') if p.is_file()}
+  tester.write_json(self.root/'packet-manifest.json',self.manifest)
+  return mock.patch.multiple(tester,FIRMWARE_CHANNEL='public-stable',FIRMWARE_VERSION='1.8.2',FIRMWARE_SOURCE=None,UF2_SHA=tester.digest(target),create=True)
+
+ def test_public_packet_keeps_official_test_input_outside_runtime(self):
+  with self.public_packet():tester.verify(self.root)
+
+ def test_public_packet_rejects_internal_image_or_wrong_channel(self):
+  with self.public_packet():
+   file=self.root/'runtime/firmware/other.uf2';file.write_bytes(b'unapproved')
+   self.manifest['files']['runtime/firmware/other.uf2']=tester.digest(file)
+   tester.write_json(self.root/'packet-manifest.json',self.manifest)
+   with self.assertRaisesRegex(ValueError,'public.*UF2'):tester.verify(self.root)
+   file.unlink();del self.manifest['files']['runtime/firmware/other.uf2']
+   self.manifest['firmware_channel']='internal'
+   tester.write_json(self.root/'packet-manifest.json',self.manifest)
+   with self.assertRaisesRegex(ValueError,'channel'):tester.verify(self.root)
+
+ def test_public_input_hash_and_runtime_channel_cannot_be_rehashed_away(self):
+  with self.public_packet():
+   file=self.root/'test-inputs/biotron-firmware_v1.8.2.uf2';file.write_bytes(b'changed')
+   self.manifest['files']['test-inputs/biotron-firmware_v1.8.2.uf2']=tester.digest(file)
+   tester.write_json(self.root/'packet-manifest.json',self.manifest)
+   with self.assertRaisesRegex(ValueError,'test input'):tester.verify(self.root)
  def test_paths_cannot_escape_on_either_os(self):
   for name in ['../secret','/secret','C:/secret','..\\secret','runtime/../../secret']:
    with self.subTest(name=name),self.assertRaises(ValueError):tester.safe_file(self.root,name)
@@ -227,7 +260,7 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
  def test_autonomous_command_keeps_browser_identity_and_local_fixture(self):
   for browser in ['chrome','edge']:
    run=tester.new_run(self.root,'auto-'+browser)
-   with mock.patch.object(tester.subprocess,'run',side_effect=self.autonomous_fixture(run,'pass')) as call:
+   with mock.patch.dict(tester.os.environ,{'BIOTRON_QA_ORIGIN':'https://foreign.invalid'}),mock.patch.object(tester.subprocess,'run',side_effect=self.autonomous_fixture(run,'pass')) as call:
     tester.run_autotest(self.root,run,browser,'C:/Browser With Spaces/app.exe','node')
    args,kwargs=call.call_args_list[0]
    self.assertEqual(call.call_count,2)
@@ -240,6 +273,7 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
    self.assertEqual(kwargs['env']['BIOTRON_QA_BROWSER'],'msedge' if browser=='edge' else 'chrome')
    self.assertEqual(kwargs['env']['EDGE_PATH' if browser=='edge' else 'CHROME_PATH'],'C:/Browser With Spaces/app.exe')
    self.assertEqual(kwargs['env']['BIOTRON_QA_DIST_ROOT'],str(self.root/'runtime'))
+   self.assertNotIn('BIOTRON_QA_ORIGIN',kwargs['env'])
    summary=json.loads((run/'autotest-summary.json').read_text())
    self.assertEqual(summary['status'],'PASS_SOFTWARE_ONLY')
    self.assertFalse(summary['customer_release'])
@@ -257,6 +291,30 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
   self.assertEqual(calls.call_count,2)
   self.assertEqual(calls.call_args_list[0].kwargs['timeout'],600)
   self.assertEqual(calls.call_args_list[1].kwargs['timeout'],150)
+
+ def test_optional_firmware_phase_shares_deadline_and_requires_completed_routes(self):
+  for complete in ['complete','missing','skipped','duplicate']:
+   run=tester.new_run(self.root,'firmware-deadline');clock=[100.0]
+   execute=self.autonomous_fixture(run,'pass')
+   (self.root/'automation/scripts/test-firmware-modal-browser.js').write_text('// fixture only')
+   def timed_execute(command,**kwargs):
+    if command[-1].endswith('test-firmware-modal-browser.js'):
+     directory=run/'firmware/firmware-modal-fixture';directory.mkdir()
+     rows=[{'installed':v,'target':'1.8.2','physical':'NOT RUN'} for v in ['1.7.3','1.7.4','1.8.2','1.10.10','unknown']]
+     if complete=='missing':rows=rows[:4]
+     if complete=='skipped':rows[0]['result']='NOT RUN: missing UF2'
+     if complete=='duplicate':rows[4]=rows[0].copy()
+     tester.write_json(directory/'journeys.json',rows)
+     result=subprocess.CompletedProcess(command,0)
+    else:result=execute(command,**kwargs)
+    clock[0]+=200;return result
+   with mock.patch.object(tester.time,'monotonic',side_effect=lambda:clock[0]),mock.patch.object(tester.subprocess,'run',side_effect=timed_execute) as calls:
+    if complete=='complete':tester.run_autotest(self.root,run,'chrome','fixture','node',firmware=True)
+    else:
+     with self.assertRaises(ValueError):tester.run_autotest(self.root,run,'chrome','fixture','node',firmware=True)
+   self.assertEqual([c.kwargs['timeout'] for c in calls.call_args_list],[600,400,200])
+   self.assertEqual(calls.call_args_list[2].kwargs['env']['BIOTRON_QA_OUTPUT'],str(run/'firmware'))
+   if complete!='complete':self.assertTrue((run/'first-autotest-fault.json').is_file())
 
  def test_autonomous_expired_budget_does_not_launch_settings(self):
   for elapsed in (600,601):
@@ -309,5 +367,41 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
    fault=json.loads((run/'first-autotest-fault.json').read_text())
    self.assertNotIn('Close only its test window',fault['message'])
    if cleanup=='NOT_CONFIRMED':self.assertIn('Stop further autotest/capture',fault['message'])
+
+class PackagingTests(unittest.TestCase):
+ def setUp(self):
+  spec=importlib.util.spec_from_file_location('build_packet',Path(__file__).with_name('build_packet.py'))
+  self.builder=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.builder)
+  self.temp=tempfile.TemporaryDirectory(prefix='biotron-build-test-');self.addCleanup(self.temp.cleanup)
+  self.root=Path(self.temp.name);self.commit='3'*40
+  (self.root/'index.html').write_bytes(b'public artifact')
+  self.release={'commit':self.commit,'firmware_update_enabled':True,'firmware_update_channel':'public-stable','files':[{'path':'index.html','sha256':tester.digest(self.root/'index.html')}]}
+  self.save()
+ def save(self):tester.write_json(self.root/'release-evidence.json',self.release)
+ def test_exact_public_artifact_and_stale_identity(self):
+  self.assertEqual(len(self.builder.validate_artifact(self.root,self.commit)[1]),2)
+  for key,value in [('commit','4'*40),('firmware_update_enabled',False),('firmware_update_channel','internal')]:
+   old=self.release[key];self.release[key]=value;self.save()
+   with self.subTest(key=key),self.assertRaises(ValueError):self.builder.validate_artifact(self.root,self.commit)
+   self.release[key]=old
+ def test_unlisted_changed_or_duplicate_artifact_stops(self):
+  (self.root/'extra.txt').write_bytes(b'unlisted')
+  with self.assertRaisesRegex(ValueError,'inventory'):self.builder.validate_artifact(self.root,self.commit)
+  (self.root/'extra.txt').unlink();(self.root/'index.html').write_bytes(b'changed')
+  with self.assertRaisesRegex(ValueError,'SHA'):self.builder.validate_artifact(self.root,self.commit)
+  self.release['files']*=2;self.save()
+  with self.assertRaisesRegex(ValueError,'Duplicate'):self.builder.validate_artifact(self.root,self.commit)
+ def test_even_listed_internal_image_is_rejected(self):
+  file=self.root/'internal.UF2';file.write_bytes(b'fixture only')
+  self.release['files'].append({'path':file.name,'sha256':tester.digest(file)});self.save()
+  with self.assertRaisesRegex(ValueError,'firmware images'):self.builder.validate_artifact(self.root,self.commit)
+ def test_zip_readback_preserves_bytes_and_never_overwrites(self):
+  output=self.root/'delivery.zip';rows={'a.txt':b'one','nested/b.txt':b'two'}
+  self.builder.zip_bytes(output,rows)
+  with zipfile.ZipFile(output) as archive:
+   self.assertIsNone(archive.testzip());self.assertEqual({n:archive.read(n) for n in archive.namelist()},rows)
+  first=tester.digest(output)
+  with self.assertRaises(FileExistsError):self.builder.zip_bytes(output,{'a.txt':b'other'})
+  self.assertEqual(tester.digest(output),first)
 
 if __name__=='__main__':unittest.main()

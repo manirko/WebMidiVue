@@ -21,6 +21,7 @@ import zipfile
 
 # Final packager fills this after the web freeze; incomplete drafts fail closed.
 WEB_COMMIT = 'PACKAGING_PENDING_WEB_COMMIT'
+FIRMWARE_CHANNEL = 'internal'
 FIRMWARE_VERSION = '1.10.11'
 FIRMWARE_SOURCE = 'a7739040e07ba7ca04767682755eec8589c15234'
 FROZEN_SHA = '598d5a084f1eb3274e7c62b7bbeec1701f49d28edad87662e19c084dfc75477d'
@@ -42,6 +43,8 @@ CASES = {
  'W13': 'Physical phone USB/MIDI, sound, settings and recovery (separate platform)',
  'W14': 'FB44 physical active calibration cue: original-channel Note Off, next cue on new channel; DAW/audio',
  'W15': 'Optional native Settings: backup -> one setting -> readback and measured MIDI effect -> exact restore; known stimulus required',
+ 'W16': 'Real plant WAV: record, listen, save, external reopen and clean handoff',
+ 'W17': 'Camera + WAV -> CapCut import, reopen, export and view outside editor',
 }
 
 
@@ -77,6 +80,8 @@ def verify(root, expected_web_commit=None):
   raise ValueError('Unexpected web commit')
  if manifest.get('firmware_version') != FIRMWARE_VERSION or manifest.get('firmware_source_commit') != FIRMWARE_SOURCE:
   raise ValueError('Firmware identity differs from candidate')
+ if manifest.get('firmware_channel','internal') != FIRMWARE_CHANNEL:
+  raise ValueError('Firmware channel differs from packet')
  for relative, expected in manifest['files'].items():
   file = safe_file(root, relative)
   if not file.is_file() or digest(file) != expected:
@@ -86,7 +91,7 @@ def verify(root, expected_web_commit=None):
  actual = {x.relative_to(runtime).as_posix() for x in runtime.rglob('*') if x.is_file()}
  if actual != expected:
   raise ValueError('Runtime inventory changed')
- for directory in ['automation', 'vendor']:
+ for directory in ['automation', 'vendor', 'test-inputs']:
   expected = {x[len(directory)+1:] for x in manifest['files'] if x.startswith(directory+'/')}
   actual = {x.relative_to(root/directory).as_posix() for x in (root/directory).rglob('*') if x.is_file()}
   if actual != expected:raise ValueError(directory+' inventory changed')
@@ -94,6 +99,15 @@ def verify(root, expected_web_commit=None):
  commits = [release[key] for key in ('commit', 'source_commit') if key in release]
  if not commits or any(commit != WEB_COMMIT for commit in commits):
   raise ValueError('Runtime metadata differs from candidate')
+ if FIRMWARE_CHANNEL == 'public-stable':
+  if release.get('firmware_update_channel') != 'public-stable' or release.get('firmware_update_enabled') is not True:
+   raise ValueError('Runtime firmware channel differs from public packet')
+  if any(name.startswith('runtime/') and name.lower().endswith('.uf2') for name in manifest['files']):
+   raise ValueError('A public runtime must not contain UF2 images')
+  if digest(root/'test-inputs'/('biotron-firmware_v'+FIRMWARE_VERSION+'.uf2')) != UF2_SHA:
+   raise ValueError('Official firmware test input hash differs')
+  return manifest
+ if FIRMWARE_CHANNEL != 'internal':raise ValueError('Unknown firmware channel')
  if digest(runtime/'firmware/biotron-1.10.11-internal.uf2') != UF2_SHA:
   raise ValueError('Firmware hash differs from candidate')
  if digest(runtime/'firmware/biotron-1.10.10-internal.uf2') != FROZEN_SHA:
@@ -190,7 +204,7 @@ def node_version(executable):
  except (OSError,subprocess.SubprocessError): return None
 
 
-def run_autotest(root, run, browser, executable, node):
+def run_autotest(root, run, browser, executable, node, firmware=False):
  # Reuse existing audition and sound/Settings suites; no native MIDI client.
  scripts=[root/'automation/scripts/test-audition-browser.js',root/'automation/scripts/test-sound-browser.js']
  if not all(script.is_file() for script in scripts):raise ValueError('This packet has no complete autonomous suite')
@@ -198,7 +212,12 @@ def run_autotest(root, run, browser, executable, node):
       'BIOTRON_QA_BROWSER':'msedge' if browser=='edge' else 'chrome',
       ('EDGE_PATH' if browser=='edge' else 'CHROME_PATH'):executable,
       'AUDITION_BROWSER_OUTPUT':str(run/'browser'), 'AUDITION_BROWSER_TIMEOUT_MS':'540000'}
+ env.pop('BIOTRON_QA_ORIGIN',None)
  commands=[[node,str(scripts[0])],[node,str(scripts[1]),'--settings-only']]
+ if firmware:
+  script=root/'automation/scripts/test-firmware-modal-browser.js'
+  if not script.is_file():raise ValueError('Compiled firmware route suite is missing')
+  commands.append([node,str(script)])
  write_json(run/'autotest-config.json',{'at':utc(),'commands':commands,'browser':browser,'executable':executable,'web_commit':WEB_COMMIT,'native_midi':'NOT_USED; isolated synthetic fixture','physical_result':'NOT_RUN'})
  fault=None;code=None;cleanup='NOT_CHECKED';interrupted=False
  deadline=time.monotonic()+600
@@ -211,7 +230,10 @@ def run_autotest(root, run, browser, executable, node):
   if index==1:
    (run/'settings').mkdir()
    lane_env['BIOTRON_TEST_EVIDENCE_DIR']=str(run/'settings')
-  with (run/('autotest.log' if index==0 else 'settings.log')).open('w',encoding='utf-8') as log:
+  if index==2:
+   (run/'firmware').mkdir()
+   lane_env.update(BIOTRON_QA_OUTPUT=str(run/'firmware'),BIOTRON_QA_STABLE_UF2=str(root/'test-inputs'/('biotron-firmware_v'+FIRMWARE_VERSION+'.uf2')))
+  with (run/['autotest.log','settings.log','firmware.log'][index]).open('w',encoding='utf-8') as log:
    try:code=subprocess.run(command,cwd=root/'automation',env=lane_env,stdout=log,stderr=subprocess.STDOUT,timeout=remaining).returncode
    except subprocess.TimeoutExpired:
     cleanup='NOT_CONFIRMED';fault='Autotest exceeded its total 600-second execution limit. Stop further autotest/capture until owned-process cleanup is confirmed.'
@@ -229,18 +251,24 @@ def run_autotest(root, run, browser, executable, node):
      keys=json.loads((run/'browser/keyboard-observations.json').read_text(encoding='utf-8'))
      if progress[-1]['stage']!='PASS' or len({(x['bank'],x['id']) for x in keys})!=43:
       fault='Suite exited without complete PASS and 43 keyboard observations.'
-    else:
+    elif index==1:
      rows=json.loads((run/'settings/settings-matrix.json').read_text(encoding='utf-8'))['rows']
      boundaries=json.loads((run/'settings/settings-boundaries.json').read_text(encoding='utf-8'))
      actions=json.loads((run/'settings/settings-actions.json').read_text(encoding='utf-8'))
      if len({x['field'] for x in rows if x['status']=='PASS'})!=26 or any(x['status'] not in ['PASS','UNCHANGED_BASELINE'] for x in rows) or len(boundaries)!=17 or any(x['status']!='PASS' for x in boundaries) or len(actions)!=10 or any(x['status']!='PASS' for x in actions):
       fault='Settings suite exited without 26 changed commands, 17 boundary/failure cases and 10 preset/action cases.'
+    else:
+     files=list((run/'firmware').glob('*/journeys.json'))
+     if len(files)!=1:raise ValueError('Firmware evidence is missing')
+     rows=json.loads(files[0].read_text(encoding='utf-8'))
+     if len(rows)!=5 or {row.get('installed') for row in rows}!={'1.7.3','1.7.4','1.8.2','1.10.10','unknown'} or any(row.get('target')!='1.8.2' or 'NOT RUN' in row.get('result','') for row in rows):
+      fault='Firmware suite exited without five complete compiled version routes.'
    except (OSError,ValueError,KeyError,IndexError,TypeError):fault='Suite evidence is missing or incomplete.'
   if fault:break
  if fault:write_json(run/'first-autotest-fault.json',{'at':utc(),'message':fault,'exit_code':code,'cleanup':cleanup,'status':'INTERRUPTED' if interrupted else 'FAIL_OR_INCONCLUSIVE; not physical acceptance'})
  write_json(run/'autotest-summary.json',{'at':utc(),'status':'INTERRUPTED' if interrupted else 'FAIL' if fault else 'PASS_SOFTWARE_ONLY','exit_code':code,'cleanup':cleanup,'web_commit':WEB_COMMIT,'browser':browser,'physical_windows_result':'NOT_RUN','customer_release':False,'error':fault})
  if fault:raise ValueError(fault+' Evidence: '+str(run))
- print('Software sound and Settings tests passed. USB and audible sound remain for the manual steps. Evidence:',run)
+ print('Software sound, Settings'+(' and simulated public firmware routes' if firmware else '')+' passed. Real USB, hearing and installation remain for manual acceptance. Evidence:',run)
 
 
 def main():
@@ -252,7 +280,7 @@ def main():
  sub.add_parser('verify'); sub.add_parser('doctor'); sub.add_parser('cases'); sub.add_parser('bundle')
  serve=sub.add_parser('serve'); serve.add_argument('--browser',choices=['chrome','edge','none'],default='none');serve.add_argument('--port',type=int,default=8765)
  capture=sub.add_parser('capture');capture.add_argument('--browser',choices=['chrome','edge'],default='chrome');capture.add_argument('--site',choices=['local','live'],default='local');capture.add_argument('--origin',help='Exact approved HTTPS origin for live capture');capture.add_argument('--minutes',type=float,default=10);capture.add_argument('--port',type=int,default=8765);capture.add_argument('--smoke',action='store_true',help='Automated headless harness check; never a physical PASS')
- autotest=sub.add_parser('autotest');autotest.add_argument('--browser',choices=['chrome','edge'],default='chrome')
+ autotest=sub.add_parser('autotest');autotest.add_argument('--browser',choices=['chrome','edge'],default='chrome');autotest.add_argument('--firmware',action='store_true',help='Include compiled public updater routes with simulated MIDI/disk; no physical flash')
  record=sub.add_parser('record');record.add_argument('--case',choices=CASES,required=True);record.add_argument('--result',choices=['PASS','FAIL','NOT_RUN','BLOCKED','INCONCLUSIVE'],required=True);record.add_argument('--note',required=True);record.add_argument('--evidence',action='append',default=[])
  args=p.parse_args();root=args.root.resolve()
  if args.command=='cases':print(json.dumps(CASES,ensure_ascii=False,indent=2));return
@@ -276,7 +304,7 @@ def main():
  if args.command=='autotest':
   if not browsers[args.browser]:raise ValueError('Browser not found; set CHROME_PATH or EDGE_PATH')
   if not environment['node_version'] or int(environment['node_version'].lstrip('v').split('.')[0])<20:raise ValueError('Autotest needs Node.js >=20; plain serve only needs Python')
-  run_autotest(root,run,args.browser,browsers[args.browser],environment['node']);return
+  run_autotest(root,run,args.browser,browsers[args.browser],environment['node'],firmware=args.firmware);return
  if not 0<=args.port<=65535:p.error('port must be 0..65535')
  if args.command=='capture' and not 0<args.minutes<=30:p.error('minutes must be >0 and <=30')
  if args.browser!='none' and not browsers[args.browser]:raise ValueError('Browser not found; set CHROME_PATH or EDGE_PATH to its exact executable')
