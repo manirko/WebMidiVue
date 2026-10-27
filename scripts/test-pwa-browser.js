@@ -292,7 +292,7 @@ async function controllerVersion(page) {
   await page.locator('#compare-variant').waitFor()
   assert.strictEqual(new URL(page.url()).hash, '#/biotron/play?sound=1', 'offline compare alias did not open the Play palette')
   await page.getByRole('button', {name: 'Timbres', exact: true}).click()
-  assert.strictEqual(await page.locator('#compare-variant option').count(), 10, 'offline musical options were not cached')
+  assert.strictEqual(await page.locator('#compare-variant option').count(), 6, 'offline musical options were not cached')
   await page.getByRole('button', {name: 'Listen to example', exact: true}).click()
   await page.locator('.sound-lab[data-example="playing"][data-audio-state="running"]').waitFor({state:'attached'})
   await page.getByRole('button', {name: 'Stop example', exact: true}).click()
