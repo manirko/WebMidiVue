@@ -242,7 +242,8 @@ async function auditProfile(browser, origin, profile) {
       })
       assert.equal(await section.count(), 1, `${profile.name}: missing ${name} section`)
       if (!await section.evaluate(element => element.open)) await section.locator(':scope > summary').click()
-      await section.locator('input:visible, select:visible').first().waitFor()
+      // Experiments has only the Reduce extra notes button since the calibration cue picker was removed (28.10).
+      await section.locator('input:visible, select:visible, button:visible').first().waitFor()
       opened.push({name, section})
       for (const previous of opened) {
         assert(await previous.section.evaluate(element => element.open),
