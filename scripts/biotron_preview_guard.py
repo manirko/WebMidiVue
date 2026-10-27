@@ -29,6 +29,10 @@ RELEASE_SCHEMA = "playtronica.biotron-beta-release-evidence.v1"
 TEST_SCHEMA = "playtronica.biotron-beta-test-evidence.v1"
 PROJECT_NAME = "biotron-settings-beta"
 FORBIDDEN_BRANCHES = {"main", "master", "production", "prod", "deploy"}
+# One stable address for the blogger beta (Sergey's plan, 2026-10-27): the alias keeps the
+# same origin, so local presets survive updates. Each upload is still verified on its
+# immutable URL first, then the alias must serve the same bytes.
+STABLE_BRANCHES = {"bloggers"}
 REQUIRED_FILES = {
     "_headers",
     "_worker.js",
@@ -98,7 +102,7 @@ def validate_branch(branch: str, build_id: str) -> None:
         raise CandidateError(f"refusing production-like branch: {branch}")
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", branch):
         raise CandidateError("preview branch must contain only lowercase letters, digits and hyphens")
-    if build_id not in branch:
+    if build_id not in branch and branch not in STABLE_BRANCHES:
         raise CandidateError("preview branch must contain the exact build ID")
 
 
@@ -433,6 +437,9 @@ def main() -> None:
             raise CandidateError(f"Cloudflare upload failed with exit code {completed.returncode}; see diagnostic above")
         url = unique_preview_url(completed.stdout)
         print(json.dumps(verify_remote(url, verified), indent=2, sort_keys=True))
+        if verified["branch"] in STABLE_BRANCHES:
+            alias = f"https://{verified['branch']}.{PROJECT_NAME}.pages.dev"
+            print(json.dumps(verify_remote(alias, verified), indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

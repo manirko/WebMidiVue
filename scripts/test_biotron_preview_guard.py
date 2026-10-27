@@ -138,6 +138,16 @@ database_id = "0d385f91-f646-4f8c-b508-344b4b2f8a6e"
         with self.assertRaisesRegex(CandidateError, "production-like branch"):
             verify_candidate(self.candidate, self.build_id, digest, "production", extract)
 
+    def test_stable_blogger_branch_is_the_only_branch_without_build_id(self) -> None:
+        _, digest = self.prepare()
+        extract = self.root / "extract-bloggers"
+        extract.mkdir()
+        self.assertEqual(verify_candidate(self.candidate, self.build_id, digest, "bloggers", extract)["branch"], "bloggers")
+        other = self.root / "extract-testers"
+        other.mkdir()
+        with self.assertRaisesRegex(CandidateError, "exact build ID"):
+            verify_candidate(self.candidate, self.build_id, digest, "testers", other)
+
     @patch("scripts.biotron_preview_guard.subprocess.run")
     def test_cloudflare_preflight_requires_exact_beta_project(self, run) -> None:
         wrangler = self.root / "wrangler"
