@@ -85,7 +85,7 @@
           </details>
           <label v-if="revealProfile.id === 'biotron'" class="sound-lab__quality">
             <input type="checkbox" aria-label="Limit to 4 notes at once" aria-describedby="sound-quality-help" :checked="lowCpu" @change="changeQuality" :disabled="starting || releaseBlocked"> Limit to 4 notes at once
-            <small id="sound-quality-help">Use if sound breaks up: less work for your device, no simulated room reflections. Switching stops sound.</small>
+            <small id="sound-quality-help">Use if sound breaks up. Up to 4 notes sound together; a new note replaces the oldest. No room reflections. Switching stops sound.</small>
           </label>
           <KeyboardControls v-if="revealProfile.id === 'biotron'" />
         </div>
@@ -132,7 +132,7 @@
         >
         Limit to 4 notes at once
       </label>
-      <small id="sound-quality-help">Use if sound breaks up: less work for your device, no simulated room reflections. Switching stops sound.</small>
+      <small id="sound-quality-help">Use if sound breaks up. Up to 4 notes sound together; a new note replaces the oldest. No room reflections. Switching stops sound.</small>
       <label class="sound-lab__volume" for="sound-lab-volume">
         <span>Volume</span>
         <input
@@ -207,7 +207,7 @@ import {createListenerScope} from '@/assets/js/ListenerScope.mjs'
 import {MIDI_PROMPT_HINT} from '@/audio/midiAccess.mjs'
 import {SOUNDS} from '@/audio/elementary/timbres.mjs'
 import {createExclusiveTabLease} from '@/audio/tabLease.mjs'
-import {BIOTRON_CALIBRATION, biotronVoiceLevel, BiotronCalibrationTracker, parseBiotronCalibrationState} from '@/audio/biotronCalibration.mjs'
+import {biotronVoiceLevel, BiotronCalibrationTracker, parseBiotronCalibrationState} from '@/audio/biotronCalibration.mjs'
 import {getRevealProfile, selectRevealInput} from '@/audio/revealProfiles.mjs'
 import {detectSoundCapabilities, soundCapabilityMessage} from '@/audio/capabilities.mjs'
 import DeviceTaskNav from '@/components/DeviceTaskNav.vue'
@@ -259,11 +259,7 @@ export default {
         : this.revealStage === 'intro' ? 'waiting' : this.revealStage
     },
     audition() { return this.profileId === 'biotron' ? soundSessionState.audition : null },
-    selectedSound() {
-      const cue = this.examplePlaying || soundSessionState.calibrating || (this.keyboardOn && !this.recognizedInput)
-      return this.audition && (this.audition.bankId !== 'calibration' || cue)
-        ? this.audition.variant.preset : this.variants[this.currentVariant]
-    },
+    selectedSound() { return this.audition ? this.audition.variant.preset : this.variants[this.currentVariant] },
     exampleSelection() { return this.audition || {...resolveAudition('timbres', 'tone-reference'), variant: {label: this.selectedSound.name, level: 1}} },
     revealProfile() { return getRevealProfile(this.profileId) },
     revealCopy() {
@@ -391,8 +387,7 @@ export default {
         }))
         const biotron = this.revealMode && this.revealProfile.id === 'biotron'
         this.midi = markRaw(new MidiInputSession(this.engine, event => this.handleMidiState(event), {
-          sysex: biotron, voiceLevel: biotron ? message => soundSessionState.calibrating && this.audition?.bankId === 'calibration'
-            ? this.audition.variant.level : biotronVoiceLevel(message, BIOTRON_CALIBRATION, soundSessionState.calibrating) : undefined
+          sysex: biotron, voiceLevel: biotron ? message => biotronVoiceLevel(message) : undefined
         }))
         try { if (navigator.audioSession) navigator.audioSession.type = 'playback' } catch (error) { void error }
       }
@@ -518,8 +513,7 @@ export default {
     },
     play(note, source = 'screen') {
       if (this.engine?.state === 'running') {
-        const cue = this.audition?.bankId === 'calibration' && this.keyboardOn && !this.recognizedInput
-        this.engine.noteOn(source, 0, note, cue ? 24 : 104, this.engine.context.currentTime, cue ? this.audition.variant.level : 1)
+        this.engine.noteOn(source, 0, note, 104, this.engine.context.currentTime, 1)
         this.$refs?.garden?.note(true, note, 104)
         this.voiceCount = this.engine.activeVoiceCount
       }

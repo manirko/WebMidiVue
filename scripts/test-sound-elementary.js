@@ -34,7 +34,7 @@ process.once('exit', cleanupArtifacts)
 fs.writeFileSync(entryFile,
   `export {ElementarySynthEngine} from ${JSON.stringify(path.join(root, 'src/audio/elementary/engine.mjs'))}\n` +
   `export {SOUNDS} from ${JSON.stringify(path.join(root, 'src/audio/elementary/timbres.mjs'))}\n` +
-  `export {BIOTRON_CALIBRATION} from ${JSON.stringify(path.join(root, 'src/audio/biotronCalibration.mjs'))}\n`)
+  `export {BIOTRON_CALIBRATION, biotronVoiceLevel} from ${JSON.stringify(path.join(root, 'src/audio/biotronCalibration.mjs'))}\n`)
 execFileSync('npx', ['--yes', 'esbuild@0.24.0', entryFile,
   '--bundle', '--format=iife', '--global-name=__ElemEngine',
   '--outfile='+bundleFile, '--log-level=error'], {cwd: root})
@@ -216,10 +216,10 @@ const server = http.createServer((request, response) => {
       // play the calibration cue and light-sensor notes sit. The player can
       // pick any sound, so the two level bands are checked on every one.
       // Reference = a plant note at the firmware maximum (velocity 98).
-      // Calibration cue: firmware state 125 → BIOTRON_CALIBRATION.localLevel
-      // at cue velocity 24. Light sensor: channel 2 → lightLevel at the
-      // firmware default velocity 68 (biotron-firmware src/params.c).
-      const {BIOTRON_CALIBRATION} = window.__ElemEngine
+      // Calibration notes: the level the player gives them during calibration
+      // (Sergey 2026-10-27: same velocity as plant notes). Light sensor:
+      // channel 2 → lightLevel at the firmware default velocity 68 (biotron-firmware src/params.c).
+      const {BIOTRON_CALIBRATION, biotronVoiceLevel} = window.__ElemEngine
       const centroidHz = (channel, from, size = 16384) => {
         const re = new Float64Array(size), im = new Float64Array(size)
         for (let i = 0; i < size; i += 1) re[i] = (channel[from + i] || 0) * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / size))
@@ -277,8 +277,8 @@ const server = http.createServer((request, response) => {
           tailSeconds: +((lastAudible - offSample) / sampleRate).toFixed(2),
           centroidHz: centroidHz(heldChannel, Math.round(0.2 * sampleRate)),
           plantPercent: Math.round(100 * peak(await note(98, 0.077)) / Math.max(heldPeak, 1e-9)),
-          calibrationDb: relativeDb(await note(24, 0.55, BIOTRON_CALIBRATION.localLevel)),
-          previousCalibrationDb: relativeDb(await note(24, 0.55, 0.025)),
+          calibrationDb: relativeDb(await note(68, 0.55, biotronVoiceLevel({type: 'note-on', channel: 1, note: 64, velocity: 68}))),
+          plantSameVelocityDb: relativeDb(await note(68, 0.55, 1)),
           registers,
           lightDb: relativeDb(await note(68, 0.55, BIOTRON_CALIBRATION.lightLevel))
         })
@@ -312,16 +312,13 @@ const server = http.createServer((request, response) => {
     assert(metrics.panicClick.settledDelta <= 0.0005,
       `panic settled-tail delta ${metrics.panicClick.settledDelta} can produce an audible click`)
 
-    // Sergey reported an inaudible cue (2026-10-08). Raising localLevel
-    // 0.025 -> 0.14 gives about +12 dB after the velocity curve; keep it below plant playback and prove
-    // that improvement against a rendered old-level control for every sound.
+    // Sergey asked for the calibration sound at the same velocity as plant notes
+    // (2026-10-27, replacing the quieter cue from 2026-10-08): no extra attenuation,
+    // proven against a plant note rendered at the same velocity for every sound.
     // The light layer has its own band; its level must not depend on the cue.
     for (const sound of metrics.sounds) {
-      assert(sound.calibrationDb <= -18 && sound.calibrationDb >= -24,
-        `${sound.name}: calibration cue at ${sound.calibrationDb} dB is outside -24..-18 dB`)
-      const improvement = sound.calibrationDb - sound.previousCalibrationDb
-      assert(improvement >= 11 && improvement <= 13,
-        `${sound.name}: cue improvement ${improvement} dB is outside 11..13 dB`)
+      assert(Math.abs(sound.calibrationDb - sound.plantSameVelocityDb) <= 0.5,
+        `${sound.name}: calibration ${sound.calibrationDb} dB differs from a plant note at the same velocity (${sound.plantSameVelocityDb} dB)`)
       assert(sound.lightDb <= -8 && sound.lightDb >= -24,
         `${sound.name}: light-sensor notes at ${sound.lightDb} dB are outside -24..-8 dB`)
       for (const register of sound.registers) {

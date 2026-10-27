@@ -8,7 +8,7 @@ export const BIOTRON_CALIBRATION = Object.freeze({
   cue: CUE, cueVelocityProfiles: VELOCITIES,
   legacyNotes: Object.freeze([91, 92]), legacyVelocity: 90,
   detectionNotes: 4, maxAlternationGapMs: 700, quietCompletionMs: 1100,
-  localLevel: 0.14, lightChannel: 2, lightLevel: 0.08
+  lightChannel: 2, lightLevel: 0.08
 })
 
 const matchesCue = (message, index, contract, profiles = contract.cueVelocityProfiles) =>
@@ -30,11 +30,10 @@ export function parseBiotronSensorState(message, nonce) {
   return data[31]
 }
 
-// Only the firmware's explicit calibration state (125) makes notes quiet. Guessing the cue
-// by pitch and velocity muted real plant notes (64 @ velocity 64 matched a profile, 2026-09-03).
-export function biotronVoiceLevel(message, contract = BIOTRON_CALIBRATION, calibrating = false) {
+// Calibration notes play exactly like plant notes, at the velocity Biotron sends (Sergey,
+// 2026-10-27: same velocity as the generator). Only the light-sensor channel is quieter.
+export function biotronVoiceLevel(message, contract = BIOTRON_CALIBRATION) {
   if (message?.type !== 'note-on') return 1
-  if (calibrating) return contract.localLevel
   return message.channel === contract.lightChannel ? contract.lightLevel : 1
 }
 

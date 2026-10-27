@@ -58,9 +58,6 @@
     </section>
     <BootstrapCollapse v-if="betaBuild" name_of_collapse="Experiments" :open_by_default="$route.query.experiments === '1'">
       <template v-slot:objects>
-        <GroupOfCommands name-of-group="Calibration cues">
-          <template v-slot:objects><AudioCompare calibration-only /></template>
-        </GroupOfCommands>
         <GroupOfCommands name-of-group="Calmer plant response">
           <template v-slot:objects>
             <p id="calmer-play-help">Reduce extra notes changes and saves three settings: turns off Input variation, turns on Manual control to prevent idle pitch drift, and sets Note repeat to 2 — skipping notes less than two semitones apart. It keeps your tempo, scale and note velocity. Save your current preset first if you want to return to it.</p>
@@ -405,8 +402,6 @@ import {createSettingsConnectionMethods} from '@/biotron/settingsConnection.mjs'
 import {recordBiotronEvent, recordSettingsState} from '@/biotron/telemetry.mjs'
 import {withMidiWriteSession} from "@/assets/js/timing.mjs"
 import { saveAs } from '@progress/kendo-file-saver';
-import {defineAsyncComponent} from 'vue';
-const AudioCompare = defineAsyncComponent(() => import(/* webpackChunkName: "biotron-auditions" */ '@audio-compare'));
 import {BiotronCommandsData, BiotronDb} from "@/components/BiotronPage/BiotronIDB"
 import FileDropArea from "@/components/MidiComponents/FileDropArea.vue";
 import GroupOfCommands from "@/components/MidiComponents/GroupOfCommands.vue";
@@ -435,7 +430,6 @@ import {
 } from "@/biotron/settingsReadback.mjs";
 export default  {
   components: {
-    AudioCompare,
     DiagnosticCopy,
     DeviceTaskNav,
     BootstrapCollapse,

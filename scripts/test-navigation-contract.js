@@ -87,8 +87,8 @@ assert(app.includes('const SoundLab = defineAsyncComponent(') &&
   'one persistent lazy player must offer recovery without blocking the Play route')
 assert(sound.includes('class="sound-palette"') && sound.includes('<AudioCompare v-if="paletteVisited"'),
   'Biotron musical sound choices must be available lazily on Play before a device is connected')
-assert(compare.includes("bank.id !== 'calibration'") && biotron.includes('<AudioCompare calibration-only'),
-  'musical choices belong on Play and calibration cues belong in Settings')
+assert(!compare.includes('calibration') && !biotron.includes('AudioCompare'),
+  'musical choices belong on Play; calibration has no cue picker: it plays like plant notes (Sergey, 2026-10-27)')
 assert(!compare.includes('KeyboardControls') && !compare.includes('compare-volume') && !compare.includes('async play()'),
   'the palette must reuse the player rather than duplicate connection, volume or keyboard controls')
 assert(biotron.includes('@click="soundPlayer.stop()"'), 'Settings must retain an immediate sound stop/cancel action')

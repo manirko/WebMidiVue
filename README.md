@@ -62,13 +62,14 @@ profiles, keyboard43, visual11, Chrome PWA and production isolation pass on
 
 The Biotron beta **Play** page has **Play with keyboard** and **Octave**.
 Open **Sound** below the visual for six quick choices: Round, Reed, Bass, Pluck,
-Air and Handpan. **All sounds & register effects** keeps the original banks.
-Upper-note processing acts above C5; it is an effect, not a separate instrument.
+Air and Handpan. **All sounds** lists Classic (7), Timbres (6) and Handpan (2);
+near-identical timbres, upper-note treatments and four handpan variants were removed
+after Sergey's listening test (12.10, applied 28.10).
 **Sound sphere · Experiment** maps horizontal drag to a sound and vertical drag
 to a bounded filter. Buttons/sliders and Reset work without dragging. Space
 uses the existing effects; adjustments survive routes in this session, but reload
-restores the base sound. This palette still needs human listening acceptance. **Settings → Experiments** contains calibration cues and the calmer
-plant response action. Enable keyboard mode on Play before using it in Settings;
+restores the base sound. This palette still needs human listening acceptance. **Settings → Experiments** contains the calmer
+plant response action. Calibration notes play like plant notes, at the velocity Biotron sends. Enable keyboard mode on Play before using it in Settings;
 both routes share the same player.
 
 White notes use A S D F G H J K; black notes W E T Y U at their physical QWERTY
@@ -191,7 +192,7 @@ cancel/late-output cleanup and sphere states. For installed test engines, set
 these engines do not certify the installed Firefox app or Safari.
 
 That single command derives the visible build ID from `HEAD`, runs the complete
-Biotron release gate, including all 36 audition variants, their standard/safe DSP
+Biotron release gate, including all 8 audition variants, their standard/safe DSP
 renders and live MIDI/Stop lifecycle, then atomically creates
 `~/ProjectData/Playtronica/biotron-beta/release-candidates/<build-id>/`. The
 directory contains the immutable `dist` archive and checksum, release and test

@@ -57,10 +57,12 @@ test('adjusting Classic effects preserves its running example; bank changes stil
   watch.call(player,{bankId:'timbres'},{bankId:'classic'});assert.equal(stops,1)
   watch.call(player,{bankId:'timbres'},{bankId:'timbres'});assert.equal(stops,1)
 })
-test('three ten-option banks and six handpan options with unique audible settings and a reference first', () => {
-  assert.deepEqual(AUDITION_BANKS.map(bank => bank.variants.length), [10,10,10,6])
+test('six distinct timbres and two handpan options with unique audible settings and a reference first', () => {
+  // Sergey 2026-10-12: near-identical timbres, all high-note treatments and handpan 2–5 removed.
+  assert.deepEqual(AUDITION_BANKS.map(bank => bank.id), ['timbres','handpan'])
+  assert.deepEqual(AUDITION_BANKS.map(bank => bank.variants.length), [6,2])
   const ids = AUDITION_BANKS.flatMap(bank => bank.variants.map(option => option.id))
-  assert.equal(new Set(ids).size,36)
+  assert.equal(new Set(ids).size,8)
   for (const bank of AUDITION_BANKS) {
     assert.match(bank.variants[0].label,/reference/i)
     const settings = bank.variants.map(({preset,level}) => digest({timbre:preset.timbre,cv:preset.cv,fx:preset.fx,registers:preset.registers,level}))
@@ -77,13 +79,7 @@ test('three ten-option banks and six handpan options with unique audible setting
   }
   assert.deepEqual(AUDITION_BANKS[0].variants[0].preset.cv,SOUNDS[0].cv)
 })
-test('calibration uses exact firmware cue and velocity; bank events pair every On with Off', () => {
-  // Source-pinned firmware fixture: manirko/biotron-firmware@2ae1973 src/global.c:38–49.
-  const firmwareCue=[[3,64,3],[8,65,3],[13,67,4],[18,72,4],[24,71,3],[29,67,3],[34,62,4],[40,60,9]]
-  const velocity=24
-  const cueOn=auditionEvents('calibration').filter(event=>event.type==='on')
-  assert.deepEqual(cueOn.map(event=>[Math.round(event.at*10),event.note]),firmwareCue.map(([tick,note])=>[tick,note]))
-  assert(cueOn.every(event=>event.velocity===velocity))
+test('bank events pair every On with Off', () => {
   for(const bank of AUDITION_BANKS){
     const events=auditionEvents(bank.id),active=new Set()
     for(const event of events){
@@ -93,25 +89,17 @@ test('calibration uses exact firmware cue and velocity; bank events pair every O
     assert(auditionDuration(bank.id)>events.at(-1).at)
   }
 })
-test('upper treatments start above the middle register; only declared three-register experiment changes bass', () => {
-  const bank=AUDITION_BANKS[2]
-  assert.equal(bank.variants[0].preset.registers,undefined)
-  for(const option of bank.variants.slice(1)){
-    assert.deepEqual(option.preset.cv,SOUNDS[0].cv)
-    assert.deepEqual(option.preset.fx,SOUNDS[0].fx)
-    assert.equal(option.preset.registers.upper.startNote,72)
-    assert.equal(option.preset.registers.upper.endNote,84)
-    assert.equal(Boolean(option.preset.registers.lower),option.id==='high-three')
-  }
+test('register treatments stay validated though no bank offers them now', () => {
   for(const upper of [{startNote:84,endNote:72},{startNote:-1,endNote:84},{startNote:72,endNote:84,gain:2},{startNote:72,endNote:84,cutoff:Infinity}]){
     assert.throws(()=>toSound({...SOUNDS[0],registers:{upper}}),TypeError)
   }
-  assert.throws(()=>toSound({...SOUNDS[0],registers:{upper:{startNote:72,endNote:84,voice:bank.variants[1].preset}}}),/Nested/)
+  const treated=toSound({...SOUNDS[0],registers:{upper:{startNote:72,endNote:84,gain:.75}}})
+  assert.throws(()=>toSound({...SOUNDS[0],registers:{upper:{startNote:72,endNote:84,voice:treated}}}),/Nested/)
 })
 
-test('six handpan roles use the native modal voice and a short plant gate; stock sounds stay unchanged', () => {
+test('two handpan roles use the native modal voice and a short plant gate; stock sounds stay unchanged', () => {
   const bank=AUDITION_BANKS.find(bank=>bank.id==='handpan')
-  assert.deepEqual(bank.variants.map(option=>option.role),['01-clear','02-soft','03-breath','04-expressive','05-space','06-bold'])
+  assert.deepEqual(bank.variants.map(option=>option.role),['01-clear','06-bold'])
   assert.deepEqual(SOUNDS.map(sound=>sound.timbre),['round','round','fat','fat','string','string','noise'])
   for(const {preset} of bank.variants){
     assert.equal(preset.timbre,'pan')
