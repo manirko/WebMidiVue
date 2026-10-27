@@ -27,7 +27,10 @@ module.exports = {
   publicPath: '/',
   configureWebpack: {
     optimization: {splitChunks: {cacheGroups: {
-      soundSession: {test: /[\\/]src[\\/]audio[\\/]soundSessionEffects\.mjs$/, name: 'sound-session', chunks: 'all', enforce: true}
+      soundSession: {test: /[\\/]src[\\/]audio[\\/]soundSessionEffects\.mjs$/, name: 'sound-session', chunks: 'all', enforce: true},
+      // Shared by the sound lab, its palette and the creator. Named so the sound lab stays in its
+      // first-play budget whichever route imports these modules first.
+      soundEngine: {test: /[\\/](node_modules[\\/](@elemaudio[\\/]core|invariant|shallowequal|eventemitter3)[\\/]|src[\\/]audio[\\/](auditionBanks|elementary[\\/]timbres|elementary[\\/]fx[\\/]srvb)\.mjs$)/, name: 'sound-engine', chunks: 'async', enforce: true}
     }}}
   },
   chainWebpack: config => {
