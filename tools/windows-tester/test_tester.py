@@ -256,7 +256,7 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
    observed=run/'browser';observed.mkdir()
    tester.write_json(observed/'progress.json',[{'stage':'PASS'}])
    keys=[{'bank':bank,'id':ident,'rms':.02,'nonFinite':0} for bank,ident in sorted(tester.KEYBOARD_CASES)]
-   tester.write_json(observed/'keyboard-observations.json',keys if mode=='pass' or mode.startswith('settings_') else keys[:42])
+   tester.write_json(observed/'keyboard-observations.json',keys if mode=='pass' or mode.startswith('settings_') else keys[:-1])
    if mode=='timeout':raise subprocess.TimeoutExpired(command,600)
    if mode=='fail':tester.write_json(observed/'failure.json',{'error':'original product fault'})
    return subprocess.CompletedProcess(command,1 if mode=='fail' else 0)
@@ -287,15 +287,30 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
    self.assertEqual(summary['phases_requested'],[phase])
    self.assertEqual(summary['physical_windows_result'],'NOT_RUN')
 
+ def test_keyboard_inventory_matches_the_trimmed_blogger_banks(self):
+  import subprocess
+  source=Path(__file__).resolve().parents[2]
+  banks=source/'src/audio/auditionBanks.mjs'
+  timbres=source/'src/audio/elementary/timbres.mjs'
+  if not banks.exists():
+   banks=Path(__file__).parent/'automation/src/audio/auditionBanks.mjs'
+   timbres=Path(__file__).parent/'automation/src/audio/elementary/timbres.mjs'
+  code=f"import {{AUDITION_BANKS}} from {json.dumps(banks.as_uri())}; import {{SOUNDS}} from {json.dumps(timbres.as_uri())}; console.log(JSON.stringify([...SOUNDS.map((_,i)=>['classic',String(i)]),...AUDITION_BANKS.flatMap(b=>b.variants.map(v=>[b.id,v.id]))]));"
+  rows=json.loads(subprocess.check_output(['node','--input-type=module','-e',code],text=True))
+  self.assertEqual(set(map(tuple,rows)),tester.KEYBOARD_CASES)
+  self.assertEqual(len(rows),15)
+
  def test_progress_reports_real_stage_without_invented_percentage(self):
   run=tester.new_run(self.root,'progress');(run/'browser').mkdir()
   tester.write_json(run/'browser/progress.json',[{'stage':'keyboard voices'}])
+  tester.write_json(run/'browser/keyboard-observations.json',[{'bank':'classic','id':'0'}])
   stop=mock.Mock();stop.wait.side_effect=[False,True]
   output=io.StringIO()
   with contextlib.redirect_stdout(output),mock.patch.object(tester.time,'monotonic',return_value=15):
    tester.show_progress(run,'sound',5,stop)
   self.assertIn('[sound] 10s · keyboard voices',output.getvalue())
   self.assertNotIn('%',output.getvalue())
+  self.assertIn('[#--------------] 1/15 keyboard sounds',output.getvalue())
 
  def test_independent_failure_still_preserves_first_fault(self):
   run=tester.new_run(self.root,'settings-failure')

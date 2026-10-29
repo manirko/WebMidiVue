@@ -54,10 +54,8 @@ SETTINGS_FIELDS = set(('scale plantBpm noteOffPercent middle_plant_note plant_mi
  'light_midi_channel light_pitch_mode lightBpm same_note_light range_light_note').split())
 KEYBOARD_CASES = {(bank,ident) for bank,ids in {
  'classic':'0 1 2 3 4 5 6',
- 'timbres':'tone-reference tone-soft tone-glass tone-hollow tone-reed tone-bass tone-pluck tone-string tone-air tone-dry',
- 'calibration':'cue-reference cue-current cue-gentle cue-present cue-soft cue-glass cue-pluck cue-warm cue-air cue-dry',
- 'high-notes':'high-reference high-soft high-quiet high-filter high-dark high-resonance high-clear high-pluck high-balanced high-three',
- 'handpan':'pan-clear pan-soft pan-breath pan-expressive pan-space pan-bold',
+ 'timbres':'tone-reference tone-reed tone-bass tone-pluck tone-string tone-air',
+ 'handpan':'pan-clear pan-bold',
 }.items() for ident in ids.split()}
 
 
@@ -243,7 +241,15 @@ def show_progress(run, phase, started, stop):
    rows=json.loads((run/'browser/progress.json').read_text(encoding='utf-8'))
    if phase=='sound' and rows:stage=str(rows[-1]['stage'])[:160]
   except (OSError,ValueError,KeyError,TypeError):pass
-  print(f'[{phase}] {int(time.monotonic()-started)}s · {stage}',flush=True)
+  count=''
+  if phase=='sound':
+   try:
+    observations=json.loads((run/'browser/keyboard-observations.json').read_text(encoding='utf-8'))
+    checked={(x.get('bank'),x.get('id')) for x in observations if isinstance(x,dict)} & KEYBOARD_CASES
+    done=len(checked);total=len(KEYBOARD_CASES)
+    count=' ['+'#'*done+'-'*(total-done)+f'] {done}/{total} keyboard sounds'
+   except (OSError,ValueError,TypeError,KeyError):pass
+  print(f'[{phase}] {int(time.monotonic()-started)}s · {stage}{count}',flush=True)
 
 
 def run_autotest(root, run, browser, executable, node, firmware=False, phase='all'):
@@ -308,8 +314,8 @@ def run_autotest(root, run, browser, executable, node, firmware=False, phase='al
     if index==0:
      progress=json.loads((run/'browser/progress.json').read_text(encoding='utf-8'))
      keys=json.loads((run/'browser/keyboard-observations.json').read_text(encoding='utf-8'))
-     if progress[-1]['stage']!='PASS' or len(keys)!=43 or {(x['bank'],x['id']) for x in keys}!=KEYBOARD_CASES or any(type(x.get('rms')) not in [int,float] or not math.isfinite(x['rms']) or x['rms']<=.001 or type(x.get('nonFinite')) is not int or x['nonFinite']!=0 for x in keys):
-      fault='Suite exited without complete PASS and 43 keyboard observations.'
+     if progress[-1]['stage']!='PASS' or len(keys)!=len(KEYBOARD_CASES) or {(x['bank'],x['id']) for x in keys}!=KEYBOARD_CASES or any(type(x.get('rms')) not in [int,float] or not math.isfinite(x['rms']) or x['rms']<=.001 or type(x.get('nonFinite')) is not int or x['nonFinite']!=0 for x in keys):
+      fault=f'Suite exited without complete PASS and {len(KEYBOARD_CASES)} keyboard observations.'
     elif index==1:
      rows=json.loads((run/'settings/settings-matrix.json').read_text(encoding='utf-8'))['rows']
      boundaries=json.loads((run/'settings/settings-boundaries.json').read_text(encoding='utf-8'))
