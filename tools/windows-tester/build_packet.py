@@ -55,7 +55,7 @@ def main():
  write(packet/'tester.py',data.encode())
  for name in ['capture-browser.cjs','test_tester.py','build_packet.py']:
   write(packet/name,(helper_root/name).read_bytes())
- substitutions={'{{WEB_COMMIT}}':commit,'{{HELPER_COMMIT}}':helper,'{{ONLINE_URL}}':args.online_origin or 'http://127.0.0.1:8765'}
+ substitutions={'{{WEB_COMMIT}}':commit,'{{WEB_SHORT}}':commit[:7],'{{HELPER_COMMIT}}':helper,'{{ONLINE_URL}}':args.online_origin or 'http://127.0.0.1:8765'}
  for source,target in [('PACKET-GUIDE.md','README.md'),('CLAUDE.md','CLAUDE.md'),('START-HERE.html','START-HERE.html')]:
   text=(helper_root/source).read_text(encoding='utf-8')
   for marker,value in substitutions.items():text=text.replace(marker,value)

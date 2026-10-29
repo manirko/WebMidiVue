@@ -1,4 +1,4 @@
-# Biotron: пакет Сергея · 12 октября 2026
+# Biotron: пакет Сергея · 29 октября 2026
 
 Открой **START-HERE.html**. Начни с W01–W03: первый звук → Stop → Start.
 Остальной план — справочник для Claude и отдельных коротких сессий.
@@ -27,9 +27,9 @@ Helper не открывает свой MIDI-клиент, не пишет пр�
 | capture-browser.cjs | Логи и ограниченный захват собственной тестовой вкладки |
 | test_tester.py / build_packet.py | Самопроверки helper и проверки сборки пакета; без установки/прошивки |
 | packet-manifest.json | Точные версии, SHA всех файлов, статус NOT_RUN |
-| runtime/ | Готовая публичная сборка958, без внутренних UF2 |
-| builds/Biotron-Web-95855bd.zip | Те же75 файлов для отдельной передачи приложения |
-| source-review.zip | Исходники958 и source-manifest, все UF2 исключены |
+| runtime/ | Готовая публичная сборка {{WEB_SHORT}}, без внутренних UF2 |
+| builds/Biotron-Web-{{WEB_SHORT}}.zip | Те же75 файлов для отдельной передачи приложения |
+| source-review.zip | Исходники {{WEB_SHORT}} и source-manifest, все UF2 исключены |
 | automation/ | Существующие9 файлов тестов/аудио/лицензии, pinned к958 |
 | automation/node_modules/ | Elementary4.0.1 и пять транзитивных packages по lockfile; лицензии внутри |
 | vendor/playwright-core/ | Версия1.62.1 и лицензии; браузер внутрь не включён |
