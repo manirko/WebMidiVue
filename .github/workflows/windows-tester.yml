@@ -31,6 +31,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
+      - name: Install locked dependencies for palette inventory guards
+        run: npm ci --no-audit --no-fund
       - name: Run real helper guards and retain their first result
         shell: python
         run: |
@@ -138,10 +140,13 @@ jobs:
               assert platform.system() == 'Windows' and record['head'] == env['GITHUB_SHA']
               # Direct CLI avoids package.json's POSIX NODE_ENV assignment on Windows.
               run('build', ['node', 'node_modules/@vue/cli-service/bin/vue-cli-service.js', 'build', '--mode', 'biotron-beta'])
-              release = json.loads(pathlib.Path('dist/release-evidence.json').read_text(encoding='utf-8'))
-              assert release['commit'] == record['head'] and release['firmware_update_channel'] == 'public-stable'
-              record['build_id'] = release['build_id']
-              record['release_evidence_sha256'] = hashlib.sha256(pathlib.Path('dist/release-evidence.json').read_bytes()).hexdigest()
+              # Final release metadata is created only after the full Mac candidate gate.
+              compiled = {p.relative_to('dist').as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                          for p in pathlib.Path('dist').rglob('*') if p.is_file()}
+              record['build_id'] = record['head'][:12]
+              assert any(record['build_id'] in p.read_text(encoding='utf-8') for p in pathlib.Path('dist/js').glob('*.js'))
+              assert not any(name.lower().endswith('.uf2') for name in compiled)
+              (output / 'compiled-sha256.json').write_text(json.dumps(compiled, indent=2), encoding='utf-8')
               if env['BIOTRON_CI_PHASE'] == 'firmware':
                   firmware = output / 'stable-test-input.uf2'
                   urllib.request.urlretrieve('https://github.com/Playtronica/biotron-firmware/releases/download/1.8.2/biotron-firmware_v1.8.2.uf2', firmware)
@@ -157,7 +162,7 @@ jobs:
               record['status'] = 'PASS_SOFTWARE_ONLY'
           except Exception as error:
               record['status'] = 'FAIL'
-              record['error'] = str(error)
+              record['error'] = repr(error)
               record['cleanup'] = 'See cleanup.json when present; no global process claim. Hosted job is discarded.'
           finally:
               save()
