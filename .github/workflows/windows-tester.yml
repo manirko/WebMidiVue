@@ -5,16 +5,6 @@ on:
     branches: [codex/biotron-web-firmware-11010-20261008, codex/biotron-blogger-20261030]
     paths: [src/**, public/**, beta-assets/**, scripts/**, tools/windows-tester/**, package*.json, vue.config.js, .env.biotron-beta, .github/workflows/windows-tester.yml]
   workflow_dispatch:
-    inputs:
-      candidate_origin:
-        description: 'Optional immutable beta origin; software tests use these exact published bytes'
-        type: string
-      candidate_commit:
-        description: 'Exact 40-hex candidate source commit, required with origin'
-        type: string
-      release_sha256:
-        description: 'Expected release-evidence.json SHA-256, required with origin'
-        type: string
 
 env:
   PYTHONIOENCODING: utf-8
@@ -110,7 +100,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ inputs.candidate_commit || github.sha }}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.14'
@@ -125,11 +114,8 @@ jobs:
         env:
           BIOTRON_QA_BROWSER: ${{ matrix.browser }}
           BIOTRON_CI_PHASE: ${{ matrix.phase }}
-          BIOTRON_PINNED_ORIGIN: ${{ inputs.candidate_origin }}
-          BIOTRON_PINNED_COMMIT: ${{ inputs.candidate_commit }}
-          BIOTRON_PINNED_RELEASE_SHA256: ${{ inputs.release_sha256 }}
         run: |
-          import datetime, hashlib, json, os, pathlib, platform, re, subprocess, sys, urllib.request, uuid
+          import datetime, hashlib, json, os, pathlib, platform, subprocess, sys, urllib.request, uuid
           output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'windows-browser-evidence'
           output.mkdir()
           env = os.environ.copy()
@@ -154,42 +140,9 @@ jobs:
               if result.returncode: raise RuntimeError(name + ' failed; original evidence preserved')
           save()
           try:
-              record['workflow_head'] = env['GITHUB_SHA']
-              expected = env['BIOTRON_PINNED_COMMIT'] or env['GITHUB_SHA']
-              assert platform.system() == 'Windows' and record['head'] == expected
-              origin = env['BIOTRON_PINNED_ORIGIN']
-              if origin:
-                  assert re.fullmatch(r'https://[0-9a-f]{8}\.biotron-settings-beta\.pages\.dev', origin)
-                  assert re.fullmatch(r'[0-9a-f]{40}', expected)
-                  assert re.fullmatch(r'[0-9a-f]{64}', env['BIOTRON_PINNED_RELEASE_SHA256'])
-                  def fetch(name):
-                      with urllib.request.urlopen(origin + '/' + name, timeout=30) as response:
-                          assert response.status == 200
-                          return response.read()
-                  body = fetch('release-evidence.json')
-                  assert hashlib.sha256(body).hexdigest() == env['BIOTRON_PINNED_RELEASE_SHA256']
-                  release = json.loads(body)
-                  assert release['commit'] == expected and release['firmware_update_channel'] == 'public-stable'
-                  assert release['firmware_update_enabled'] is True
-                  dist = pathlib.Path('dist')
-                  assert not dist.exists(), 'Refuse to mix compiled and pinned artifact bytes'
-                  dist.mkdir()
-                  for item in release['files']:
-                      name = item['path']
-                      parts = pathlib.PurePosixPath(name)
-                      assert not parts.is_absolute() and '..' not in parts.parts and '\\' not in name and ':' not in name
-                      config = {'_headers': 'beta-assets/_headers', '_worker.js': 'beta-assets/telemetry-worker.mjs'}
-                      data = subprocess.check_output(['git', 'show', 'HEAD:' + config[name]]) if name in config else fetch(name)
-                      assert len(data) == item['bytes'] and hashlib.sha256(data).hexdigest() == item['sha256']
-                      target = dist / name
-                      target.parent.mkdir(parents=True, exist_ok=True)
-                      target.write_bytes(data)
-                  (dist / 'release-evidence.json').write_bytes(body)
-                  record['pinned_origin'] = origin
-                  record['release_evidence_sha256'] = env['BIOTRON_PINNED_RELEASE_SHA256']
-              else:
-                  # Direct CLI avoids package.json's POSIX NODE_ENV assignment on Windows.
-                  run('build', ['node', 'node_modules/@vue/cli-service/bin/vue-cli-service.js', 'build', '--mode', 'biotron-beta'])
+              assert platform.system() == 'Windows' and record['head'] == env['GITHUB_SHA']
+              # Direct CLI avoids package.json's POSIX NODE_ENV assignment on Windows.
+              run('build', ['node', 'node_modules/@vue/cli-service/bin/vue-cli-service.js', 'build', '--mode', 'biotron-beta'])
               # Final release metadata is created only after the full Mac candidate gate.
               compiled = {p.relative_to('dist').as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                           for p in pathlib.Path('dist').rglob('*') if p.is_file()}
