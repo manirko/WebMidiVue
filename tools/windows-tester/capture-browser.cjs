@@ -112,10 +112,11 @@ function hasAdvancingDspClock(rows) {
       const palette=page.locator('details.sound-palette')
       await palette.waitFor()
       await palette.locator('summary').click()
+      await page.getByText('All sounds', {exact:true}).click()
       await page.locator('#compare-variant').waitFor()
       if (await page.getByRole('button',{name:'Calibration sounds',exact:true}).count()) throw new Error('Calibration cues leaked onto Play')
       if (await page.getByLabel('Limit to 4 notes at once',{exact:true}).count() !== 1 || await page.getByRole('button',{name:'Play with keyboard',exact:true}).count() !== 1) throw new Error('Play keyboard/quality controls missing')
-      await page.getByRole('button',{name:'Handpan',exact:true}).click()
+      await page.getByRole('group',{name:'Sound experiment group',exact:true}).getByRole('button',{name:'Handpan',exact:true}).click()
       const handpan = await page.locator('#compare-variant option').evaluateAll(options => options.map(option => option.value).sort())
       const expected = config.handpan_ids
       if (!Array.isArray(expected) || !expected.length || new Set(expected).size !== expected.length ||

@@ -173,11 +173,12 @@ class PacketTests(unittest.TestCase):
   # No actual browser, MIDI, audio graph, network or permissions in this oracle.
   script=r"""
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
-const [source,root,mode,release,inventory,options]=process.argv.slice(1);let clock=0,index=0,exit;
+const [source,root,mode,release,inventory,options]=process.argv.slice(1);let clock=0,index=0,exit,allSoundsOpen=false;
 const config={root,run:root,origin:'http://fixture',profile:root,executable:'fixture',smoke:true,web_commit:'fixture',seconds:30,handpan_ids:JSON.parse(inventory)};
 fs.writeFileSync(path.join(root,'config.json'),JSON.stringify(config));
-const locator={waitFor:async()=>{},click:async()=>{},count:async()=>JSON.parse(options).length,evaluateAll:async fn=>fn(JSON.parse(options).map(value=>({value}))),locator:()=>locator};
-const page={setDefaultTimeout(){},on(){},goto:async()=>{},isClosed:()=>false,screenshot:async()=>{},locator:()=>locator,
+const locator={waitFor:async()=>{},click:async()=>{},getByRole:()=>locator,count:async()=>JSON.parse(options).length,evaluateAll:async fn=>fn(JSON.parse(options).map(value=>({value}))),locator:()=>locator};
+const page={setDefaultTimeout(){},on(){},goto:async()=>{},isClosed:()=>false,screenshot:async()=>{},locator:selector=>selector==='#compare-variant'?{...locator,waitFor:async()=>{if(!allSoundsOpen)throw Error('All sounds is collapsed')}}:locator,
+ getByText:text=>({...locator,click:async()=>{if(text==='All sounds')allSoundsOpen=true}}),
  getByLabel:()=>({...locator,count:async()=>1}),getByRole:(role,args)=>({...locator,count:async()=>args.name==='Calibration sounds'?0:1}),
  evaluate:async()=>{index++;let audio=[];
   if(mode==='late' && index>=3)audio=[{id:0,state:'running',time:(index-3)/10}];
