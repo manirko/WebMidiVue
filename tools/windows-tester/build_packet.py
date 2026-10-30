@@ -41,7 +41,7 @@ def main():
  if args.online_origin is not None and not re.fullmatch(r'https://[0-9a-f]{8}\.biotron-settings-beta\.pages\.dev',args.online_origin):parser.error('Exact immutable beta origin required')
  if git('status','--porcelain').strip():raise ValueError('Commit own helper/docs before packaging')
  helper=git('rev-parse','HEAD').decode().strip()
- if git('diff','--name-only',commit,helper,'--','src','public','beta-assets','scripts','package.json','package-lock.json','vue.config.js').strip():raise ValueError('App/test inputs changed after exact app gate')
+ if git('diff','--name-only',commit,helper,'--','src','public','beta-assets',*AUTOMATION,'package.json','package-lock.json','vue.config.js').strip():raise ValueError('App/test inputs changed after exact app gate')
  release,files=validate_artifact(args.runtime.resolve(),commit)
  if args.stable_input.is_symlink() or sha(args.stable_input.read_bytes())!=STABLE_SHA:raise ValueError('Official stable test input SHA differs')
  packet=args.output.resolve();packet.mkdir(parents=True,exist_ok=False)

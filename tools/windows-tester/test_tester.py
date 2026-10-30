@@ -168,15 +168,15 @@ class PacketTests(unittest.TestCase):
    self.assertFalse(data['customer_release'])
   (run/'dangerous.exe').write_text('unexpected')
   with self.assertRaisesRegex(ValueError,'Unexpected'):tester.export_results(self.root)
- def run_capture_fixture(self, mode, release=None):
+ def run_capture_fixture(self, mode, release=None, handpan_options=None):
   # Execute the real JS launcher with deterministic browser/time adapters.
   # No actual browser, MIDI, audio graph, network or permissions in this oracle.
   script=r"""
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
-const [source,root,mode,release]=process.argv.slice(1);let clock=0,index=0,exit;
-const config={root,run:root,origin:'http://fixture',profile:root,executable:'fixture',smoke:true,web_commit:'fixture',seconds:30};
+const [source,root,mode,release,inventory,options]=process.argv.slice(1);let clock=0,index=0,exit;
+const config={root,run:root,origin:'http://fixture',profile:root,executable:'fixture',smoke:true,web_commit:'fixture',seconds:30,handpan_ids:JSON.parse(inventory)};
 fs.writeFileSync(path.join(root,'config.json'),JSON.stringify(config));
-const locator={waitFor:async()=>{},click:async()=>{},count:async()=>6,locator:()=>locator};
+const locator={waitFor:async()=>{},click:async()=>{},count:async()=>JSON.parse(options).length,evaluateAll:async fn=>fn(JSON.parse(options).map(value=>({value}))),locator:()=>locator};
 const page={setDefaultTimeout(){},on(){},goto:async()=>{},isClosed:()=>false,screenshot:async()=>{},locator:()=>locator,
  getByLabel:()=>({...locator,count:async()=>1}),getByRole:(role,args)=>({...locator,count:async()=>args.name==='Calibration sounds'?0:1}),
  evaluate:async()=>{index++;let audio=[];
@@ -197,7 +197,7 @@ const sandbox={require:name=>name==='node:fs'?fixtureFs:name==='node:path'?path:
 vm.runInNewContext(fs.readFileSync(source,'utf8'),sandbox,{filename:source});
 setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');process.stdout.write(JSON.stringify({exit,summary:JSON.parse(fs.readFileSync(path.join(root,'capture-summary.json'),'utf8')),samples:index})+'\n')});
 """
-  result=subprocess.run(['node','-e',script,str(Path(__file__).with_name('capture-browser.cjs')),tempfile.mkdtemp(prefix='capture-fixture-',dir=self.root),mode,json.dumps({'source_commit':'fixture'} if release is None else release)],capture_output=True,text=True,timeout=10,check=True)
+  result=subprocess.run(['node','-e',script,str(Path(__file__).with_name('capture-browser.cjs')),tempfile.mkdtemp(prefix='capture-fixture-',dir=self.root),mode,json.dumps({'source_commit':'fixture'} if release is None else release),json.dumps(sorted(ident for bank,ident in tester.KEYBOARD_CASES if bank=='handpan')),json.dumps(sorted(ident for bank,ident in tester.KEYBOARD_CASES if bank=='handpan') if handpan_options is None else handpan_options)],capture_output=True,text=True,timeout=10,check=True)
   return json.loads(result.stdout)
  def test_capture_checks_canonical_and_legacy_identity_before_browser_launch(self):
   for release in [{'commit':'fixture'}, {'source_commit':'fixture'},
@@ -218,6 +218,13 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
   self.assertEqual(result['summary']['status'],'SMOKE_PASS_NOT_PHYSICAL_ACCEPTANCE')
   self.assertGreaterEqual(result['samples'],4)
   self.assertLessEqual(result['samples'],10)
+ def test_smoke_rejects_missing_or_replaced_handpan_options(self):
+  for options in [[], ['pan-clear'], ['pan-clear','other'], ['pan-clear','pan-clear']]:
+   with self.subTest(options=options):
+    result=self.run_capture_fixture('late',handpan_options=options)
+    self.assertEqual(result['exit'],1)
+    self.assertEqual(result['samples'],0)
+    self.assertEqual(result['summary']['status'],'CAPTURE_FAULT')
  def test_smoke_rejects_absent_frozen_or_foreign_clocks(self):
   for mode in ['missing','frozen','suspended','different','stopped','overrun','writeoverrun']:
    with self.subTest(mode=mode):
@@ -287,6 +294,28 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
    self.assertEqual(summary['phases_requested'],[phase])
    self.assertEqual(summary['physical_windows_result'],'NOT_RUN')
 
+ def test_packet_guard_allows_only_unbundled_test_changes(self):
+  spec=importlib.util.spec_from_file_location('packet_builder',Path(__file__).with_name('build_packet.py'))
+  builder=importlib.util.module_from_spec(spec);spec.loader.exec_module(builder)
+  for changed,allowed in [('scripts/test-quality-browser.js',True),('scripts/test-sound-browser.js',False),('src/app.js',False),('public/index.html',False)]:
+   with self.subTest(changed=changed),tempfile.TemporaryDirectory(dir=self.root) as folder:
+    repo=Path(folder)
+    def git(*args):
+     return subprocess.check_output(['git','-c','user.name=Fixture','-c','user.email=fixture@example.invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null',*args],cwd=repo,stderr=subprocess.DEVNULL,text=True).strip()
+    git('init','-q')
+    for name in ['scripts/test-quality-browser.js','scripts/test-sound-browser.js','src/app.js','public/index.html']:
+     file=repo/name;file.parent.mkdir(parents=True,exist_ok=True);file.write_text('original')
+    git('add','--','scripts','src','public');git('commit','-qm','runtime');runtime=git('rev-parse','HEAD')
+    (repo/changed).write_text('changed');git('add','--',changed);git('commit','-qm','helper inputs')
+    args=['build_packet.py','--web-commit',runtime,'--runtime',str(repo/'runtime'),'--stable-input',str(repo/'stable.uf2'),'--output',str(repo/'packet')]
+    with mock.patch.object(builder,'ROOT',repo),mock.patch.object(builder,'validate_artifact',side_effect=RuntimeError('artifact-stage')) as validate,mock.patch('sys.argv',args):
+     if allowed:
+      with self.assertRaisesRegex(RuntimeError,'artifact-stage'):builder.main()
+      validate.assert_called_once()
+     else:
+      with self.assertRaisesRegex(ValueError,'App/test inputs changed'):builder.main()
+      validate.assert_not_called()
+
  def test_keyboard_inventory_matches_the_trimmed_blogger_banks(self):
   import subprocess
   source=Path(__file__).resolve().parents[2]
@@ -299,6 +328,7 @@ setImmediate(()=>{if(exit===undefined)throw Error('Launcher did not complete');p
   rows=json.loads(subprocess.check_output(['node','--input-type=module','-e',code],text=True))
   self.assertEqual(set(map(tuple,rows)),tester.KEYBOARD_CASES)
   self.assertEqual(len(rows),15)
+  self.assertNotIn('upper-note',tester.CASES['W11'])
 
  def test_progress_reports_real_stage_without_invented_percentage(self):
   run=tester.new_run(self.root,'progress');(run/'browser').mkdir()

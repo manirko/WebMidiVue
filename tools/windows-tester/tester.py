@@ -39,7 +39,7 @@ CASES = {
  'W08': 'Offline reopen and comparison sound, no false ready state',
  'W09': 'Installed/same/legacy firmware presentation, without BOOT or write',
  'W10': 'Physical flash -> rollback -> reflash; screened board/backup/review first',
- 'W11': 'Play: six quick sounds and sphere; All sounds: ten timbres/ten upper-note/six handpan; Settings: ten calibration cues',
+ 'W11': 'Play: quick sounds and sphere; All sounds: Classic, Timbres and Handpan; Settings: calibration sounds',
  'W12': 'Independent native details, sliders, local feedback and exact copied diagnostics',
  'W13': 'Physical phone USB/MIDI, sound, settings and recovery (separate platform)',
  'W14': 'FB44 physical active calibration cue: original-channel Note Off, next cue on new channel; DAW/audio',
@@ -400,7 +400,7 @@ def main():
    node=shutil.which('node')
    if not node or not environment['node_version'] or int(environment['node_version'].lstrip('v').split('.')[0])<20:raise ValueError('Capture needs installed Node.js >=20; plain serve only needs Python')
    profile=root/'.tester-profiles'/(args.browser+'-observed')
-   config={'root':str(root),'run':str(run),'executable':browsers[args.browser],'browser':args.browser,'origin':origin,'profile':str(profile),'seconds':args.minutes*60,'smoke':args.smoke,'web_commit':WEB_COMMIT,'firmware_version':FIRMWARE_VERSION,'firmware_source_commit':FIRMWARE_SOURCE}
+   config={'root':str(root),'run':str(run),'executable':browsers[args.browser],'browser':args.browser,'origin':origin,'profile':str(profile),'seconds':args.minutes*60,'smoke':args.smoke,'web_commit':WEB_COMMIT,'firmware_version':FIRMWARE_VERSION,'firmware_source_commit':FIRMWARE_SOURCE,'handpan_ids':sorted(ident for bank,ident in KEYBOARD_CASES if bank=='handpan')}
    write_json(run/'capture-config.json',config)
    result=subprocess.run([node,str(root/'capture-browser.cjs'),str(run/'capture-config.json')],cwd=root)
    if result.returncode:raise ValueError('Capture stopped with an incident; see '+str(run))

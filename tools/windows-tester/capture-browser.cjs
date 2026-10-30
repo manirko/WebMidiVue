@@ -116,7 +116,10 @@ function hasAdvancingDspClock(rows) {
       if (await page.getByRole('button',{name:'Calibration sounds',exact:true}).count()) throw new Error('Calibration cues leaked onto Play')
       if (await page.getByLabel('Limit to 4 notes at once',{exact:true}).count() !== 1 || await page.getByRole('button',{name:'Play with keyboard',exact:true}).count() !== 1) throw new Error('Play keyboard/quality controls missing')
       await page.getByRole('button',{name:'Handpan',exact:true}).click()
-      if (await page.locator('#compare-variant option').count() !== 6) throw new Error('Exact candidate is missing six Handpan options')
+      const handpan = await page.locator('#compare-variant option').evaluateAll(options => options.map(option => option.value).sort())
+      const expected = config.handpan_ids
+      if (!Array.isArray(expected) || !expected.length || new Set(expected).size !== expected.length ||
+          JSON.stringify(handpan) !== JSON.stringify([...expected].sort())) throw new Error('Exact candidate Handpan inventory differs from packet')
       await page.getByRole('button',{name:'Listen to example',exact:true}).click()
       await page.getByRole('button',{name:'Stop example',exact:true}).waitFor()
     }
