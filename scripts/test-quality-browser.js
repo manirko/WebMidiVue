@@ -628,14 +628,16 @@ async function auditJourneys(browser, origin) {
             await page.keyboard.press(tabKey)
             focus.push(await page.evaluate(() => {
               const e = document.activeElement, s = getComputedStyle(e), r = e.getBoundingClientRect()
-              return {tag: e.tagName, text: (e.getAttribute('aria-label') || e.textContent).trim().slice(0, 80),
+              return {tag: e.tagName, documentHasFocus: document.hasFocus(), text: (e.getAttribute('aria-label') || e.textContent).trim().slice(0, 80),
                 focusVisible: e.matches(':focus-visible'), outline: s.outlineStyle, outlineWidth: parseFloat(s.outlineWidth),
                 boxShadow: s.boxShadow, height: r.height, width: r.width}
             }))
           }
           report.focus = focus; write()
-          assert(focus.every(f => f.height > 0 && f.width > 0 && f.focusVisible), 'Tab focused an invisible/non-visible control')
-          assert(focus.every(f => f.outlineWidth > 0 && f.outline !== 'none' || f.boxShadow !== 'none'), 'Keyboard focus has no measured outline/shadow')
+          // After the last control Chrome tabs to its own UI; BODY is not an app focus target then.
+          const controls = focus.filter(f => !(f.tag === 'BODY' && !f.documentHasFocus))
+          assert(controls.length && controls.every(f => f.height > 0 && f.width > 0 && f.focusVisible), 'Tab focused an invisible/non-visible control')
+          assert(controls.every(f => f.outlineWidth > 0 && f.outline !== 'none' || f.boxShadow !== 'none'), 'Keyboard focus has no measured outline/shadow')
         })
         await step('set browser Volume37', 'volume37', async () => {
           await page.locator('#biotron-play-volume').focus()
