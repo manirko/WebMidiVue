@@ -5,6 +5,19 @@ on:
     branches: [codex/biotron-web-firmware-11010-20261008, codex/biotron-blogger-20261030]
     paths: [src/**, public/**, beta-assets/**, scripts/**, tools/windows-tester/**, package*.json, vue.config.js, .env.biotron-beta, .github/workflows/windows-tester.yml]
   workflow_dispatch:
+    inputs:
+      candidate_origin:
+        description: 'Optional immutable beta origin; software tests use these exact published bytes'
+        type: string
+      candidate_commit:
+        description: 'Exact 40-hex candidate source commit, required with origin'
+        type: string
+      release_sha256:
+        description: 'Expected release-evidence.json SHA-256, required with origin'
+        type: string
+
+env:
+  PYTHONIOENCODING: utf-8
 
 permissions:
   contents: read
@@ -97,6 +110,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ inputs.candidate_commit || github.sha }}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.14'
@@ -111,8 +125,11 @@ jobs:
         env:
           BIOTRON_QA_BROWSER: ${{ matrix.browser }}
           BIOTRON_CI_PHASE: ${{ matrix.phase }}
+          BIOTRON_PINNED_ORIGIN: ${{ inputs.candidate_origin }}
+          BIOTRON_PINNED_COMMIT: ${{ inputs.candidate_commit }}
+          BIOTRON_PINNED_RELEASE_SHA256: ${{ inputs.release_sha256 }}
         run: |
-          import datetime, hashlib, json, os, pathlib, platform, subprocess, sys, urllib.request, uuid
+          import datetime, hashlib, json, os, pathlib, platform, re, subprocess, sys, urllib.request, uuid
           output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'windows-browser-evidence'
           output.mkdir()
           env = os.environ.copy()
@@ -137,9 +154,40 @@ jobs:
               if result.returncode: raise RuntimeError(name + ' failed; original evidence preserved')
           save()
           try:
-              assert platform.system() == 'Windows' and record['head'] == env['GITHUB_SHA']
-              # Direct CLI avoids package.json's POSIX NODE_ENV assignment on Windows.
-              run('build', ['node', 'node_modules/@vue/cli-service/bin/vue-cli-service.js', 'build', '--mode', 'biotron-beta'])
+              expected = env['BIOTRON_PINNED_COMMIT'] or env['GITHUB_SHA']
+              assert platform.system() == 'Windows' and record['head'] == expected
+              origin = env['BIOTRON_PINNED_ORIGIN']
+              if origin:
+                  assert re.fullmatch(r'https://[0-9a-f]{8}\.biotron-settings-beta\.pages\.dev', origin)
+                  assert re.fullmatch(r'[0-9a-f]{40}', expected)
+                  assert re.fullmatch(r'[0-9a-f]{64}', env['BIOTRON_PINNED_RELEASE_SHA256'])
+                  def fetch(name):
+                      with urllib.request.urlopen(origin + '/' + name, timeout=30) as response:
+                          assert response.status == 200
+                          return response.read()
+                  body = fetch('release-evidence.json')
+                  assert hashlib.sha256(body).hexdigest() == env['BIOTRON_PINNED_RELEASE_SHA256']
+                  release = json.loads(body)
+                  assert release['commit'] == expected and release['firmware_update_channel'] == 'public-stable'
+                  assert release['firmware_update_enabled'] is True
+                  dist = pathlib.Path('dist')
+                  assert not dist.exists(), 'Refuse to mix compiled and pinned artifact bytes'
+                  dist.mkdir()
+                  for item in release['files']:
+                      name = item['path']
+                      parts = pathlib.PurePosixPath(name)
+                      assert not parts.is_absolute() and '..' not in parts.parts and '\\' not in name and ':' not in name
+                      data = fetch(name)
+                      assert len(data) == item['bytes'] and hashlib.sha256(data).hexdigest() == item['sha256']
+                      target = dist / name
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      target.write_bytes(data)
+                  (dist / 'release-evidence.json').write_bytes(body)
+                  record['pinned_origin'] = origin
+                  record['release_evidence_sha256'] = env['BIOTRON_PINNED_RELEASE_SHA256']
+              else:
+                  # Direct CLI avoids package.json's POSIX NODE_ENV assignment on Windows.
+                  run('build', ['node', 'node_modules/@vue/cli-service/bin/vue-cli-service.js', 'build', '--mode', 'biotron-beta'])
               # Final release metadata is created only after the full Mac candidate gate.
               compiled = {p.relative_to('dist').as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                           for p in pathlib.Path('dist').rglob('*') if p.is_file()}
@@ -147,34 +195,6 @@ jobs:
               assert any(record['build_id'] in p.read_text(encoding='utf-8') for p in pathlib.Path('dist/js').glob('*.js'))
               assert not any(name.lower().endswith('.uf2') for name in compiled)
               (output / 'compiled-sha256.json').write_text(json.dumps(compiled, indent=2), encoding='utf-8')
-              if record['phase'] == 'keyboard':
-                  probe = r"""
-                  const fs=require('fs'),path=require('path'),{chromium}=require('playwright-core');
-                  const {browserConfig,createStaticServer}=require('./scripts/browser-test-harness');
-                  const server=createStaticServer(path.resolve('dist')), rows=[];
-                  const bounded=(task,ms)=>Promise.race([task,new Promise((_,reject)=>setTimeout(()=>reject(Error('diagnostic deadline')),ms))]);
-                  (async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-                  for(const headless of [true,false])for(const blockGarden of [false,true]){
-                    const row={headless,blockGarden};let browser;
-                    try{browser=await chromium.launch({headless,...browserConfig().options});
-                      const context=await browser.newContext({serviceWorkers:'block'});
-                      if(blockGarden)await context.route('**/garden/scene.html',route=>route.fulfill({contentType:'text/html',body:'<p>Diagnostic visual omitted</p>'}));
-                      const page=await context.newPage();page.setDefaultTimeout(3000);
-                      await page.goto('http://127.0.0.1:'+server.address().port+'/#/biotron/play?sound=1',{waitUntil:'domcontentloaded'});
-                      await page.getByRole('heading',{name:'Plant music',exact:true}).waitFor();
-                      row.frame=await bounded(page.evaluate(()=>new Promise(resolve=>{let frames=0;const tick=()=>{frames++;requestAnimationFrame(tick)};requestAnimationFrame(tick);setTimeout(()=>resolve({frames,hidden:document.hidden,visibility:document.visibilityState}),1000)})),5000);
-                      await page.getByText('All sounds',{exact:true}).click();row.click='PASS';
-                      await page.screenshot({path:path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR,'probe-'+headless+'-'+blockGarden+'.png'),timeout:2000});
-                    }catch(error){row.error=String(error)}finally{
-                      if(browser)try{await bounded(browser.close(),5000);row.closed=true}catch(error){row.closed=false;row.closeError=String(error)}
-                      rows.push(row);fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR,'render-probe.json'),JSON.stringify(rows,null,2));
-                    }
-                    if(row.closed===false)break;
-                  }
-                  server.close();console.log(JSON.stringify(rows));process.exit(0);
-                  })().catch(error=>{console.error(error);process.exit(1)});
-                  """
-                  run('render-probe', ['node', '-e', probe])
               if env['BIOTRON_CI_PHASE'] == 'firmware':
                   firmware = output / 'stable-test-input.uf2'
                   urllib.request.urlretrieve('https://github.com/Playtronica/biotron-firmware/releases/download/1.8.2/biotron-firmware_v1.8.2.uf2', firmware)
