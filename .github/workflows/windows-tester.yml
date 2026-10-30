@@ -147,6 +147,34 @@ jobs:
               assert any(record['build_id'] in p.read_text(encoding='utf-8') for p in pathlib.Path('dist/js').glob('*.js'))
               assert not any(name.lower().endswith('.uf2') for name in compiled)
               (output / 'compiled-sha256.json').write_text(json.dumps(compiled, indent=2), encoding='utf-8')
+              if record['phase'] == 'keyboard':
+                  probe = r"""
+                  const fs=require('fs'),path=require('path'),{chromium}=require('playwright-core');
+                  const {browserConfig,createStaticServer}=require('./scripts/browser-test-harness');
+                  const server=createStaticServer(path.resolve('dist')), rows=[];
+                  const bounded=(task,ms)=>Promise.race([task,new Promise((_,reject)=>setTimeout(()=>reject(Error('diagnostic deadline')),ms))]);
+                  (async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+                  for(const headless of [true,false])for(const blockGarden of [false,true]){
+                    const row={headless,blockGarden};let browser;
+                    try{browser=await chromium.launch({headless,...browserConfig().options});
+                      const context=await browser.newContext({serviceWorkers:'block'});
+                      if(blockGarden)await context.route('**/garden/scene.html',route=>route.fulfill({contentType:'text/html',body:'<p>Diagnostic visual omitted</p>'}));
+                      const page=await context.newPage();page.setDefaultTimeout(3000);
+                      await page.goto('http://127.0.0.1:'+server.address().port+'/#/biotron/play?sound=1',{waitUntil:'domcontentloaded'});
+                      await page.getByRole('heading',{name:'Plant music',exact:true}).waitFor();
+                      row.frame=await bounded(page.evaluate(()=>new Promise(resolve=>{let frames=0;const tick=()=>{frames++;requestAnimationFrame(tick)};requestAnimationFrame(tick);setTimeout(()=>resolve({frames,hidden:document.hidden,visibility:document.visibilityState}),1000)})),5000);
+                      await page.getByText('All sounds',{exact:true}).click();row.click='PASS';
+                      await page.screenshot({path:path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR,'probe-'+headless+'-'+blockGarden+'.png'),timeout:2000});
+                    }catch(error){row.error=String(error)}finally{
+                      if(browser)try{await bounded(browser.close(),5000);row.closed=true}catch(error){row.closed=false;row.closeError=String(error)}
+                      rows.push(row);fs.writeFileSync(path.join(process.env.BIOTRON_TEST_EVIDENCE_DIR,'render-probe.json'),JSON.stringify(rows,null,2));
+                    }
+                    if(row.closed===false)break;
+                  }
+                  server.close();console.log(JSON.stringify(rows));process.exit(0);
+                  })().catch(error=>{console.error(error);process.exit(1)});
+                  """
+                  run('render-probe', ['node', '-e', probe])
               if env['BIOTRON_CI_PHASE'] == 'firmware':
                   firmware = output / 'stable-test-input.uf2'
                   urllib.request.urlretrieve('https://github.com/Playtronica/biotron-firmware/releases/download/1.8.2/biotron-firmware_v1.8.2.uf2', firmware)
