@@ -154,6 +154,7 @@ jobs:
               if result.returncode: raise RuntimeError(name + ' failed; original evidence preserved')
           save()
           try:
+              record['workflow_head'] = env['GITHUB_SHA']
               expected = env['BIOTRON_PINNED_COMMIT'] or env['GITHUB_SHA']
               assert platform.system() == 'Windows' and record['head'] == expected
               origin = env['BIOTRON_PINNED_ORIGIN']
@@ -177,7 +178,8 @@ jobs:
                       name = item['path']
                       parts = pathlib.PurePosixPath(name)
                       assert not parts.is_absolute() and '..' not in parts.parts and '\\' not in name and ':' not in name
-                      data = fetch(name)
+                      config = {'_headers': 'beta-assets/_headers', '_worker.js': 'beta-assets/telemetry-worker.mjs'}
+                      data = subprocess.check_output(['git', 'show', 'HEAD:' + config[name]]) if name in config else fetch(name)
                       assert len(data) == item['bytes'] and hashlib.sha256(data).hexdigest() == item['sha256']
                       target = dist / name
                       target.parent.mkdir(parents=True, exist_ok=True)
