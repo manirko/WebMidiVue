@@ -11,6 +11,18 @@ console.log('PASS: immediate close, repeated open/close, Escape, unmount and scr
 // Execute the actual scene handler and physics, without a GPU. This proves
 // bounded energy and settling; visual acceptance remains a real-browser task.
 const scene=fs.readFileSync(process.argv[2] || 'public/garden/scene.html','utf8');
+// Exercise the real graphics guard before loading the expensive shader scene.
+const guardSource=scene.slice(scene.indexOf('function canRenderGarden()'),scene.indexOf('\nif (!canRenderGarden())'));
+for(const [renderer,available,expected] of [['Apple M3',true,true],['ANGLE NVIDIA',true,true],
+  ['SwiftShader',true,false],['Microsoft Basic Render Driver',true,false],['llvmpipe',true,false],['',false,false]]) {
+  let released=0,attributes;
+  const gl={getExtension(name){return name==='WEBGL_debug_renderer_info'?{UNMASKED_RENDERER_WEBGL:1}:{loseContext(){released++}}},getParameter(){return renderer}};
+  const fixture={document:{createElement(){return {getContext(type,options){assert.equal(type,'webgl2');attributes=options;return available?gl:null}}}}};
+  vm.runInNewContext(guardSource+';result=canRenderGarden()',fixture);
+  assert.equal(fixture.result,expected,renderer);assert.equal(attributes.failIfMajorPerformanceCaveat,true);
+  assert.equal(released,available?1:0,'Probe context leaked');
+}
+console.log('PASS: hardware graphics retained; software/unavailable adapters keep the existing static visual and release probe context');
 const start=scene.lastIndexOf("addEventListener('message', e => {");
 assert(start>=0);
 const end=scene.indexOf('\n});',start)+4;

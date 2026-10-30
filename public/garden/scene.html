@@ -20,6 +20,18 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 // Original Garden Anomaly by Frank Reitberger: https://github.com/prinzipiell/tsl/tree/main/garden-anomaly
 // Local review adaptation by Playtronica. No commercial permission or endorsement claimed.
+// Keep the existing static visual when software graphics would stall the host UI.
+function canRenderGarden() {
+  const gl = document.createElement('canvas').getContext('webgl2', {failIfMajorPerformanceCaveat: true});
+  if (!gl) return false;
+  const debug = gl.getExtension('WEBGL_debug_renderer_info');
+  const renderer = debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : '';
+  gl.getExtension('WEBGL_lose_context')?.loseContext();
+  return !/swiftshader|llvmpipe|software|microsoft basic render|\bwarp\b/i.test(renderer);
+}
+if (!canRenderGarden()) {
+  parent.postMessage({type:'garden-fallback', reason:'graphics-performance'}, location.origin);
+} else {
 try {
 
 
@@ -760,4 +772,5 @@ renderer.setAnimationLoop(renderFrame);
 addEventListener('resize', () => { firstFrame=true; renderFrame(); });
 
 } catch(error) { console.error(error); parent.postMessage({type:'garden-fallback'},location.origin); }
+}
 </script></html>
