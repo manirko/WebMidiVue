@@ -74,12 +74,14 @@ function browserConfig(name = process.env.BIOTRON_QA_BROWSER || 'chrome') {
   throw new Error(`Unknown BIOTRON_QA_BROWSER: ${name}`)
 }
 
+// Hosted Windows headless GPU stalls are separate from native GPU acceptance.
+const headlessArgs = options => [...(process.platform === 'win32' ? ['--disable-gpu'] : []), ...(options.args || [])]
 const ownedBrowsers = new Set()
 async function launchBrowser(options = {}) {
   const cleanupFile=process.env.BIOTRON_QA_CLEANUP_FILE, attempt=process.env.BIOTRON_QA_ATTEMPT
   if(cleanupFile && (!path.isAbsolute(cleanupFile) || !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(attempt)))throw new Error('Cleanup receipt needs an absolute file and attempt UUID')
   const config = browserConfig()
-  const browser = await require('playwright-core')[config.engine].launch({headless: true, ...options, ...config.options})
+  const browser = await require('playwright-core')[config.engine].launch({headless: true, ...options, ...config.options, args: headlessArgs(options)})
   if(cleanupFile){
     const close=browser.close.bind(browser)
     const record=()=>fs.writeFileSync(cleanupFile,JSON.stringify({attempt,pid:process.pid,openBrowsers:ownedBrowsers.size,browserApiClosed:ownedBrowsers.size===0,globalClaim:false}))
@@ -89,7 +91,7 @@ async function launchBrowser(options = {}) {
   const newContext = browser.newContext.bind(browser)
   browser.newContext = (...args) => browserCall(browser, () => newContext(...args), 'newContext')
     .then(context => guardPages(context, browser))
-  console.log(JSON.stringify({browser: config.name, engine: config.engine, version: browser.version(),
+  console.log(JSON.stringify({browser: config.name, engine: config.engine, gpuDisabled: process.platform === 'win32', version: browser.version(),
     executable: config.options.executablePath || config.options.channel || 'Playwright pinned binary',
     scope: config.engine === 'webkit' ? 'Playwright WebKit, not installed Safari' :
       config.engine === 'firefox' ? 'Playwright patched Firefox, not installed Firefox' : 'Isolated browser profile'}))
@@ -111,8 +113,8 @@ async function gotoReady(page, url, ready) {
 async function launchPersistentContext(profile, options) {
   const config = browserConfig()
   const context = await require('playwright-core')[config.engine].launchPersistentContext(profile,
-    {...options, ...config.options, headless: true})
-  console.log(JSON.stringify({browser: config.name, engine: config.engine, version: context.browser().version(),
+    {...options, ...config.options, headless: true, args: headlessArgs(options || {})})
+  console.log(JSON.stringify({browser: config.name, engine: config.engine, gpuDisabled: process.platform === 'win32', version: context.browser().version(),
     scope: 'Isolated persistent test profile; Firefox/WebKit are Playwright binaries, not installed Firefox/Safari'}))
   return guardPages(context, context.browser())
 }
