@@ -615,6 +615,7 @@ const boundedCapture=task=>Promise.race([task,new Promise(resolve=>setTimeout(()
    await page.evaluate(attribute=>{const parent=document.createElement(attribute==='dialog'?'dialog':'div');parent.id='blocked-probe';const [key,value]=attribute.split('=');parent.setAttribute(key,value||'');const child=document.createElement('select');child.setAttribute('data-keyboard-playable','true');parent.append(child);document.body.append(parent);child.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyA',bubbles:true}))},attribute);await voices(0)
    await page.locator('#blocked-probe').evaluate(element=>element.remove())
   }
+  await page.getByLabel('Keyboard octave',{exact:true}).selectOption('5')
   await down();await down();await down({repeat:true});await voices(1)
   await page.getByLabel('Keyboard octave',{exact:true}).selectOption('4');await voices(0);await up();await voices(0)
   await down();await voices(1)
