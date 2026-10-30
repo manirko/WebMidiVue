@@ -162,7 +162,8 @@ const hasRequiredPrecache = async signal => {
   const required = ['index.html', 'manifest.json',
     'img/icons/icon-192x192.png', 'img/icons/icon-512x512.png']
   for (const element of document.querySelectorAll('script[src], link[rel="stylesheet"][href]')) {
-    required.push(relative(element.src || element.href))
+    const url = new URL(element.src || element.href, window.location.href)
+    if (url.origin === base.origin) required.push(relative(url))
   }
   const names = await window.caches.keys()
   assertCurrent(signal)

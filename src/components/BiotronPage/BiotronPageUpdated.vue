@@ -557,7 +557,7 @@ export default  {
         starting: "Starting…",
         waiting: "Step away and keep the plant still.",
         measuring: "Measuring… keep the plant and cables still.",
-        ready: "Calibration complete — touch the plant.",
+        ready: "Calibration complete.",
         unsupported: "This firmware cannot start calibration here. Reconnect USB to calibrate.",
         timeout: "No stable signal yet. Check both plant clips and try again.",
         error: "Calibration could not start. Reconnect Biotron and try again."

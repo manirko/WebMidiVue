@@ -131,6 +131,16 @@ function environment({ready = Promise.resolve({}), cached = true, controller = {
     assert.deepStrictEqual(await bounded(module.prepareOfflineAccess()),
       {state: 'unsupported', code: 'SW_UNSUPPORTED', ready: false})
 
+    // Hosting analytics/styles are not application precache dependencies.
+    env = environment()
+    const assets = document.querySelectorAll()
+    document.querySelectorAll = () => [...assets,
+      {src: 'https://static.cloudflareinsights.com/beacon.min.js/vtest'},
+      {href: 'https://external.test/style.css'}]
+    module = await loadModule()
+    assert.equal((await bounded(module.prepareOfflineAccess())).ready, true,
+      'External hosting assets blocked a complete app cache')
+
     env = environment({cached: false})
     module = await loadModule()
     assert.deepStrictEqual(await bounded(module.prepareOfflineAccess()),

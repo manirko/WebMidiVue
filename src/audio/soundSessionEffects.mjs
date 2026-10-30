@@ -211,7 +211,7 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
         const state = await resumeAudioWithin(engine)
         if (this.engine !== engine || this.resumeAttemptId !== attemptId) return
         if (state !== 'running') throw new Error('Audio did not resume.')
-        this.setAudioState('running', 'Sound ready — touch the plant to check it.')
+        this.setAudioState('running', 'Sound ready — listen for plant notes.')
         this.resumeOutcome = automatic ? 'automatic_running' : 'manual_running'
         trace('resume', this.resumeOutcome)
       } catch (error) {

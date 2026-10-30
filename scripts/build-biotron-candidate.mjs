@@ -63,8 +63,8 @@ export function createTestEvidence({commit, buildId, testedAt, environment}) {
       "telemetry_contract_and_privacy",
       "first_use_plant_connection_prerequisite_visible",
       "sound_core_and_seven_sound_levels",
-      "four_audition_banks_and_36_native_variants",
-      "audition_dsp_72_standard_safe_cases_and_handpan_controls",
+      "current_audition_palette_and_native_variants",
+      "audition_dsp_standard_safe_cases_and_handpan_controls",
       "live_audition_midi_and_audio_release_lifecycle",
       "audio_interruption_state_and_foreground_recovery",
       "production_isolation",
@@ -102,7 +102,7 @@ not update firmware as part of this software acceptance pass.
 Stop at the first failure:
 
 1. Open **Play**, press **Start listening**, keep the plant still through
-   calibration, then touch a leaf. Sound must react without a DAW.
+   calibration, then listen for plant-triggered notes without a DAW.
 2. Open **Settings**. The picker must offer the responsive Biotron but not
    \`MIDIIN2\`, \`MIDIOUT2\` or \`Biotron Port 2\`. Wait for its saved settings
    to load before changing anything. If the read fails, press **Retry settings

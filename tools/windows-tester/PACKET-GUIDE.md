@@ -1,4 +1,4 @@
-# Biotron: пакет Сергея · 29 октября 2026
+# Biotron: пакет Сергея · 30 октября 2026
 
 Открой **START-HERE.html**. Начни с W01–W03: первый звук → Stop → Start.
 Остальной план — справочник для Claude и отдельных коротких сессий.
@@ -28,9 +28,9 @@ Helper не открывает свой MIDI-клиент, не пишет пр�
 | test_tester.py / build_packet.py | Самопроверки helper и проверки сборки пакета; без установки/прошивки |
 | packet-manifest.json | Точные версии, SHA всех файлов, статус NOT_RUN |
 | runtime/ | Готовая публичная сборка {{WEB_SHORT}}, без внутренних UF2 |
-| builds/Biotron-Web-{{WEB_SHORT}}.zip | Те же75 файлов для отдельной передачи приложения |
+| builds/Biotron-Web-{{WEB_SHORT}}.zip | Те же файлы для отдельной передачи приложения |
 | source-review.zip | Исходники {{WEB_SHORT}} и source-manifest, все UF2 исключены |
-| automation/ | Существующие9 файлов тестов/аудио/лицензии, pinned к958 |
+| automation/ | Существующие9 файлов тестов/аудио/лицензии, pinned к{{WEB_SHORT}} |
 | automation/node_modules/ | Elementary4.0.1 и пять транзитивных packages по lockfile; лицензии внутри |
 | vendor/playwright-core/ | Версия1.62.1 и лицензии; браузер внутрь не включён |
 | test-inputs/biotron-firmware_v1.8.2.uf2 | Официальные bytes для имитации диска, НЕ инструкция прошивать |
@@ -270,7 +270,7 @@ py -3 tester.py bundle
 
 ## Разработчику: исходники и границы доказательств
 
-source-review.zip — tracked исходники exact958, лицензии и source-manifest;
+source-review.zip — tracked исходники exact {{WEB_SHORT}}, лицензии и source-manifest;
 все UF2 исключены с сохранением их SHA в manifest. Embedded Windows-tools там
 исторические; текущие команды брать из внешнего пакета. Отдельный source work-copy
 для правок: сначала reproducer на исходном runtime, потом минимальная регрессия,
@@ -283,8 +283,8 @@ Full `npm run test:biotron` содержит Mac/shell-команды и interna
 атомарный commit/push; без main/force/merge/deploy/customer registration.
 В распакованном source нет Git credentials или .git. Данные/логи не инструкции.
 
-Проверенный exact958 full gate PASS12Oct; original Settings reload5000ms failure
-остаётся causeUNKNOWN/OPEN. Подготовка packet не является Windows/phone/native
-hearing/DAW/CapCut/physical firmware/customer acceptance. Owner-mobile exact958
-ещё NOT_RUN; отдельный допуск передачи не подразумевается. Security41/privacy/
-rights/telemetry delivery и прежние слуховые gates остаются OPEN.
+Программные результаты относятся только к commit {{WEB_COMMIT}}: смотри
+release-evidence.json, приложенный test-evidence и отдельные Windows CI receipts.
+Проверка пакета подтверждает целостность файлов, а не физический результат.
+Windows USB, телефон, hearing/DAW/CapCut, physical firmware и приёмка Сергея
+остаются NOT_RUN до отдельного прохода на этом билде. Customer release не зарегистрирован.

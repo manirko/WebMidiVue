@@ -17,6 +17,9 @@ if (evidence) fs.mkdirSync(evidence, {recursive: true})
 const server = createStaticServer(root, {
   headers: {'Service-Worker-Allowed': '/'},
   transform(relative, body) {
+    // Reproduce hosting analytics injection without contacting a third party.
+    if (relative === 'index.html') return Buffer.from(body.toString().replace('</head>',
+      '<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vtest"></script></head>'))
     if (relative !== 'service-worker.js') return body
     return Buffer.from(`${body.toString()}\nself.addEventListener('message',event=>{if(event.data&&event.data.type==='TEST_SW_VERSION'&&event.ports[0])event.ports[0].postMessage(${serviceWorkerVersion})})\n`)
   }
@@ -33,6 +36,8 @@ async function waitFor(predicate, message, timeout = 10000) {
 async function openProfile(online, denyMidiOnce = false) {
   context = await launchPersistentContext(profile, {serviceWorkers: 'allow'})
   context.setDefaultTimeout(5000)
+  if (!remotePreview) await context.route('https://static.cloudflareinsights.com/**',
+    route => route.fulfill({contentType: 'application/javascript', body: ''}))
   if (remotePreview && online) {
     const identity = await verifyOnlineIdentity(context, origin, root)
     if (!workerBytesChecked) {
@@ -370,7 +375,7 @@ async function controllerVersion(page) {
   await page.evaluate(nonce => window.__emitSettingsMidi([0xf0, 0x0b, 125, nonce, 2, 0xf7]), calibrationNonce)
   await page.getByText('Measuring… keep the plant and cables still.').waitFor({state: 'visible'})
   await page.evaluate(nonce => window.__emitSettingsMidi([0xf0, 0x0b, 125, nonce, 3, 0xf7]), calibrationNonce)
-  await page.getByText('Calibration complete — touch the plant.').waitFor({state: 'visible'})
+  await page.getByText('Calibration complete.').waitFor({state: 'visible'})
   const sentBefore = await page.evaluate(() => window.__midiSent.length)
   await page.evaluate(() => {
     window.__midiHeartbeatMaxGap = 0

@@ -1,9 +1,9 @@
-name: Windows tester guards
+name: Windows Biotron software and tester guards
 
 on:
   push:
-    branches: [codex/biotron-web-firmware-11010-20261008]
-    paths: [tools/windows-tester/**, .github/workflows/windows-tester.yml]
+    branches: [codex/biotron-web-firmware-11010-20261008, codex/biotron-blogger-20261030]
+    paths: [src/**, public/**, beta-assets/**, scripts/**, tools/windows-tester/**, package*.json, vue.config.js, .env.biotron-beta, .github/workflows/windows-tester.yml]
   workflow_dispatch:
 
 permissions:
@@ -80,5 +80,93 @@ jobs:
         with:
           name: windows-helper-${{ matrix.python }}-node${{ matrix.node }}-${{ github.run_id }}
           path: ${{ runner.temp }}/windows-tester-evidence/
+          if-no-files-found: error
+          retention-days: 14
+
+  browser:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, msedge]
+        phase: [keyboard, settings, pwa, firmware]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Compile pinned beta and run one independent software phase
+        shell: python
+        env:
+          BIOTRON_QA_BROWSER: ${{ matrix.browser }}
+          BIOTRON_CI_PHASE: ${{ matrix.phase }}
+        run: |
+          import datetime, hashlib, json, os, pathlib, platform, subprocess, sys, urllib.request, uuid
+          output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'windows-browser-evidence'
+          output.mkdir()
+          env = os.environ.copy()
+          env.update(BIOTRON_TEST_EVIDENCE_DIR=str(output), AUDITION_BROWSER_OUTPUT=str(output),
+                     BIOTRON_QA_ATTEMPT=str(uuid.uuid4()), BIOTRON_QA_CLEANUP_FILE=str(output / 'cleanup.json'))
+          record = {'at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+                    'os': platform.platform(), 'browser': env['BIOTRON_QA_BROWSER'],
+                    'phase': env['BIOTRON_CI_PHASE'], 'status': 'RUNNING', 'steps': [],
+                    'scope': 'Hosted Windows browser software only; USB/hearing/DAW/phone/flash NOT_RUN'}
+          summary = output / 'summary.json'
+          def save():
+              summary.write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
+          def run(name, args):
+              log = output / (name + '.log')
+              with log.open('w', encoding='utf-8') as stream:
+                  result = subprocess.run(args, env=env, stdout=stream, stderr=subprocess.STDOUT, timeout=600)
+              record['steps'].append({'name': name, 'exit_code': result.returncode,
+                                      'sha256': hashlib.sha256(log.read_bytes()).hexdigest()})
+              save()
+              print(log.read_text(encoding='utf-8'), flush=True)
+              if result.returncode: raise RuntimeError(name + ' failed; original evidence preserved')
+          save()
+          try:
+              assert platform.system() == 'Windows' and record['head'] == env['GITHUB_SHA']
+              # Direct CLI avoids package.json's POSIX NODE_ENV assignment on Windows.
+              run('build', ['node', 'node_modules/@vue/cli-service/bin/vue-cli-service.js', 'build', '--mode', 'biotron-beta'])
+              release = json.loads(pathlib.Path('dist/release-evidence.json').read_text(encoding='utf-8'))
+              assert release['commit'] == record['head'] and release['firmware_update_channel'] == 'public-stable'
+              record['build_id'] = release['build_id']
+              record['release_evidence_sha256'] = hashlib.sha256(pathlib.Path('dist/release-evidence.json').read_bytes()).hexdigest()
+              if env['BIOTRON_CI_PHASE'] == 'firmware':
+                  firmware = output / 'stable-test-input.uf2'
+                  urllib.request.urlretrieve('https://github.com/Playtronica/biotron-firmware/releases/download/1.8.2/biotron-firmware_v1.8.2.uf2', firmware)
+                  digest = hashlib.sha256(firmware.read_bytes()).hexdigest()
+                  assert digest == 'd2406d66225f76779331714b0a9df814d1c72d7f3640178f29adc9d3b45b4251'
+                  env['BIOTRON_QA_STABLE_UF2'] = str(firmware)
+                  record['stable_test_input_sha256'] = digest
+              commands = {'keyboard': ['scripts/test-audition-browser.js', '--keyboard-only'],
+                          'settings': ['scripts/test-sound-browser.js', '--settings-only'],
+                          'pwa': ['scripts/test-pwa-browser.js'],
+                          'firmware': ['scripts/test-firmware-modal-browser.js']}
+              run(record['phase'], ['node', *commands[record['phase']]])
+              record['status'] = 'PASS_SOFTWARE_ONLY'
+          except Exception as error:
+              record['status'] = 'FAIL'
+              record['error'] = str(error)
+              record['cleanup'] = 'See cleanup.json when present; no global process claim. Hosted job is discarded.'
+          finally:
+              save()
+          sys.exit(0 if record['status'] == 'PASS_SOFTWARE_ONLY' else 1)
+      - name: Preserve first fault and software receipts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-${{ matrix.browser }}-${{ matrix.phase }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/windows-browser-evidence/
           if-no-files-found: error
           retention-days: 14
