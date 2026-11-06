@@ -1,5 +1,9 @@
 # Biotron: тестировщик для Windows и Claude Сергея
 
+## Единый тестировщик · 06.11.2026
+
+Общий вход для Biotron, Playtron и TouchMe/Love: [Playtronica Tester](https://github.com/manirko/playtronica-context-1/tree/codex/tester-ux-20261106/projects/tester). Там общие UX-сценарии, один next-step coach, проверка provenance и импорт оригинальных отчётов. Product-specific suites и инструкции этого пакета сохраняют свои границы; их PASS не является физической/слуховой приёмкой. Для сопровождающего: `python3 projects/tester/tester.py selftest --out <NEW-EVIDENCE-DIRECTORY>` из общего проекта проверяет контракты всех трёх testers одной командой, без запуска браузера/прибора.
+
 Начни с онлайн-ссылки из manifest: клавиатура, музыка от растения, Stop.
 Это короткая ручная часть W01–W03; ставить программы для неё не нужно.
 Тестировать на ночь или оставлять компьютер без присмотра не требуется.
