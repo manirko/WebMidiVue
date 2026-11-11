@@ -34,7 +34,7 @@ process.once('exit', cleanupArtifacts)
 fs.writeFileSync(entryFile,
   `export {ElementarySynthEngine} from ${JSON.stringify(path.join(root, 'src/audio/elementary/engine.mjs'))}\n` +
   `export {SOUNDS} from ${JSON.stringify(path.join(root, 'src/audio/elementary/timbres.mjs'))}\n` +
-  `export {BIOTRON_CALIBRATION, biotronVoiceLevel} from ${JSON.stringify(path.join(root, 'src/audio/biotronCalibration.mjs'))}\n`)
+  `export {MidiInputSession} from ${JSON.stringify(path.join(root, 'src/audio/midi.mjs'))}\nexport {BIOTRON_CALIBRATION, biotronVoiceLevel} from ${JSON.stringify(path.join(root, 'src/audio/biotronCalibration.mjs'))}\n`)
 execFileSync('npx', ['--yes', 'esbuild@0.24.0', entryFile,
   '--bundle', '--format=iife', '--global-name=__ElemEngine',
   '--outfile='+bundleFile, '--log-level=error'], {cwd: root})
@@ -114,6 +114,21 @@ const server = http.createServer((request, response) => {
       }
 
       const preset = SOUNDS[0]
+      // Sergey 33688: exercise raw Light MIDI through the actual input session and DSP.
+      const lightMidiPcm = []
+      for (const status of [0x91, 0x92]) {
+        const rendered = await playEvents(0.6, [
+          {at: 0.05, action: e => {
+            const session = new window.__ElemEngine.MidiInputSession(e, () => {}, {
+              voiceLevel: window.__ElemEngine.biotronVoiceLevel
+            })
+            session.input = {id: 'light-fixture'}
+            session.onMessage({data: [status, 64, 68]})
+          }}
+        ], {preset})
+        lightMidiPcm.push({status, peak: peak(rendered.channel), rms: rms(rendered.channel)})
+      }
+
       // Sergey 33686: changing the cap must keep held notes and subsequent input audible.
       const changedLimit = await playEvents(1.2, [
         {at: 0.05, action: e => e.noteOn('plant', 0, 64, 98)},
@@ -296,7 +311,7 @@ const server = http.createServer((request, response) => {
         })
       }
 
-      return {limitPcm, plantNote, dynamics, thdPercent, eightVoices, release, panicClick, sounds}
+      return {lightMidiPcm, limitPcm, plantNote, dynamics, thdPercent, eightVoices, release, panicClick, sounds}
       // browser-qa:sound-body:end
     })
 
@@ -307,6 +322,8 @@ const server = http.createServer((request, response) => {
     // gates; dynamics and THD specified for this one.
     assert(metrics.plantNote.plantPeak >= 0.8 * metrics.plantNote.heldPeak,
       `27 ms plant note peaks at ${metrics.plantNote.plantPeak} vs held ${metrics.plantNote.heldPeak}`)
+    assert(metrics.lightMidiPcm.every(item => item.rms > 0.0001 && item.peak > 0.001), `Light MIDI produced silent PCM: ${JSON.stringify(metrics.lightMidiPcm)}`)
+    console.log('Sergey 33688 Light MIDI PCM:', JSON.stringify(metrics.lightMidiPcm))
     assert(metrics.limitPcm.every(rms => rms > 0.0001), `Limit 4 silenced PCM: ${metrics.limitPcm}`)
     console.log('Sergey 33686 Limit 4 PCM RMS:', JSON.stringify(metrics.limitPcm))
     assert(metrics.dynamics.dB >= 8, `dynamics ${metrics.dynamics.dB} dB is below the 8 dB floor`)
