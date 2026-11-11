@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import test from 'node:test'
+import vm from 'node:vm'
 import {detectedFault} from './qa-contract-controls.mjs'
 import {
   CALMER_PLAY_SETTINGS,
@@ -134,4 +135,37 @@ test('fault control detects Saved with a mismatched persisted vector', async t =
         assert.deepEqual(persisted, variant === 'mismatch' ? [...values.slice(0, -1), values[26] ^ 1] : values)
       }
     }, 'Unconfirmed vector reported Saved')))
+})
+
+
+// Sergey 33687: fresh web presets use 1/2; actual saved channels must remain authoritative.
+test('Sergey 33687: fresh presets send channels 1/2 and readback preserves reported channels', () => {
+  const commandSource = readFileSync('src/assets/js/SysExCommand.js', 'utf8')
+    .replace(/^import .*$/gm, '').replace(/^export /gm, '')
+  const presetSource = readFileSync('src/components/BiotronPage/BiotronIDB.js', 'utf8')
+    .replace(/^import .*$/gm, '').replace(/^export /gm, '')
+  const scope = {Db: class {initialize(presets) {this.presets = presets}}, module: {exports: {}}}
+  vm.runInNewContext(commandSource + '\n' + presetSource + '\nmodule.exports = {BiotronDb, BiotronCommandsData}', scope)
+  const {BiotronDb, BiotronCommandsData} = scope.module.exports
+  const deviceCommands = Object.fromEntries(BiotronCommandsData)
+  for (const preset of new BiotronDb().presets) {
+    assert.equal(preset.data.plant_midi_channel, 1, preset.name)
+    assert.equal(preset.data.light_midi_channel, 2, preset.name)
+    const sent = []
+    for (const name of ['plant_midi_channel', 'light_midi_channel']) {
+      deviceCommands[name].set_value(preset.data[name])
+      deviceCommands[name].sendToMidi({send: data => sent.push(Array.from(data))})
+    }
+    assert.deepEqual(sent, [[240, 20, 13, 127, 0, 0, 247], [240, 20, 13, 127, 1, 1, 247]])
+    const replyValues = [...values]
+    replyValues[23] = 1; replyValues[24] = 2
+    applySettingsVector(deviceCommands, replyValues)
+    assert.equal(deviceCommands.plant_midi_channel.value, 1)
+    assert.equal(deviceCommands.light_midi_channel.value, 2)
+    assert(settingsVectorsEqual(settingsVectorFromCommands(deviceCommands), replyValues))
+  }
+  applySettingsVector(deviceCommands, values)
+  assert.equal(deviceCommands.plant_midi_channel.value, 2)
+  assert.equal(deviceCommands.light_midi_channel.value, 3)
+  console.log('33687: fresh web presets 1/2; SysEx bytes 0/1; readback 1/2 and saved 2/3 preserved')
 })
