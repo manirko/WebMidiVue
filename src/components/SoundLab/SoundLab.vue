@@ -84,8 +84,8 @@
             <AudioCompare v-if="paletteVisited" />
           </details>
           <label v-if="revealProfile.id === 'biotron'" class="sound-lab__quality">
-            <input type="checkbox" aria-label="Limit to 4 notes at once" aria-describedby="sound-quality-help" :checked="lowCpu" @change="changeQuality" :disabled="starting || releaseBlocked"> Limit to 4 notes at once
-            <small id="sound-quality-help">Use if sound breaks up. Up to 4 notes sound together; a new note replaces the oldest. No room reflections. Switching stops sound.</small>
+            <input type="checkbox" data-keyboard-playable="true" aria-label="Limit to 4 notes at once" aria-describedby="sound-quality-help" :checked="lowCpu" @change="changeQuality" :disabled="starting || releaseBlocked"> Limit to 4 notes at once
+            <small id="sound-quality-help">Use if sound breaks up. Up to 4 notes sound together; a new note replaces the oldest. No room reflections.</small>
           </label>
           <KeyboardControls v-if="revealProfile.id === 'biotron'" />
         </div>
@@ -128,11 +128,11 @@
           type="checkbox"
           :checked="lowCpu" @change="changeQuality"
           :disabled="starting || releaseBlocked"
-          aria-label="Limit to 4 notes at once" aria-describedby="sound-quality-help"
+          data-keyboard-playable="true" aria-label="Limit to 4 notes at once" aria-describedby="sound-quality-help"
         >
         Limit to 4 notes at once
       </label>
-      <small id="sound-quality-help">Use if sound breaks up. Up to 4 notes sound together; a new note replaces the oldest. No room reflections. Switching stops sound.</small>
+      <small id="sound-quality-help">Use if sound breaks up. Up to 4 notes sound together; a new note replaces the oldest. No room reflections.</small>
       <label class="sound-lab__volume" for="sound-lab-volume">
         <span>Volume</span>
         <input

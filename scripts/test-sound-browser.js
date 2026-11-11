@@ -1150,7 +1150,7 @@ async function verifyCapabilityFallbacks(browser, origin) {
   await iphone.getByRole('button', {name: 'Stop example', exact: true}).tap()
   await iphone.locator('.sound-lab[data-example="idle"]').waitFor()
   await iphone.getByLabel('Limit to 4 notes at once', {exact: true}).check()
-  await iphone.getByText(/Sound stopped. Press Listen to example to start again./).waitFor()
+  await iphone.getByText('Up to 4 notes at once.', {exact: true}).waitFor()
   await iphone.getByRole('button', {name: 'Listen to example', exact: true}).tap()
   await iphone.locator('.sound-lab[data-example="playing"][data-quality="safe"]').waitFor()
   await iphone.getByRole('button', {name: 'Stop example', exact: true}).tap()
@@ -1705,6 +1705,12 @@ async function verifyLazyPlayerRecovery(browser, origin) {
     assert.strictEqual(await page.evaluate(() => window.__soundInput.connection), 'open')
     await page.evaluate(() => window.__emitSoundMidi([0x90, 64, 100]))
     await page.locator('.sound-lab[data-active-voices="1"]').waitFor()
+    for (const checked of [true, false]) {
+      await page.getByLabel('Limit to 4 notes at once').setChecked(checked)
+      await page.locator(`.sound-lab[data-audio-state="running"][data-active-voices="1"][data-quality="${checked ? 'safe' : 'standard'}"]`).waitFor()
+      assert.strictEqual(await page.evaluate(() => window.__soundInput.connection), 'open', 'Limit 4 released MIDI')
+      assert.deepStrictEqual(await page.evaluate(() => window.__soundMidiRequests), [{sysex: false}])
+    }
     await page.dispatchEvent('body', 'keydown', {code: 'KeyD', key: 'в'})
     await page.locator('.sound-lab[data-active-voices="2"]').waitFor()
     await page.dispatchEvent('body', 'keyup', {code: 'KeyD', key: 'в'})

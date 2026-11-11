@@ -133,13 +133,10 @@ export function createSoundSessionEffects({resumeAudioWithin, trace, updateSound
     },
     async changeQuality(event) {
       if (this.starting || this.releaseBlocked) { event.target.checked = this.lowCpu; return }
-      const previous = this.lowCpu, safe = event.target.checked
-      const restartExample = this.examplePlaying || (!this.capabilities.midi && !this.keyboardOn)
-      const restartAction = restartExample ? `${this.revealMode ? 'Open Sound, then press' : 'Press'} Listen to example` : `Press ${!this.revealMode ? 'Start sound' : (this.keyboardOn ? 'Play with keyboard' : this.revealProfile.startLabel)}`
+      const safe = event.target.checked
+      await this.engine?.setQuality(safe ? 'safe' : 'standard')
       this.lowCpu = safe
-      if (this.engine) await this.stop()
-      if (this.releaseBlocked) { this.lowCpu = previous; return }
-      this.status = `Up to ${safe ? 4 : 8} notes at once. Sound stopped. ${restartAction} to start again.`
+      this.status = `Up to ${safe ? 4 : 8} notes at once.`
     },
     applySelectedSound() {
       const engine = this.engine, sound = this.selectedSound

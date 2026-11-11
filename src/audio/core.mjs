@@ -11,7 +11,7 @@ export function blocksKeyboardNotes(event, allowSoundSelectors = false) {
     targets.some(target => {
       if (target?.isContentEditable || target?.closest?.('[role="textbox"],[role="combobox"],[contenteditable]:not([contenteditable="false"]),[inert],dialog,[role="dialog"],.modal.show')) return true
       const control = target?.closest?.('input,select,textarea')
-      return control && !(allowSoundSelectors && control.tagName === 'SELECT' && !control.disabled && control.getAttribute('data-keyboard-playable') === 'true')
+      return control && !((control.type === 'checkbox' || allowSoundSelectors && control.tagName === 'SELECT') && !control.disabled && control.getAttribute('data-keyboard-playable') === 'true')
     })
 }
 

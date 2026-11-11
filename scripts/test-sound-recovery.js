@@ -193,37 +193,24 @@ test('closed or releasing audio is never silently re-enabled', async () => {
   await target.handleVisibility()
 })
 
-test('changing note limit names the available restart action after Stop resets keyboard intent', async () => {
-  for (const [revealMode, keyboardOn, midi, examplePlaying, action] of [
-    [false, false, true, false, 'Press Start sound'],
-    [false, false, false, false, 'Press Listen to example'],
-    [true, true, true, false, 'Press Play with keyboard'],
-    [true, false, true, false, 'Press Start listening'],
-    [true, false, false, false, 'Open Sound, then press Listen to example'],
-    [true, true, false, false, 'Press Play with keyboard'],
-    [true, false, true, true, 'Open Sound, then press Listen to example']
-  ]) {
-    const {target} = fixture()
-    Object.assign(target, {revealMode, keyboardOn, examplePlaying, capabilities: {midi}, lowCpu: false})
-    target.revealProfile.startLabel = 'Start listening'
-    let stopped = false
-    target.stop = async () => { stopped = true; target.keyboardOn = target.examplePlaying = false; target.engine = null }
-    await target.changeQuality({target: {checked: true}})
-    assert(stopped)
-    assert.equal(target.lowCpu, true)
-    assert(target.status.includes(`${action} to start again.`), target.status)
-    assert.match(target.status, /Up to 4 notes at once/)
+test('Sergey 33686: Limit 4 preserves MIDI, keyboard and example sessions in both directions', async () => {
+  for (const keyboardOn of [false, true]) for (const examplePlaying of [false, true]) {
+    const {target, session} = fixture()
+    Object.assign(target, {keyboardOn, examplePlaying, lowCpu: false, capabilities: {midi: true}})
+    const engine = target.engine, midi = target.midi, qualities = []
+    engine.setQuality = async quality => qualities.push(quality)
+    target.stop = async () => { target.engine = null; target.keyboardOn = false; session.running = false }
+    for (const checked of [true, false]) {
+      await target.changeQuality({target: {checked}})
+      assert.strictEqual(target.engine, engine, 'Limit 4 stopped the generator')
+      assert.strictEqual(target.midi, midi)
+      assert.equal(target.keyboardOn, keyboardOn, 'Limit 4 disabled the keyboard')
+      assert.equal(target.examplePlaying, examplePlaying)
+      assert.equal(session.running, true)
+      assert.equal(target.lowCpu, checked)
+    }
+    assert.deepEqual(qualities, ['safe', 'standard'])
   }
-})
-
-test('failed Stop preserves the note limit and failure message instead of offering restart', async () => {
-  const {target} = fixture()
-  Object.assign(target, {capabilities: {midi: true}, lowCpu: true})
-  target.revealProfile.startLabel = 'Start listening'
-  target.stop = async () => { target.releaseBlocked = true; target.status = 'Release did not finish' }
-  await target.changeQuality({target: {checked: false}})
-  assert.equal(target.lowCpu, true)
-  assert.equal(target.status, 'Release did not finish')
 })
 
 test('explicit calibration ends visibly and ignores a late reply after timeout', () => {

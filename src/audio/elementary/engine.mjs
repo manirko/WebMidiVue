@@ -269,6 +269,31 @@ export class ElementarySynthEngine {
     await this._resyncRefs()
   }
 
+  async setQuality(input) {
+    const quality = input === 'safe' ? 'safe' : 'standard'
+    if (quality === this.quality) return
+    const size = quality === 'safe' ? 4 : 8
+    // Keep the newest held notes, just as voice stealing does at the smaller limit.
+    const voices = [...this.pool.ledger.entries.values()].filter(entry => entry.state === 'active').slice(-size)
+      .map(entry => ({entry, slot: this.pool.slotFor(entry.key)}))
+    const previous = this.values, pitches = this.voicePitch
+    this.quality = quality
+    this.poolSize = size
+    this.pool = new VoicePool(size)
+    this.voicePitch = new Array(size).fill(null)
+    this.values = {gate: new Array(size).fill(0), freq: new Array(size).fill(440),
+      vel: new Array(size).fill(0), volume: previous.volume}
+    for (const {entry, slot} of voices) {
+      const next = this.pool.claim(entry.key, entry.startedAt)
+      for (const key of ['gate', 'freq', 'vel']) this.values[key][next] = previous[key][slot]
+      this.voicePitch[next] = pitches[slot]
+    }
+    if (!this.ready) return
+    this._createRefs()
+    await this._render()
+    await this._resyncRefs()
+  }
+
   setVolume(input) {
     this.volume = normalizeVolume(input)
     this.values.volume = attenuation(this.volume)

@@ -103,7 +103,7 @@ const server = http.createServer((request, response) => {
         const ordered = [...bySample.entries()].sort((a, b) => a[0] - b[0])
         const chain = ordered.reduce((step, [sample, actions]) => step.then(() =>
           context.suspend(sample).then(async () => {
-            for (const action of actions) action(engine)
+            for (const action of actions) await action(engine)
             await engine.whenIdle()
             context.resume()
           })), Promise.resolve())
@@ -114,6 +114,18 @@ const server = http.createServer((request, response) => {
       }
 
       const preset = SOUNDS[0]
+      // Sergey 33686: changing the cap must keep held notes and subsequent input audible.
+      const changedLimit = await playEvents(1.2, [
+        {at: 0.05, action: e => e.noteOn('plant', 0, 64, 98)},
+        {at: 0.2, action: e => e.setQuality('safe')},
+        {at: 0.4, action: e => e.noteOff('plant', 0, 64)},
+        {at: 0.5, action: e => e.noteOn('keyboard', 0, 67, 98)},
+        {at: 0.7, action: e => e.setQuality('standard')},
+        {at: 0.9, action: e => e.noteOff('keyboard', 0, 67)}
+      ], {preset})
+      const limitPcm = [0.1, 0.3, 0.6, 0.8].map(at =>
+        rms(changedLimit.channel.slice(Math.floor(at * sampleRate), Math.floor((at + 0.04) * sampleRate))))
+
 
       // 1. 27 ms plant note vs a held note: the attack must finish before
       // release starts, and the note must reach the level a held note reaches.
@@ -284,7 +296,7 @@ const server = http.createServer((request, response) => {
         })
       }
 
-      return {plantNote, dynamics, thdPercent, eightVoices, release, panicClick, sounds}
+      return {limitPcm, plantNote, dynamics, thdPercent, eightVoices, release, panicClick, sounds}
       // browser-qa:sound-body:end
     })
 
@@ -295,6 +307,8 @@ const server = http.createServer((request, response) => {
     // gates; dynamics and THD specified for this one.
     assert(metrics.plantNote.plantPeak >= 0.8 * metrics.plantNote.heldPeak,
       `27 ms plant note peaks at ${metrics.plantNote.plantPeak} vs held ${metrics.plantNote.heldPeak}`)
+    assert(metrics.limitPcm.every(rms => rms > 0.0001), `Limit 4 silenced PCM: ${metrics.limitPcm}`)
+    console.log('Sergey 33686 Limit 4 PCM RMS:', JSON.stringify(metrics.limitPcm))
     assert(metrics.dynamics.dB >= 8, `dynamics ${metrics.dynamics.dB} dB is below the 8 dB floor`)
     assert(metrics.dynamics.dB <= 13, `dynamics ${metrics.dynamics.dB} dB is above the 13 dB ceiling (light touches would go inaudible)`)
     assert(metrics.thdPercent <= 3, `master-chain THD is ${metrics.thdPercent}% (gate <= 3%)`)

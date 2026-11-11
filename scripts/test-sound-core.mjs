@@ -897,3 +897,39 @@ test('Stop before a delayed lock callback cannot leave a silent owner holding th
   assert.equal(lease.held, false)
   assert.equal(lease.releaseHold, null)
 })
+
+
+test('Sergey 33686: live note-limit changes retain held voices and accept subsequent MIDI/keyboard notes', async () => {
+  const engine = new ElementarySynthEngine({currentTime: 0, state: 'running'})
+  for (let i = 0; i < 6; i++) engine.noteOn(i % 2 ? 'keyboard' : 'plant', i % 2, 60 + i, 90)
+  const context = engine.context
+  await engine.setQuality('safe')
+  assert.equal(engine.context, context)
+  assert.equal(engine.quality, 'safe')
+  assert.equal(engine.poolSize, 4)
+  assert.equal(engine.activeVoiceCount, 4)
+  assert.deepEqual([...engine.pool.ledger.entries.keys()], ['plant:0:62', 'keyboard:1:63', 'plant:0:64', 'keyboard:1:65'])
+  assert(engine.values.gate.every(value => value === 1))
+  assert.equal(engine.noteOff('keyboard', 1, 65), true)
+  engine.noteOn('plant', 0, 70, 90)
+  assert.equal(engine.activeVoiceCount, 4)
+  await engine.setQuality('standard')
+  assert.equal(engine.poolSize, 8)
+  engine.noteOn('keyboard', 1, 71, 90)
+  assert.equal(engine.activeVoiceCount, 5)
+  assert.equal(engine.state, 'running')
+})
+
+test('Sergey 33686: focus on Limit 4 keeps keyboard notes while text fields remain protected', () => {
+  const event = (type, marked, disabled = false) => {
+    const control = {tagName: 'INPUT', type, disabled, getAttribute: () => marked ? 'true' : null}
+    return {target: {closest: selector => selector === 'input,select,textarea' ? control : null}}
+  }
+  for (const allowSelectors of [false, true]) {
+    assert.equal(Boolean(blocksKeyboardNotes(event('checkbox', true), allowSelectors)), false,
+      'focused Limit 4 blocked or released keyboard notes')
+    assert.equal(Boolean(blocksKeyboardNotes(event('checkbox', false), allowSelectors)), true)
+    assert.equal(Boolean(blocksKeyboardNotes(event('checkbox', true, true), allowSelectors)), true)
+    assert.equal(Boolean(blocksKeyboardNotes(event('text', true), allowSelectors)), true)
+  }
+})
