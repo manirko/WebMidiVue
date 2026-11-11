@@ -93,7 +93,7 @@
             repo="Playtronica/biotron-firmware"
             :device="this.device"
             :current-version="firmwareVersion"
-            :version-aware="betaBuild"
+            version-aware
             @check_firmware="checkFirmware"
         />
       </div>
@@ -501,8 +501,9 @@ export default  {
       }
     },
     handleFirmwareTimeout(event) {
-      if (!this.betaBuild || !this.device || event?.outputId !== this.device.id ||
-          this.settingsSnapshotKnown || this.settingsState !== "connecting") return
+      if (!this.device || event?.outputId !== this.device.id) return
+      this.firmwareVersion = ""
+      if (!this.betaBuild || this.settingsSnapshotKnown || this.settingsState !== "connecting") return
       this.settingsState = "error"
       this.settingsMessage = "Biotron did not answer the firmware check. Retry the connection; settings stay locked until they are read."
     },
@@ -516,7 +517,10 @@ export default  {
       this.settingsMessage = "Checking Biotron firmware…"
       this.$refs.deviceSelector?.requestFirmwareVersion()
     },
-    checkFirmware() { this.$refs.deviceSelector?.requestFirmwareVersion() },
+    checkFirmware() {
+      this.firmwareVersion = ""
+      this.$refs.deviceSelector?.requestFirmwareVersion()
+    },
     async loadPersistedSettings(device) {
       if (this.legacyFirmware) { this.settingsState = "error"; this.settingsMessage = "This firmware cannot report saved settings. Settings stay locked. Check the firmware offer below; reconnecting cannot add readback support."; return }
       const loadId = ++this.settingsLoadId

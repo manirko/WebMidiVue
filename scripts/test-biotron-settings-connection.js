@@ -118,6 +118,20 @@ const rangeWrites = pair.sent.length
 pair.values[0] = ''; pair.changeEndpoint(0, pair.minCommandObject)
 assert.equal(pair.sent.length, rangeWrites, 'blank range endpoint must not write zero')
 
+// Sergey 33681: a retry timeout must invalidate even a previously read version.
+for (const settingsSnapshotKnown of [false, true]) {
+  const timedOut = page()
+  timedOut.firmwareVersion = '1.7.4'
+  timedOut.settingsSnapshotKnown = settingsSnapshotKnown
+  timedOut.settingsState = settingsSnapshotKnown ? 'loaded' : 'connecting'
+  timedOut.handleFirmwareTimeout({outputId: 'another-output'})
+  assert.equal(timedOut.firmwareVersion, '1.7.4', 'another device invalidated the version')
+  timedOut.handleFirmwareTimeout({outputId: timedOut.device.id})
+  assert.equal(timedOut.firmwareVersion, '', 'version timeout retained an installable stale version')
+}
+
+assert.doesNotMatch(source, /:version-aware="betaBuild"/, 'production Biotron bypassed the version guard')
+
 ;(async () => {
   const importing = page()
   importing.settingsSnapshotKnown = true
