@@ -54,12 +54,20 @@ export class SoundPlayer {
     const entry = this.choices.find(c => c.id === id); if (!entry) throw Error('Unknown sound.');
     this.selected = id;
     this.presetTask = this.presetTask.catch(() => {}).then(async () => {
+      await this.starting;
       if (this.engine?.ready && !this.engine.stopped) await this.engine.applyPreset(this.choices.find(c => c.id === this.selected).preset);
     });
     await this.presetTask;
   }
   setVolume(value) {this.volume = value; this.engine?.setVolume(value);}
-  async setLimit(safe) {this.safe = safe; await this.engine?.setQuality(safe ? 'safe' : 'standard'); this.emit();}
+  async setLimit(safe) {
+    this.safe = safe;
+    this.presetTask = this.presetTask.catch(() => {}).then(async () => {
+      await this.starting;
+      if (this.engine?.ready && !this.engine.stopped) await this.engine.setQuality(this.safe ? 'safe' : 'standard');
+    });
+    await this.presetTask; this.emit();
+  }
   receive(data) {
     const engine = this.engine;
     if (!engine?.ready || engine.state !== 'running' || engine.stopped) return;
@@ -84,6 +92,7 @@ export class SoundPlayer {
   releaseKeyboard() {for (const id of this.held.keys()) this.release(id);}
   async tap(note) {
     const id = 'tap'; await this.hold(id, note);
+    if (!this.held.has(id)) return;
     const timer = setTimeout(() => {this.timers.delete(timer); this.release(id);}, 270); this.timers.add(timer);
   }
   async toggleKeyboard() {

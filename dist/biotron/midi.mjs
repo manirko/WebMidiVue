@@ -21,7 +21,7 @@ export class MidiSession {
   constructor({request = options => navigator.requestMIDIAccess(options), onState = () => {}, onMessage = () => {}, onSilence = () => {}, timeout = 8000} = {}) {
     Object.assign(this, {request, onState, onMessage, onSilence, timeout});
     this.access = this.input = this.output = null;
-    this.epoch = 0; this.enabled = false; this.status = 'idle'; this.owned = new Set(); this.opening = new Map(); this.closing = new Map();
+    this.epoch = 0; this.enabled = false; this.status = 'idle'; this.owned = new Set(); this.everOwned = new WeakSet(); this.opening = new Map(); this.closing = new Map();
     this.message = event => {if (this.enabled && event.currentTarget === this.input) this.onMessage(event.data);};
     this.changed = () => {if (this.enabled) void this.refresh().catch(error => this.emit('error', error.message));};
   }
@@ -64,11 +64,11 @@ export class MidiSession {
   async openPort(port, epoch) {
     if (this.closing.has(port)) await withDeadline(this.closing.get(port), this.timeout);
     if (epoch !== this.epoch || !this.enabled) return false;
-    if (port.connection === 'open' && !this.owned.has(port)) return true;
+    if (port.connection === 'open' && !this.everOwned.has(port)) return true;
     if (this.opening.has(port)) throw Error('The previous MIDI connection is still opening. Reconnect the device.');
-    this.owned.add(port);
+    this.owned.add(port); this.everOwned.add(port);
     const task = Promise.resolve().then(() => port.open()).then(async () => {
-      if (epoch !== this.epoch || !this.enabled || port.state === 'disconnected') {await this.closePort(port); return false;}
+      if (epoch !== this.epoch || !this.enabled || port.state === 'disconnected') {this.owned.add(port); await this.closePort(port); return false;}
       return true;
     }).finally(() => this.opening.delete(port));
     this.opening.set(port, task);
@@ -90,7 +90,7 @@ export class MidiSession {
     if (!this.enabled) return;
     if (!this.input) {
       const inputs = this.ports('inputs');
-      const same = inputs.find(p => p.id === this.wantedInput);
+      const same = inputs.find(p => p.id === this.wantedInput && isBiotron(p));
       const input = same || (this.wantedInput === '' ? null : automaticInput(inputs));
       if (input) return this.selectInput(input.id, false);
     } else if (!this.output && this.wantedOutput !== '') {
@@ -113,18 +113,21 @@ export class MidiSession {
       const output = pairedOutput(input, this.ports('inputs'), this.ports('outputs'));
       if (output && await this.openPort(output, epoch) && epoch === this.epoch) this.output = output;
       this.emit('connected');
-    } finally {this.selecting = false;}
+    } catch (error) {if (this.enabled) this.emit('error', error.message); throw error;}
+    finally {this.selecting = false;}
   }
   async selectOutput(id) {
     this.wantedOutput = id;
     if (this.output?.id === id && this.output.state !== 'disconnected') return;
-    const epoch = ++this.epoch, old = this.output; this.output = null;
-    this.emit(this.input ? 'connected' : 'choose');
-    if (old) await this.closePort(old);
-    const output = this.access?.outputs.get(id);
-    if (!this.enabled || epoch !== this.epoch || !output || output.state === 'disconnected' || isSecondPort(output.name)) return;
-    if (await this.openPort(output, epoch) && epoch === this.epoch) this.output = output;
-    this.emit(this.input ? 'connected' : 'choose');
+    const epoch = ++this.epoch, old = this.output; this.output = null; this.selecting = true;
+    try {
+      this.emit(this.input ? 'connected' : 'choose');
+      if (old) await this.closePort(old);
+      const output = this.access?.outputs.get(id);
+      if (!this.enabled || epoch !== this.epoch || !output || output.state === 'disconnected' || isSecondPort(output.name)) return;
+      if (await this.openPort(output, epoch) && epoch === this.epoch) this.output = output;
+      this.emit(this.input ? 'connected' : 'choose');
+    } finally {this.selecting = false;}
   }
   async pause() {this.enabled = false; this.epoch++; await this.releasePorts();}
   async dispose() {this.access?.removeEventListener('statechange', this.changed); await this.pause(); this.access = null;}

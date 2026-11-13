@@ -10,8 +10,8 @@ export const COMMANDS = Object.freeze(Object.fromEntries(Object.entries({
   light_midi_channel: [[127, 1], 16, 1], swing_first_note_percent: [26, 100, 1], button_mode_state: [27]
 }).map(([name, [command, max = 127, min = 0]]) => [name, Object.freeze({command, min, max})])));
 export function settingValue(name, input) {
-  const spec = COMMANDS[name];
-  if (!spec || input === '' || input === null || input === undefined ||
+  const spec = Object.hasOwn(COMMANDS, name) ? COMMANDS[name] : null;
+  if (!spec || (typeof input === 'string' && input.trim() === '') || input === null || input === undefined ||
       !['number','string','boolean'].includes(typeof input) || !Number.isFinite(Number(input))) throw Error('Invalid Biotron setting.');
   const value = Number(input);
   if (!Number.isInteger(value) || value < spec.min || value > spec.max) throw Error(`${name}: enter ${spec.min}…${spec.max}.`);

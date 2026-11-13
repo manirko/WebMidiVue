@@ -63,7 +63,7 @@ $('midi-input').addEventListener('change', event => { void midi.selectInput(even
 $('midi-output').addEventListener('change', event => { void midi.selectOutput(event.target.value).catch(error => status(error.message)); });
 $('stop').addEventListener('click', () => { void attempt(async () => { await Promise.all([sound.stop(), midi.pause()]); }); });
 for (const entry of sound.choices) $('sound').add(new Option(entry.label, entry.id));
-$('sound').value = sound.selected;
+$('sound').value = '';
 $('sound').addEventListener('change', event => { void sound.choose(event.target.value).catch(error => status(error.message)); });
 $('volume').addEventListener('input', event => {sound.setVolume(Number(event.target.value)); $('volume-value').value = event.target.value + '%';});
 $('limit-four').addEventListener('change', event => { void sound.setLimit(event.target.checked).catch(error => status(error.message)); });

@@ -9,7 +9,7 @@ export class SettingsSession {
     Object.assign(this, {onChange, persist, timeout});
     this.values = audibleHumanize(builtinPresets[0].data);
     this.input = this.output = null; this.version = ''; this.epoch = this.nonce = this.revision = 0;
-    this.snapshotKnown = false; this.pendingPreset = false; this.message = 'Local preset — changes stay in this browser.';
+    this.sending = false; this.snapshotKnown = false; this.pendingPreset = false; this.message = 'Local preset — changes stay in this browser.';
   }
   get updateAvailable() {return Boolean(this.output && needsFirmwareUpdate(this.version));}
   get writable() {return Boolean(this.output && this.input && isBiotron(this.input) && isBiotron(this.output) && this.output.state !== 'disconnected' && this.input.state !== 'disconnected');}
@@ -30,6 +30,7 @@ export class SettingsSession {
   }
   async check() {
     if (!this.writable) throw Error('Connect the Biotron input and output first.');
+    if (this.sending) throw Error('Wait for the preset to finish sending.');
     if (this.readRequest) return this.readRequest.promise;
     const epoch = this.epoch, output = this.output;
     this.version = ''; clearTimeout(this.versionRequest?.timer);
@@ -76,6 +77,7 @@ export class SettingsSession {
     if (reply !== null) {clearTimeout(version.timer); this.versionRequest = null; this.version = reply; this.changed();}
   }
   async edit(name, input) {
+    if (this.sending) throw Error('Wait for the preset to finish sending.');
     const value = settingValue(name, input);
     if (this.values[name] === value) return false;
     const epoch = this.epoch, output = this.output, snapshotKnown = this.snapshotKnown;
@@ -90,20 +92,26 @@ export class SettingsSession {
     return true;
   }
   load(data) {
+    if (this.sending) throw Error('Wait for the preset to finish sending.');
     const validated = typeof data === 'string' ? parsePreset(data) : validatePreset(data);
     this.values = {...this.values, ...validated}; this.revision++; this.pendingPreset = true;
     this.changed('Preset loaded in browser. Send to device to apply it.');
   }
   async send() {
+    if (this.readRequest) throw Error('Wait for the settings check to finish.');
+    if (this.sending) throw Error('Wait for the preset to finish sending.');
     if (!this.writable || !this.snapshotKnown) throw Error('Check saved settings before sending.');
     const values = validatePreset(this.values), output = this.output, epoch = this.epoch;
-    // Preserve the old ordering: all other settings precede plant tempo.
-    for (const name of [...Object.keys(values).filter(name => name !== 'plantBpm'), 'plantBpm']) {
-      if (epoch !== this.epoch || output !== this.output || !this.writable) throw Error('Biotron changed before sending finished.');
-      output.send(commandFrame(name, values[name]));
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    if (epoch !== this.epoch) return;
-    this.pendingPreset = false; this.changed('Preset sent to Biotron.');
+    this.sending = true; this.changed('Sending preset…');
+    try {
+      // Preserve the old ordering: all other settings precede plant tempo.
+      for (const name of [...Object.keys(values).filter(name => name !== 'plantBpm'), 'plantBpm']) {
+        if (epoch !== this.epoch || output !== this.output || !this.writable) throw Error('Biotron changed before sending finished.');
+        output.send(commandFrame(name, values[name]));
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      if (epoch !== this.epoch) return;
+      this.pendingPreset = false; this.changed('Preset sent to Biotron.');
+    } finally {this.sending = false; this.onChange();}
   }
 }

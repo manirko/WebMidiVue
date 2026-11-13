@@ -1,11 +1,13 @@
 import {COMMANDS} from './protocol.mjs';
 import {Presets} from './presets.mjs';
+const ROOTS = ['C4','C#4','D4','D#4','E4','F4','F#4','G4','G#4','A4','A#4','B4','C5'];
+const HOLDS = {64:'1/64',48:'1/48',32:'1/32',24:'1/24',16:'1/16',12:'1/12',8:'1/8',6:'1/6',4:'1/4',2:'1/2',1:'1'};
 const SCALES = ['Major','Minor','Chrom','Dorian','Mixolydian','Lydian','Wholetone','Minblues','Majblues','Minpen','Majpen','Diminished','Hirajōshi'];
 // Labels and groups from BiotronPageUpdated.vue; the wire ranges stay in COMMANDS.
 const GROUPS = {
   'Plant sensor': [
-    ['plant_no_velocity','🔇 Mute','switch'], ['plantBpm','🌱 The beat'], ['noteOffPercent','🎵 Note hold'],
-    ['middle_plant_note','🏠︎ Home note'], ['scale','🎼 Scale','scale']
+    ['plant_no_velocity','🔇 Mute','switch'], ['plantBpm','🌱 The beat'], ['noteOffPercent','🎵 Note hold','hold'],
+    ['middle_plant_note','🏠︎ Home note','root'], ['scale','🎼 Scale','scale']
   ],
   'More fun': [
     ['plant_midi_channel','🎛️ MIDI channel'], ['button_mode_state','Biotron mute pad','switch'], ['swing_first_note_percent','Swing note'],
@@ -34,10 +36,12 @@ export function mountSettings(root, session, storage) {
     for (const [name, text, type] of fields) {
       const label = document.createElement('label'); label.className = 'setting'; label.htmlFor = 'setting-' + name;
       const caption = document.createElement('span'); caption.textContent = text; label.append(caption);
-      const input = document.createElement(type === 'switch' || type === 'scale' ? 'select' : 'input');
+      const input = document.createElement(type ? 'select' : 'input');
       input.id = 'setting-' + name; input.dataset.setting = name;
       if (type === 'switch') input.append(new Option('Off',0), new Option('On',1));
       else if (type === 'scale') input.append(...SCALES.map((s,i) => new Option(s,i)));
+      else if (type === 'root') input.append(...ROOTS.map((s,i) => new Option(s,i+60)));
+      else if (type === 'hold') input.append(...Object.entries(HOLDS).sort((a,b)=>Number(b[0])-Number(a[0])).map(([value,label]) => new Option(label,value)));
       else {input.type = 'number'; input.min = COMMANDS[name].min; input.max = COMMANDS[name].max; input.step = 1;}
       input.addEventListener('change', () => {
         const raw = input.value;
@@ -67,11 +71,12 @@ export function mountSettings(root, session, storage) {
     for (const [name, input] of controls) {
       const value = String(session.values[name]);
       if (input.tagName === 'SELECT' && ![...input.options].some(option => option.value === value)) input.add(new Option(value,value));
-      input.value = value;
+      input.value = value; input.disabled = session.sending;
     }
     $('settings-status').textContent = session.message;
-    $('settings-check').disabled = !session.writable || Boolean(session.readRequest);
-    $('settings-send').disabled = !session.writable || !session.snapshotKnown;
+    $('settings-check').disabled = !session.writable || Boolean(session.readRequest) || session.sending;
+    $('settings-send').disabled = !session.writable || !session.snapshotKnown || Boolean(session.readRequest) || session.sending;
+    for (const id of ['preset','preset-load','preset-save']) $(id).disabled = session.sending;
   }
   render(); return {render};
 }
