@@ -1,0 +1,1431 @@
+{
+  "schema": 1,
+  "scope": "Biotron web, decision 57 / AM-3308. All 30 Sergey message IDs explicitly attributed in the supplied historical table and 13 November topic-7 exports; other authors are context. Historical firmware requests are retained without changing firmware. Not a claim of complete Telegram history or media coverage.",
+  "authority": "Canonical feedback disposition only; aiplay remains the sole commitment/priority board",
+  "last_synced_utc": "2026-11-13T14:34:47.017775+00:00",
+  "last_ingested_message_id": 34310,
+  "source_snapshot": {
+    "sha256": "0e566047c2f04385f977009953cd6d635ac3815ed7931f27f71bcdb05fd534a1",
+    "external_path": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source",
+    "method": "Supplied read-only files only; no live Telegram read. sha256 is SHA-256 of UTF-8 compact JSON files manifest (path,sha256), sorted by filename. Recent text/ID pairing requires equal counts and newest-first IDs. Historical records use explicitly attributed table rows; 33545 is context because authorship is absent.",
+    "sergey_ids": [
+      33601,
+      33602,
+      33678,
+      33679,
+      33680,
+      33681,
+      33682,
+      33683,
+      33684,
+      33685,
+      33686,
+      33687,
+      33688,
+      33689,
+      33690,
+      33691,
+      33692,
+      33709,
+      33814,
+      34286,
+      34287,
+      34288,
+      34289,
+      34293,
+      34300,
+      34303,
+      34304,
+      34305,
+      34306,
+      34309
+    ],
+    "topic_watermark": 34310,
+    "all_today_date": "2026-11-13",
+    "all_today_ids": [
+      34285,
+      34286,
+      34287,
+      34288,
+      34289,
+      34290,
+      34291,
+      34292,
+      34293,
+      34299,
+      34300,
+      34301,
+      34303,
+      34304,
+      34305,
+      34306,
+      34307,
+      34308,
+      34309,
+      34310
+    ],
+    "files": [
+      {
+        "path": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+        "sha256": "af2377d45f48e9f273eef57f58bda5911a47d1e61897a940beea8693bd16e82f"
+      },
+      {
+        "path": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-a-ids.txt",
+        "sha256": "9a155d2d2a1929974de07d9f303fce75b486782b524688520a5617aec007bd81"
+      },
+      {
+        "path": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-a.txt",
+        "sha256": "43c96dbbb44c08868aeda112f5ace5a768ba2e71c9604fd4e60aa39eeebabbb3"
+      },
+      {
+        "path": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-b-ids.txt",
+        "sha256": "90e430fed3a42c43669276c143d53f6b30945fd9223c25a3dcdc20971601a134"
+      },
+      {
+        "path": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-b.txt",
+        "sha256": "a979c538c82524a437cb64d7de8fb0ca5ae39d00d2ced96bf0f4782bcf836e56"
+      }
+    ],
+    "raw_export_watermark": 34309,
+    "handoff": {
+      "path": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/HANDOFF-CODEX-LEDGER.md",
+      "sha256": "969d47594f0f4ca39091cab3387de95e57523dfffa987344decdb461abc8cdd5"
+    },
+    "format_reference": {
+      "repository": "/Users/andreymanirko/Projects/touchme-next",
+      "commit": "1cf8eb6",
+      "path": "docs/FEEDBACK-LEDGER.json"
+    },
+    "snapshot_limits": "Historical source is an already summarized 09 November disposition, not original messages. 13 November raw exports cover 34286-34293 and 34299-34309 with their included IDs, not every integer. 34285/34310 are handoff-only context; watermark does not imply a live sync."
+  },
+  "current_candidate": {
+    "source": "d326e73b027184263f862a3d9001980ffbfaac58",
+    "runtime": "18e8fb6f3201",
+    "branch": "claude/biotron-web-20261113",
+    "delivery": "Local v4 source snapshot; the supplied release receipt establishes production build 2168e8eda105 only, not delivery of this v4 candidate.",
+    "feedback_build": "v4 with Play keyboard, header Volume slider, shared interface and visible connection.",
+    "production_receipt": {
+      "ref": "docs/RELEASE-2026-11-13.md",
+      "date": "2026-11-13",
+      "source": "4eff34c",
+      "runtime": "2168e8eda105",
+      "url": "https://biotron.playtronica.com",
+      "not_rechecked": true
+    },
+    "feedback_backend": {
+      "evidence": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/HANDOFF-CODEX-LEDGER.md",
+      "status": "Handoff dated 2026-11-13 reports the production receiver allowlist change and six origins returning HTTP 204. This task did not retest delivery; worker commit and the six-origin list were not supplied."
+    }
+  },
+  "records": [
+    {
+      "id": 33601,
+      "date_utc": "2026-11-02 16:50",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33601",
+      "event_uid": "tg:HT_x_PL__7899795:33601",
+      "media": null,
+      "kind": "feedback",
+      "issues": [
+        "firmware-pr-review",
+        "firmware-branches",
+        "firmware-plsdk",
+        "firmware-led-flag",
+        "firmware-board-support",
+        "firmware-led-include",
+        "firmware-time-wrap",
+        "firmware-filter-migration",
+        "firmware-same-note-light"
+      ],
+      "summary": "Firmware review found no critical issue, but requests PR-based review with Sergey, main/dev branches, minimal or isolated PLSDK edits, one CMake LED flag, a decision on A03-A05, unconditional include, time_us_32 wrap handling, filter migration defaults and clarification of changed same_note_light semantics.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "5d4959a339b8677bde936c69d55d44166f03599c16f827572975112b6faeb6a9",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33602,
+      "date_utc": "2026-11-02 16:50",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33602",
+      "event_uid": "tg:HT_x_PL__7899795:33602",
+      "media": null,
+      "kind": "feedback",
+      "issues": [
+        "firmware-branches"
+      ],
+      "summary": "Tidy the firmware repository branches; coordinate any cleanup with Sergey.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "2a530b59abe3b26016a361da312fa695d410d2dd65405df835ae496f16823cbb",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33678,
+      "date_utc": "2026-11-03 12:07",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33678",
+      "event_uid": "tg:HT_x_PL__7899795:33678",
+      "media": null,
+      "kind": "context",
+      "issues": [
+        "firmware-identity"
+      ],
+      "summary": "Test package context: web e02b11e, Windows r2, internal firmware 1.10.11. BOOT, flashing and rollback were not performed.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "504a0f577ddf088f7b811e8c8f6dfba82982d8d2df3f1ab611573e59c78e9468",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33679,
+      "date_utc": "2026-11-03 12:08",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33679",
+      "event_uid": "tg:HT_x_PL__7899795:33679",
+      "media": true,
+      "kind": "context",
+      "issues": [],
+      "summary": "First attachment to the Windows report. Historical aiplay review says tester.py was not run on Windows; attachment not reopened here.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "825d293cac798457929efbdfbec56454737b16a277bc6920f4dbff747361f9a9",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33680,
+      "date_utc": "2026-11-03 12:08",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33680",
+      "event_uid": "tg:HT_x_PL__7899795:33680",
+      "media": true,
+      "kind": "context",
+      "issues": [],
+      "summary": "Second attachment to the Windows report. Historical aiplay review says tester.py was not run on Windows; attachment not reopened here.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "825d293cac798457929efbdfbec56454737b16a277bc6920f4dbff747361f9a9",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33681,
+      "date_utc": "2026-11-03 12:08",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33681",
+      "event_uid": "tg:HT_x_PL__7899795:33681",
+      "media": null,
+      "kind": "feedback",
+      "issues": [
+        "firmware-identity",
+        "version-timeout",
+        "W07"
+      ],
+      "summary": "Windows USB unplug froze the browser in all five reported attempts (four Chrome 156, one Edge), including after Stop & release; the page still said Device connected. Start/Stop/Start and five minutes with shorted clips passed; plant not tested. Fibonacci B with firmware 1.10.11, exact board/binary unknown. Version timeout left Update firmware active and could offer an unverified downgrade. Promised automated results were not found in the historical snapshot.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "727fafb29a8c677081b7860bd5e2ad774377cd111cabd92a9e4597ad27ddc8dc",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33682,
+      "date_utc": "2026-11-03",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33682",
+      "event_uid": "tg:HT_x_PL__7899795:33682",
+      "media": null,
+      "kind": "context",
+      "issues": [],
+      "summary": "Preview ea4501a5 / e02b11e for the following website feedback; grouped source time range 12:22-12:24 UTC.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "1edb5d64ab51b5161b0c7b1b902c96354ffb2b1a903f894f5e7c84872c01cb38",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33683,
+      "date_utc": "2026-11-03",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33683",
+      "event_uid": "tg:HT_x_PL__7899795:33683",
+      "media": null,
+      "kind": "context",
+      "issues": [],
+      "summary": "Introduction to website feedback 33684-33691; grouped source time range 12:22-12:24 UTC.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "1edb5d64ab51b5161b0c7b1b902c96354ffb2b1a903f894f5e7c84872c01cb38",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33684,
+      "date_utc": "2026-11-03 12:25",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33684",
+      "event_uid": "tg:HT_x_PL__7899795:33684",
+      "media": null,
+      "kind": "feedback",
+      "issues": [
+        "feedback-form"
+      ],
+      "summary": "No sound? Help should offer a clear on-site form rather than the confusing Yes / Not yet path to WhatsApp.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "ba30c0bbedb51b06f4b0808d38957986f5a4fd52732a5e4b71dc43c268e109d8",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33685,
+      "date_utc": "2026-11-03 12:29",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33685",
+      "event_uid": "tg:HT_x_PL__7899795:33685",
+      "media": null,
+      "kind": "feedback",
+      "issues": [
+        "sphere-horizontal",
+        "sphere-space"
+      ],
+      "summary": "Sound sphere experiment is generally successful; show a horizontal control/axis and explain what Space changes.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "d6898a920054e53641c694f9d71ffeaa1cb47a118d41233e824cd53940d10071",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33686,
+      "date_utc": "2026-11-03 12:55",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33686",
+      "event_uid": "tg:HT_x_PL__7899795:33686",
+      "media": null,
+      "kind": "feedback",
+      "issues": [
+        "limit4-toggle",
+        "limit4-policy"
+      ],
+      "summary": "Toggling Limit to 4 notes at once disables the generator and keyboard input. Separate unresolved policy question is linked as 33545.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "51ac3649b1742c7001b8de1d820d4119b7c5dbc59925e0fd86b9a376a7c83d4e",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33687,
+      "date_utc": "2026-11-03 12:57",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33687",
+      "event_uid": "tg:HT_x_PL__7899795:33687",
+      "media": null,
+      "kind": "feedback",
+      "issues": [
+        "default-channels"
+      ],
+      "summary": "Default Plant and Light MIDI channels should be 1 and 2, rather than 2 and 3; cause is not established without hardware readback.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "e8ee17eb85f002d4bca752900aaf12a7f456b38ec8331b7cad177919010c046e",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33688,
+      "date_utc": "2026-11-03 12:59",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33688",
+      "event_uid": "tg:HT_x_PL__7899795:33688",
+      "media": null,
+      "kind": "feedback",
+      "issues": [
+        "light-sound"
+      ],
+      "summary": "Light sensor notes are silent in the built-in synth; this needs its own check, independently of channel defaults.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "c2c459da421ecfb01de021f57ce1650b998e32f74299e2ff5e584abd711a4d24",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33689,
+      "date_utc": "2026-11-03 13:00",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33689",
+      "event_uid": "tg:HT_x_PL__7899795:33689",
+      "media": null,
+      "kind": "feedback",
+      "issues": [
+        "settings-no-plant-music"
+      ],
+      "summary": "Remove Plant music from Settings because it increases load and makes scrolling lag.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "0ac80fec66cc3ecaf8dff5c7b168fce94f4bb5fb54101819d65d717c340f4ea2",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33690,
+      "date_utc": "2026-11-03 13:24",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33690",
+      "event_uid": "tg:HT_x_PL__7899795:33690",
+      "media": null,
+      "kind": "feedback",
+      "issues": [
+        "sphere-vertical"
+      ],
+      "summary": "Remove the sound sphere vertical rotation limit.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "a062854b799414ad5f2843250f9e572cf55e26e17f9118f05d991c158441f398",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33691,
+      "date_utc": "2026-11-03 13:26",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33691",
+      "event_uid": "tg:HT_x_PL__7899795:33691",
+      "media": null,
+      "kind": "feedback",
+      "issues": [
+        "sound-chooser"
+      ],
+      "summary": "Plant music design looks finished. Reduce Sound to choosing a sound, playing it with Biotron or listening to an example.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "33460732ebc94b0437b6270e507f37e82a822ab3581302d93afebffe0795f373",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33692,
+      "date_utc": "2026-11-03 13:28",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33692",
+      "event_uid": "tg:HT_x_PL__7899795:33692",
+      "media": null,
+      "kind": "feedback",
+      "issues": [
+        "W07"
+      ],
+      "summary": "Fix the browser crash/freeze when the device is unplugged from USB; repeat of W07.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "64afacb36ada540053c8cdec1f4989f0a5999c87207a47f792b7ed3eb44f8744",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33709,
+      "date_utc": "2026-11-03 14:21",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33709",
+      "event_uid": "tg:HT_x_PL__7899795:33709",
+      "media": null,
+      "kind": "context",
+      "issues": [],
+      "summary": "Feedback may be passed to AI; this is routing permission, not product acceptance.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "c0ceb2260da8871803e2164cf30a716bcdf0d0484378d9385196cb7ec485d8e7",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 33814,
+      "date_utc": "2026-11-04 13:07",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/33814",
+      "event_uid": "tg:HT_x_PL__7899795:33814",
+      "media": null,
+      "kind": "context",
+      "issues": [
+        "W07"
+      ],
+      "summary": "In the Playtron topic, Sergey avoided USB unplug because of the freeze on his PC. This is indirect context, not the requested W07 control test; other Playtron requirements are outside this ledger.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md",
+      "source_excerpt_sha256": "256757eaf4a7fa83693f289541e845fba2d9149683407caa65561be2eda55990",
+      "triage_note": "English paraphrase of the historical disposition, not a raw message quote. Historical media flags are otherwise unknown."
+    },
+    {
+      "id": 34286,
+      "date_utc": "2026-11-13 10:28",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/34286",
+      "event_uid": "tg:HT_x_PL__7899795:34286",
+      "media": false,
+      "kind": "feedback",
+      "issues": [
+        "default-channels",
+        "light-sound",
+        "settings-no-plant-music",
+        "sound-chooser",
+        "remove-beta"
+      ],
+      "summary": "Item 1 cannot be checked until Monday; replies to items 2-5 are Yes, Yes, Yes, OK. Release receipt scopes this to the earlier checklist; it does not confirm plant/light hardware behavior or later v2/v4 changes.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-a.txt",
+      "text_sha256": "b65a17997f7f7bc4c99b732d5e075569a0f228c30bad68ae6f59fb86c2f1ef5e",
+      "triage_note": "English paraphrase; raw text stays in the external snapshot. Any attached media is absent from the supplied text export and was not opened here."
+    },
+    {
+      "id": 34287,
+      "date_utc": "2026-11-13 10:29",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/34287",
+      "event_uid": "tg:HT_x_PL__7899795:34287",
+      "media": false,
+      "kind": "feedback",
+      "issues": [
+        "settings-knobs"
+      ],
+      "summary": "Make settings compact like TouchMe and Playtron by using knobs. The later 34300 correction keeps Volume as a slider.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-a.txt",
+      "text_sha256": "ff06d13101331f44ec6e2a447fbc0f1de11c127e5a43e94b8aa5357fe01f5502",
+      "triage_note": "English paraphrase; raw text stays in the external snapshot. Any attached media is absent from the supplied text export and was not opened here."
+    },
+    {
+      "id": 34288,
+      "date_utc": "2026-11-13 10:30",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/34288",
+      "event_uid": "tg:HT_x_PL__7899795:34288",
+      "media": false,
+      "kind": "feedback",
+      "issues": [
+        "feedback-send"
+      ],
+      "summary": "Send feedback in ? reports no confirmation; asks whether this is expected. The original failure is retained even though the handoff reports a later receiver fix.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-a.txt",
+      "text_sha256": "4567a41bb748202b37eb7076745d5a3fca718022633c4c59bc5af9431a00ad95",
+      "triage_note": "English paraphrase; raw text stays in the external snapshot. Any attached media is absent from the supplied text export and was not opened here."
+    },
+    {
+      "id": 34289,
+      "date_utc": "2026-11-13 10:35",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/34289",
+      "event_uid": "tg:HT_x_PL__7899795:34289",
+      "media": true,
+      "kind": "feedback",
+      "issues": [
+        "play-keyboard"
+      ],
+      "summary": "Improve the keyboard block, possibly using the Playtron keyboard.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-a.txt",
+      "text_sha256": "90db5d149b75e592139ae80bd7a6c42a0d9ca093666a9244e67359814955ed9c",
+      "triage_note": "English paraphrase; raw text stays in the external snapshot. Any attached media is absent from the supplied text export and was not opened here."
+    },
+    {
+      "id": 34293,
+      "date_utc": "2026-11-13 10:41",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/34293",
+      "event_uid": "tg:HT_x_PL__7899795:34293",
+      "media": true,
+      "kind": "feedback",
+      "issues": [
+        "settings-knobs"
+      ],
+      "summary": "Clarifies that compact blocks should replace sliders with knobs; Volume is later excluded by 34300.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-a.txt",
+      "text_sha256": "a8c1145bfc63dd767337ac1e46cb4f4360ccbada19337cb158740409b6bbe9f7",
+      "triage_note": "English paraphrase; raw text stays in the external snapshot. Any attached media is absent from the supplied text export and was not opened here."
+    },
+    {
+      "id": 34300,
+      "date_utc": "2026-11-13 12:07",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/34300",
+      "event_uid": "tg:HT_x_PL__7899795:34300",
+      "media": true,
+      "kind": "feedback",
+      "issues": [
+        "settings-knobs",
+        "volume-slider"
+      ],
+      "summary": "Volume must remain a slider, correcting the previous knob implementation.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-b.txt",
+      "text_sha256": "3eabd81c76c7626d065ffb8ab75e3e05a91cf384da202627e81f9416d8c90407",
+      "triage_note": "English paraphrase; raw text stays in the external snapshot. Any attached media is absent from the supplied text export and was not opened here."
+    },
+    {
+      "id": 34303,
+      "date_utc": "2026-11-13 12:18",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/34303",
+      "event_uid": "tg:HT_x_PL__7899795:34303",
+      "media": false,
+      "kind": "feedback",
+      "issues": [
+        "play-keyboard"
+      ],
+      "summary": "Item 2 is not correct yet: the keyboard must actually be like Playtron, superseding the earlier v2 claim.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-b.txt",
+      "text_sha256": "3db163b0da005f24cca2fd969d770bce24c12cf99a7638f049edf445267db51d",
+      "triage_note": "English paraphrase; raw text stays in the external snapshot. Any attached media is absent from the supplied text export and was not opened here."
+    },
+    {
+      "id": 34304,
+      "date_utc": "2026-11-13 12:18",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/34304",
+      "event_uid": "tg:HT_x_PL__7899795:34304",
+      "media": false,
+      "kind": "feedback",
+      "issues": [
+        "default-channels",
+        "light-sound"
+      ],
+      "summary": "Item 3 is correct: confirms the Monday plant/light test plan from 34299, not a completed hardware test.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-b.txt",
+      "text_sha256": "cb37587b8843bdc9407d5c508ad9f7d4d23d369f04065b5ad8b5b1437bd9dc86",
+      "triage_note": "English paraphrase; raw text stays in the external snapshot. Any attached media is absent from the supplied text export and was not opened here."
+    },
+    {
+      "id": 34305,
+      "date_utc": "2026-11-13 12:18",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/34305",
+      "event_uid": "tg:HT_x_PL__7899795:34305",
+      "media": false,
+      "kind": "feedback",
+      "issues": [
+        "shared-interface"
+      ],
+      "summary": "Make the whole interface like the other sites.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-b.txt",
+      "text_sha256": "deaf9d6cf81b146f8aaf38e90a5ef5ebba8e9b64fb02b0a6e9646ffa26db8e17",
+      "triage_note": "English paraphrase; raw text stays in the external snapshot. Any attached media is absent from the supplied text export and was not opened here."
+    },
+    {
+      "id": 34306,
+      "date_utc": "2026-11-13 12:19",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/34306",
+      "event_uid": "tg:HT_x_PL__7899795:34306",
+      "media": false,
+      "kind": "feedback",
+      "issues": [
+        "visible-connection"
+      ],
+      "summary": "Questions hiding the connection button; keep connection discoverable.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-b.txt",
+      "text_sha256": "e2ff7ac59b9defc125837f5f48739c61835d9717e1cb6fa29c0a4d5270b595cc",
+      "triage_note": "English paraphrase; raw text stays in the external snapshot. Any attached media is absent from the supplied text export and was not opened here."
+    },
+    {
+      "id": 34309,
+      "date_utc": "2026-11-13 12:38",
+      "author": "Sergey",
+      "url": "https://t.me/c/1797899795/34309",
+      "event_uid": "tg:HT_x_PL__7899795:34309",
+      "media": false,
+      "kind": "feedback",
+      "issues": [
+        "visible-connection"
+      ],
+      "summary": "Agrees that the connection control should stay visible, in reply to the immediately preceding discussion.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-b.txt",
+      "text_sha256": "64ab8d4a40c2071298b768c25662c538f85730d89877dbe936caf0a9cc81b466",
+      "triage_note": "English paraphrase; raw text stays in the external snapshot. Any attached media is absent from the supplied text export and was not opened here."
+    }
+  ],
+  "issues": [
+    {
+      "id": "firmware-pr-review",
+      "title": "Review firmware through PRs",
+      "status": "open",
+      "implemented": "No firmware change in this web task; historical request retained.",
+      "remaining": "No fresh firmware review is established; the historical source reports no reviews on the proposed PRs.",
+      "acceptance": "Sergey reviews a PR with its exact base and build and checks every earlier remark.",
+      "source_ids": [
+        33601
+      ],
+      "team_acceptance": null,
+      "evidence": []
+    },
+    {
+      "id": "firmware-branches",
+      "title": "Tidy firmware main/dev branches",
+      "status": "open",
+      "implemented": "No firmware change in this web task; historical request retained.",
+      "remaining": "Repository cleanup remains open and requires coordination with Sergey.",
+      "acceptance": "Agree branch layout with Sergey, then review the intended cleanup before any deletion.",
+      "source_ids": [
+        33601,
+        33602
+      ],
+      "team_acceptance": null,
+      "evidence": []
+    },
+    {
+      "id": "firmware-plsdk",
+      "title": "Keep PLSDK changes minimal or isolated",
+      "status": "open",
+      "implemented": "No firmware change in this web task; historical request retained.",
+      "remaining": "The PLSDK scope request remains open outside this web task.",
+      "acceptance": "Review the selected firmware diff and either minimize PLSDK edits or isolate them explicitly.",
+      "source_ids": [
+        33601
+      ],
+      "team_acceptance": null,
+      "evidence": []
+    },
+    {
+      "id": "firmware-led-flag",
+      "title": "Define the LED flag in one CMake location",
+      "status": "open",
+      "implemented": "No firmware change in this web task; historical request retained.",
+      "remaining": "No current evidence resolves the duplicate LED flag concern.",
+      "acceptance": "Inspect the selected firmware build and demonstrate one authoritative CMake LED flag.",
+      "source_ids": [
+        33601
+      ],
+      "team_acceptance": null,
+      "evidence": []
+    },
+    {
+      "id": "firmware-board-support",
+      "title": "Decide support for A03-A05 boards",
+      "status": "open",
+      "implemented": "No firmware change in this web task; historical request retained.",
+      "remaining": "Board support has not been resolved by the supplied evidence.",
+      "acceptance": "Sergey decides A03-A05 support against the selected firmware base and records the decision.",
+      "source_ids": [
+        33601
+      ],
+      "team_acceptance": null,
+      "evidence": []
+    },
+    {
+      "id": "firmware-led-include",
+      "title": "Make the requested include unconditional",
+      "status": "open",
+      "implemented": "No firmware change in this web task; historical request retained.",
+      "remaining": "The historical include review remark remains unresolved.",
+      "acceptance": "Review the exact include change against the selected firmware base and build it.",
+      "source_ids": [
+        33601
+      ],
+      "team_acceptance": null,
+      "evidence": []
+    },
+    {
+      "id": "firmware-time-wrap",
+      "title": "Handle time_us_32 overflow",
+      "status": "open",
+      "implemented": "No firmware change in this web task; historical request retained.",
+      "remaining": "No verified firmware fix for timer wrap is supplied.",
+      "acceptance": "Review wrap handling on the exact selected firmware base and verify the wrap boundary.",
+      "source_ids": [
+        33601
+      ],
+      "team_acceptance": null,
+      "evidence": []
+    },
+    {
+      "id": "firmware-filter-migration",
+      "title": "Write defaults during filter migration",
+      "status": "open",
+      "implemented": "No firmware change in this web task; historical request retained.",
+      "remaining": "The migration/defaults remark remains open.",
+      "acceptance": "Review migration from the previous filter format and verify the resulting default settings.",
+      "source_ids": [
+        33601
+      ],
+      "team_acceptance": null,
+      "evidence": []
+    },
+    {
+      "id": "firmware-same-note-light",
+      "title": "Clarify changed same_note_light behavior",
+      "status": "open",
+      "implemented": "No firmware change in this web task; historical request retained.",
+      "remaining": "Changed semantics remain unconfirmed; no firmware acceptance is inferred.",
+      "acceptance": "Sergey reviews and confirms the intended same_note_light behavior on the selected base.",
+      "source_ids": [
+        33601
+      ],
+      "team_acceptance": null,
+      "evidence": []
+    },
+    {
+      "id": "firmware-identity",
+      "title": "Identify the board and binary before any write",
+      "status": "open",
+      "implemented": "No BOOT, flashing or settings write performed by this task.",
+      "remaining": "Exact A06-A08 board and firmware binary remain unknown; historical BOOT/settings-write blocker is retained.",
+      "acceptance": "Identify the physical board and exact binary before authorizing the historical device procedure.",
+      "source_ids": [
+        33681
+      ],
+      "team_acceptance": null,
+      "evidence": [],
+      "context_source_ids": [
+        33678
+      ]
+    },
+    {
+      "id": "version-timeout",
+      "title": "Disable Update firmware after unknown/stale version",
+      "status": "software_verified",
+      "implemented": "Version timeout invalidates stale replies; the updater link requires a valid different version.",
+      "remaining": "Sergey must repeat the network/version-timeout case on his real device; Windows/Opera GX and hardware remain unverified.",
+      "acceptance": "Timeout or malformed/unknown version leaves no active Update firmware link; a valid reply restores only the appropriate link.",
+      "source_ids": [
+        33681
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "software_check",
+          "ref": "docs/CODEX-REPORT-V1.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "docs/CODEX-REPORT-V4.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "tests/settings.test.mjs",
+          "not_human_acceptance": true
+        }
+      ]
+    },
+    {
+      "id": "limit4-toggle",
+      "title": "Keep generator and keyboard playing after Limit 4 changes",
+      "status": "software_verified",
+      "implemented": "Held voices and later keyboard/MIDI notes survive limit changes; keyboard focus remains playable.",
+      "remaining": "Sergey and hearing checks on the real Windows/device setup remain open.",
+      "acceptance": "Play generator and keyboard notes, toggle Limit 4 off/on, and hear continued sound without reloading.",
+      "source_ids": [
+        33686
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "software_check",
+          "ref": "docs/CODEX-REPORT-V1.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "docs/CODEX-REPORT-V4.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "tests/sound.test.mjs",
+          "not_human_acceptance": true
+        }
+      ]
+    },
+    {
+      "id": "default-channels",
+      "title": "Default Plant to channel 1 and Light to channel 2",
+      "status": "open",
+      "implemented": "Software checks cover fresh web preset channels 1/2, wire bytes 0/1 and preserving saved channels.",
+      "remaining": "Monday real-device check (34286 item 1); confirm 1.8.2 readback and both sensor channels with Sergey.",
+      "acceptance": "Load a fresh preset on Biotron 1.8.2, read back settings, and observe Plant on channel 1 and Light on channel 2.",
+      "source_ids": [
+        33687
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "historical_disposition",
+          "ref": "docs/CODEX-REPORT-V1.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "historical_disposition",
+          "ref": "tests/protocol.test.mjs",
+          "not_human_acceptance": true
+        }
+      ],
+      "context_source_ids": [
+        34286,
+        34285,
+        34299,
+        34304
+      ]
+    },
+    {
+      "id": "light-sound",
+      "title": "Hear Light sensor notes in the built-in synth",
+      "status": "open",
+      "implemented": "Raw Plant/Light MIDI channels reach Elementary voices in software checks.",
+      "remaining": "Monday real-device and hearing check with Sergey remains open, independently of the channel-default issue.",
+      "acceptance": "Record incoming Light channel and note on the real Biotron and hear the corresponding built-in synth note.",
+      "source_ids": [
+        33688
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "historical_disposition",
+          "ref": "docs/CODEX-REPORT-V1.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "historical_disposition",
+          "ref": "tests/sound.test.mjs",
+          "not_human_acceptance": true
+        }
+      ],
+      "context_source_ids": [
+        34286,
+        34285,
+        34299,
+        34304
+      ]
+    },
+    {
+      "id": "feedback-form",
+      "title": "Offer a clear on-site feedback form in Help",
+      "status": "software_verified",
+      "implemented": "The ?/Help form uses the existing receiver and Biotron product; production allowlist fix is reported on 13 November.",
+      "remaining": "Sergey must complete the form from his origin and confirm the receipt/outcome.",
+      "acceptance": "Open Help/No sound?, reach the on-site form, send a comment and get a clear result without mandatory WhatsApp.",
+      "source_ids": [
+        33684
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "software_check",
+          "ref": "docs/CODEX-REPORT-V1.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "tests/shell.test.mjs",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "handoff_report",
+          "ref": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/HANDOFF-CODEX-LEDGER.md",
+          "sha256": "969d47594f0f4ca39091cab3387de95e57523dfffa987344decdb461abc8cdd5",
+          "detail": "Handoff dated 2026-11-13 reports the production receiver allowlist change and six origins returning HTTP 204. This task did not retest delivery; worker commit and the six-origin list were not supplied.",
+          "not_human_acceptance": true
+        }
+      ],
+      "context_source_ids": [
+        34285
+      ]
+    },
+    {
+      "id": "settings-no-plant-music",
+      "title": "Remove Plant music from Settings",
+      "status": "software_verified",
+      "implemented": "Plant music stays on the play stage; device settings use their own pop-up.",
+      "remaining": "Sergey must compare Settings scrolling/performance in his environment and confirm play remains usable.",
+      "acceptance": "Scroll Settings without the Plant music block, then return to Play and hear the plant.",
+      "source_ids": [
+        33689
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "software_check",
+          "ref": "docs/CODEX-REPORT-V1.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "tests/shell.test.mjs",
+          "not_human_acceptance": true
+        }
+      ],
+      "context_source_ids": [
+        34286
+      ]
+    },
+    {
+      "id": "sound-chooser",
+      "title": "Reduce Sound to choosing and trying a sound",
+      "status": "software_verified",
+      "implemented": "Sound is reduced to Choose a sound; existing sound examples, pointer and keyboard remain available.",
+      "remaining": "Sergey must confirm the simplified flow and hear examples/device sound; prior design praise is preserved as historical only.",
+      "acceptance": "Choose a sound, listen to an example, then play it with Biotron without redundant Sound controls.",
+      "source_ids": [
+        33691
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "software_check",
+          "ref": "docs/CODEX-REPORT-V1.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "tests/sound.test.mjs",
+          "not_human_acceptance": true
+        }
+      ],
+      "context_source_ids": [
+        34286
+      ]
+    },
+    {
+      "id": "remove-beta",
+      "title": "Remove the beta label",
+      "status": "software_verified",
+      "implemented": "Shell checks reject beta text; the production release receipt records no beta label.",
+      "remaining": "Sergey visual check on the intended build remains open; the original request ID is not supplied.",
+      "acceptance": "Open the intended desktop and phone build and confirm that no beta label appears.",
+      "source_ids": [],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "software_check",
+          "ref": "README.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "docs/RELEASE-2026-11-13.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "tests/shell.test.mjs",
+          "not_human_acceptance": true
+        }
+      ],
+      "context_source_ids": [
+        34285,
+        34286,
+        34299
+      ]
+    },
+    {
+      "id": "sphere-horizontal",
+      "title": "Explain sphere horizontal movement with an axis/control",
+      "status": "open",
+      "implemented": "Historical positive assessment of the experiment retained; no sphere implementation in this web candidate.",
+      "remaining": "Deferred until after release (historical plan: after 21 November); Andrey/Sergey decision and human review remain open.",
+      "acceptance": "On an approved later sphere build, a horizontal axis/control makes left-right movement understandable.",
+      "source_ids": [
+        33685
+      ],
+      "team_acceptance": null,
+      "evidence": []
+    },
+    {
+      "id": "sphere-space",
+      "title": "Explain the sphere Space control",
+      "status": "open",
+      "implemented": "No Space explanation added; the experiment is outside this release.",
+      "remaining": "After release: agree and review an explanation with Andrey/Sergey, then hear/observe its effect.",
+      "acceptance": "On an approved later sphere build, identify what Space changes and confirm its audible/visual effect.",
+      "source_ids": [
+        33685
+      ],
+      "team_acceptance": null,
+      "evidence": []
+    },
+    {
+      "id": "sphere-vertical",
+      "title": "Remove the sphere vertical rotation limit",
+      "status": "open",
+      "implemented": "No sphere renderer or rotation change in this web candidate.",
+      "remaining": "Deferred until after release; Andrey/Sergey decision and real interaction check remain open.",
+      "acceptance": "On an approved later sphere build, rotate vertically without the reported restriction.",
+      "source_ids": [
+        33690
+      ],
+      "team_acceptance": null,
+      "evidence": []
+    },
+    {
+      "id": "W07",
+      "title": "Resolve Windows browser freeze on USB unplug",
+      "status": "open",
+      "implemented": "Historical five-of-five failure retained; a suspected Chromium/MIDI bug is not a demonstrated local fix.",
+      "remaining": "Sergey control test remains unanswered in supplied evidence; real Windows Chrome/Edge unplug tests remain open.",
+      "acceptance": "Record OS/browser/board/binary; compare another MIDI device in Chrome and Biotron in Firefox; if local fix is possible, repeat unplug 5/5 in Chrome and Edge without freezing.",
+      "source_ids": [
+        33681,
+        33692
+      ],
+      "team_acceptance": null,
+      "evidence": [],
+      "context_source_ids": [
+        33804,
+        33814
+      ]
+    },
+    {
+      "id": "settings-knobs",
+      "title": "Use compact knobs for device settings",
+      "status": "software_verified",
+      "implemented": "TouchMe knob module drives numeric settings; v4 keeps these knobs while restoring Volume to a slider per 34300.",
+      "remaining": "Sergey must confirm compactness and real-device setting edits/readback; browser layout was not verified in the Codex reports.",
+      "acceptance": "Use settings knobs by pointer/keyboard and confirm compact layout, exact values and real-device updates.",
+      "source_ids": [
+        34287,
+        34293
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "software_check",
+          "ref": "docs/CODEX-REPORT-V2.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "docs/CODEX-REPORT-V4.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "tests/knobs.test.mjs",
+          "not_human_acceptance": true
+        }
+      ],
+      "context_source_ids": [
+        34299,
+        34300
+      ]
+    },
+    {
+      "id": "play-keyboard",
+      "title": "Match the Play keyboard drawing and interaction",
+      "status": "software_verified",
+      "implemented": "V4 draws W E T Y U above A S D F G H J K with physical columns and pressed states; v2 was not final acceptance.",
+      "remaining": "Sergey visual/hearing review and actual browser/phone behavior remain open in the supplied reports.",
+      "acceptance": "Compare against Play, play every physical key and screen cap, check highlights and release after blur/Stop.",
+      "source_ids": [
+        34289,
+        34303
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "software_check",
+          "ref": "docs/CODEX-REPORT-V4.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "tests/keyboard.test.mjs",
+          "not_human_acceptance": true
+        }
+      ],
+      "context_source_ids": [
+        34299
+      ]
+    },
+    {
+      "id": "volume-slider",
+      "title": "Keep Volume as the header slider",
+      "status": "software_verified",
+      "implemented": "V4 restores the Play-style 0-100 header slider, step 1, default 70 and squared engine gain.",
+      "remaining": "Sergey must confirm the slider visually and by hearing; browser layout/PCM were not verified in the report.",
+      "acceptance": "Use the header Volume slider from 0 to 100 and hear the expected change while settings remain knobs.",
+      "source_ids": [
+        34300
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "software_check",
+          "ref": "docs/CODEX-REPORT-V4.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "tests/volume.test.mjs",
+          "not_human_acceptance": true
+        }
+      ],
+      "context_source_ids": [
+        34299
+      ]
+    },
+    {
+      "id": "shared-interface",
+      "title": "Match the interface of the other sites",
+      "status": "software_verified",
+      "implemented": "V4 uses the shared full-bleed stage, header/icons, two phone rows, Help/MIDI screens and MIDI Limit 4.",
+      "remaining": "Sergey desktop/phone comparison, browser/fullscreen and hearing checks remain open.",
+      "acceptance": "Compare header/menu/stage with Play and TouchMe at desktop and phone sizes; open Help/MIDI and return to play.",
+      "source_ids": [
+        34305
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "software_check",
+          "ref": "docs/CODEX-REPORT-V4.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "tests/shell.test.mjs",
+          "not_human_acceptance": true
+        }
+      ],
+      "context_source_ids": [
+        34301,
+        34307
+      ]
+    },
+    {
+      "id": "visible-connection",
+      "title": "Keep connection control and state visible",
+      "status": "software_verified",
+      "implemented": "V4 keeps Connect and MIDI status in the header, including the 390px phone layout.",
+      "remaining": "Sergey browser/phone inspection and real-device connect/unplug/replug remain open; W07 is still separate and open.",
+      "acceptance": "At desktop and phone widths, find Connect and status without opening a menu, then observe actual connect/unplug/replug.",
+      "source_ids": [
+        34306,
+        34309
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "software_check",
+          "ref": "docs/CODEX-REPORT-V4.md",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "software_check",
+          "ref": "tests/shell.test.mjs",
+          "not_human_acceptance": true
+        }
+      ],
+      "context_source_ids": [
+        34301,
+        34307,
+        34308
+      ]
+    },
+    {
+      "id": "feedback-send",
+      "title": "Resolve Send feedback missing confirmation",
+      "status": "software_verified",
+      "implemented": "The original no-confirmation failure is retained; handoff reports the 13 November receiver allowlist fix (six origins, HTTP 204).",
+      "remaining": "Sergey must retry from the affected origin and confirm receipt; end-to-end delivery was not retested here.",
+      "acceptance": "Submit from the previously failing Biotron origin, receive a clear success response, and confirm the receiver has the intended comment.",
+      "source_ids": [
+        34288
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "software_check",
+          "ref": "tests/shell.test.mjs",
+          "not_human_acceptance": true
+        },
+        {
+          "type": "handoff_report",
+          "ref": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/HANDOFF-CODEX-LEDGER.md",
+          "sha256": "969d47594f0f4ca39091cab3387de95e57523dfffa987344decdb461abc8cdd5",
+          "detail": "Handoff dated 2026-11-13 reports the production receiver allowlist change and six origins returning HTTP 204. This task did not retest delivery; worker commit and the six-origin list were not supplied.",
+          "not_human_acceptance": true
+        }
+      ]
+    },
+    {
+      "id": "limit4-policy",
+      "title": "Clarify fifth-note behavior at the four-note limit",
+      "status": "needs_clarification",
+      "implemented": "The toggle regression is software-verified separately; current software voice stealing does not establish the desired product policy.",
+      "remaining": "The linked 33545 policy question has no supplied answer or full message; obtain the intended steal/reject rule.",
+      "acceptance": "Agree whether the fifth note replaces the oldest voice or is rejected, then verify that rule without muting later input.",
+      "source_ids": [
+        33686
+      ],
+      "team_acceptance": null,
+      "evidence": [
+        {
+          "type": "historical_disposition",
+          "ref": "tests/sound.test.mjs",
+          "not_human_acceptance": true
+        }
+      ],
+      "context_source_ids": [
+        33545
+      ]
+    }
+  ],
+  "context_sources": [
+    {
+      "id": 33545,
+      "date_utc": null,
+      "author": "Unknown in supplied sources",
+      "url": "https://t.me/c/1797899795/33545",
+      "event_uid": "tg:HT_x_PL__7899795:33545",
+      "media": null,
+      "kind": "context",
+      "issues": [
+        "limit4-policy"
+      ],
+      "summary": "Linked unresolved question: should Limit 4 steal the oldest voice or reject a fifth note? Full message, author and timestamp are not supplied.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md"
+    },
+    {
+      "id": 33804,
+      "date_utc": "2026-11-04 12:21",
+      "author": "Andrey",
+      "url": "https://t.me/c/1797899795/33804",
+      "event_uid": "tg:HT_x_PL__7899795:33804",
+      "media": null,
+      "kind": "outgoing_reference",
+      "issues": [
+        "W07"
+      ],
+      "summary": "Andrey requested Chrome/Windows versions, Chrome with another MIDI device, and Firefox with Biotron to distinguish W07 from a browser bug. Historical snapshot found no reply by 09 November.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/FEEDBACK-biotron-plan-20261109.md"
+    },
+    {
+      "id": 34285,
+      "date_utc": "2026-11-13",
+      "author": "Andrey / AI-assisted outgoing",
+      "url": "https://t.me/c/1797899795/34285",
+      "event_uid": "tg:HT_x_PL__7899795:34285",
+      "media": null,
+      "kind": "outgoing_reference",
+      "issues": [
+        "default-channels",
+        "light-sound",
+        "feedback-form",
+        "remove-beta"
+      ],
+      "summary": "Earlier outgoing checklist; release receipt says items 2-5 were accepted and item 1 is real plant/light sound on Monday. Full text is absent; handoff reports time 11:25 without a timezone.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/HANDOFF-CODEX-LEDGER.md"
+    },
+    {
+      "id": 34290,
+      "date_utc": "2026-11-13 10:37",
+      "author": "Andrey",
+      "url": "https://t.me/c/1797899795/34290",
+      "event_uid": "tg:HT_x_PL__7899795:34290",
+      "media": false,
+      "kind": "context",
+      "issues": [],
+      "summary": "Andrey asks Sergey for a more precise description.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-a.txt",
+      "text_sha256": "0ffefe8348423d4c69f4540aaf3f2dc9e4b9815664787bea66cf3cc4b782916a"
+    },
+    {
+      "id": 34291,
+      "date_utc": "2026-11-13 10:37",
+      "author": "Andrey",
+      "url": "https://t.me/c/1797899795/34291",
+      "event_uid": "tg:HT_x_PL__7899795:34291",
+      "media": false,
+      "kind": "context",
+      "issues": [],
+      "summary": "Andrey requests examples/screenshots of good and bad layouts.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-a.txt",
+      "text_sha256": "0ce4472497270d808cb83fd5323c780ea225f53124dc35bf84b097050e970ca7"
+    },
+    {
+      "id": 34292,
+      "date_utc": "2026-11-13 10:37",
+      "author": "Andrey",
+      "url": "https://t.me/c/1797899795/34292",
+      "event_uid": "tg:HT_x_PL__7899795:34292",
+      "media": false,
+      "kind": "context",
+      "issues": [],
+      "summary": "Andrey wants to advance Biotron that day.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-a.txt",
+      "text_sha256": "cb1db6e63d4b995bf4c615ee36ab85dbf733890efc0ac8482cb432ae06b6a63e"
+    },
+    {
+      "id": 34299,
+      "date_utc": "2026-11-13 11:39",
+      "author": "Andrey / AI-assisted outgoing",
+      "url": "https://t.me/c/1797899795/34299",
+      "event_uid": "tg:HT_x_PL__7899795:34299",
+      "media": false,
+      "kind": "outgoing_reference",
+      "issues": [
+        "default-channels",
+        "light-sound",
+        "remove-beta",
+        "settings-knobs",
+        "play-keyboard",
+        "volume-slider"
+      ],
+      "summary": "AI-assisted outgoing release/update notice and three questions: compact knobs, Play-style keyboard, and Monday plant/light testing. It reports then-live builds and describes a workflow; no standing send permission or acceptance is inferred.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-b.txt",
+      "text_sha256": "35473ba6f7b674a61dba57b828f9bc0ddbc503fa06cfa81e54c1cb354d08c526"
+    },
+    {
+      "id": 34301,
+      "date_utc": "2026-11-13 12:09",
+      "author": "Andrey",
+      "url": "https://t.me/c/1797899795/34301",
+      "event_uid": "tg:HT_x_PL__7899795:34301",
+      "media": false,
+      "kind": "context",
+      "issues": [
+        "shared-interface",
+        "visible-connection"
+      ],
+      "summary": "Andrey asks for the same interface as the other sites, with connection highly visible and a similar menu.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-b.txt",
+      "text_sha256": "f8280542ab32ef72fd0bd4cb8d68d6e92213dd7fd8d33da9c20bd82fab8ccb7a"
+    },
+    {
+      "id": 34307,
+      "date_utc": "2026-11-13 12:37",
+      "author": "Andrey",
+      "url": "https://t.me/c/1797899795/34307",
+      "event_uid": "tg:HT_x_PL__7899795:34307",
+      "media": false,
+      "kind": "context",
+      "issues": [
+        "shared-interface",
+        "visible-connection"
+      ],
+      "summary": "Andrey agrees in the interface/connection discussion; this is context, not a physical verification.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-b.txt",
+      "text_sha256": "27b3333fedf5a4f3c6bfb0546b04e760080752b4a36a79fa743eb1e9ab16179d"
+    },
+    {
+      "id": 34308,
+      "date_utc": "2026-11-13 12:38",
+      "author": "Andrey",
+      "url": "https://t.me/c/1797899795/34308",
+      "event_uid": "tg:HT_x_PL__7899795:34308",
+      "media": false,
+      "kind": "context",
+      "issues": [
+        "visible-connection"
+      ],
+      "summary": "Andrey asks whether connection should be visible.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/source/tg7-20261113-b.txt",
+      "text_sha256": "a5afc13d11a85f1912e89a75eb88ff466b7c1c4a65658b4bec37c82a3b8cc2fc"
+    },
+    {
+      "id": 34310,
+      "date_utc": "2026-11-13",
+      "author": "Andrey / AI-assisted outgoing",
+      "url": "https://t.me/c/1797899795/34310",
+      "event_uid": "tg:HT_x_PL__7899795:34310",
+      "media": null,
+      "kind": "outgoing_reference",
+      "issues": [],
+      "summary": "Outgoing update referenced by the handoff only. Full text is absent; handoff reports time 14:31 without a timezone. It supplies no acceptance.",
+      "external_snapshot": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/HANDOFF-CODEX-LEDGER.md"
+    }
+  ],
+  "iteration_decisions": {
+    "date": "2026-11-13",
+    "source": "/Users/andreymanirko/ProjectData/Playtronica/biotron-web/HANDOFF-CODEX-LEDGER.md",
+    "decision": 57,
+    "task": "AM-3308",
+    "required_scope": "Docs and checker only; common TouchMe top-level format; no product change, publish, push, board update or outgoing message.",
+    "hardware": "33687/33688 stay open; real plant/light check on Monday per 34286 item 1 and 34304.",
+    "volume": "34300 supersedes Volume-as-knob; settings knobs remain.",
+    "keyboard": "34303 reopens the v2 keyboard claim; v4 has software evidence only.",
+    "sphere": "33685/33690 are after-release work, historically proposed after 21 November.",
+    "acceptance": "software_verified means checks passed; real device, Windows/Opera GX, hearing and Sergey acceptance remain explicit.",
+    "outgoing_references": [
+      34285,
+      34299,
+      34310
+    ]
+  },
+  "audit_findings": [
+    "The exact top-level keys and value types follow TouchMe main reference 1cf8eb6. The kind: love adapter is unchanged and can read this ledger.",
+    "No new channel sync or message read was performed; all source facts are from the supplied dated offline files. last_synced_utc is local ledger assembly time, not Telegram freshness.",
+    "Historical rows explicitly attribute 19 IDs to Sergey; the recent exports add 11. The link to 33545 has no supplied author/date and is context only.",
+    "Attachments 33679/33680 were historically reviewed in aiplay on 07 November but were not reopened here. Recent media 34289/34293/34300 is absent from the supplied text exports; only accompanying text is triaged.",
+    "The full texts of outgoing 34285/34310 are absent. Their handoff times have no explicit timezone, so only dates are recorded. Outgoing 34299 is in the raw export. None is human acceptance or current sending authorization.",
+    "Remove-beta request ID is not supplied; its source_ids is empty with checklist context and repository/release evidence rather than an invented Sergey ID.",
+    "Receiver success is reported by the handoff (13 November, six origins HTTP 204). Exact worker commit, origin list and a Sergey end-to-end retry are absent; the earlier release receipt and reports correctly preserve the older failure.",
+    "V4 Codex report records browser checks blocked by EPERM. No physical Biotron, Windows/Opera GX, hearing, current production v4 delivery or new Sergey acceptance is established.",
+    "Firmware review/identity requests and the fifth-note policy remain open outside this docs-only task. Positive historical subcases and sphere/design praise do not close W07 or the new device checks."
+  ],
+  "untriaged_source_ids": [],
+  "session_history": "docs/LEDGER-NOTE.md"
+}

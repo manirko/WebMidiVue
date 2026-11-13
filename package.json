@@ -11,6 +11,7 @@
     "test": "node --test tests/*.test.mjs",
     "test:browser": "node scripts/test-browser.mjs",
     "check:core": "node scripts/sync-core.mjs --check",
+    "check:feedback": "node scripts/check-feedback.mjs",
     "verify": "npm run check:core && npm run build && npm test && npm run test:browser"
   },
   "dependencies": {
