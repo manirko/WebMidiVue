@@ -1,0 +1,9 @@
+[
+  {
+    "origin": "/Users/andreymanirko/Projects/touchme-next",
+    "commit": "db3d2a45b7252789d684f2896cfc64cbfefbd2d0",
+    "path": "dist/core.mjs",
+    "destination": "dist/core/core.mjs",
+    "sha256": "e6e2d6d48efad35fcfacbb6bed8bae32baef7b6f95671dc9a55c770e93a1df0f"
+  }
+]
