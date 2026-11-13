@@ -13,7 +13,7 @@ const sound = new SoundPlayer({onState: state => {
   $('instrument').dataset.audio = state.audio;
   $('instrument').dataset.activeVoices = state.voices;
   keyboardUI?.render(state.notes);
-  $('stop').hidden = !state.started;
+  $('stop').disabled = !state.started;
 }, onStatus: status});
 let settingsUI;
 const midi = new MidiSession({onMessage: data => {settings.receive(data); sound.receive(data);},
@@ -28,8 +28,7 @@ const midi = new MidiSession({onMessage: data => {settings.receive(data); sound.
       select.value = selected?.id || '';
     }
     $('midi-status').textContent = state.message;
-    if (state.input) { $('stage-title').textContent = 'Ready to play'; status(state.message); }
-    else if (state.status !== 'idle') { $('stage-title').textContent = 'Connect a plant'; status(state.message); }
+    if (state.input || state.status !== 'idle') status(state.message);
     settingsUI?.render();
   }});
 const settings = new SettingsSession({onChange: () => {
@@ -59,6 +58,15 @@ $('connect').addEventListener('click', () => { void connect().catch(error => sta
 $('midi-connect').addEventListener('click', () => { void midi.connect().catch(error => status(error.message)); });
 $('settings-open').addEventListener('click', () => { openDialog('settings'); void midi.connect().catch(error => status(error.message)); });
 $('help-open').addEventListener('click', () => openDialog('help'));
+$('fullscreen').addEventListener('click', async () => {
+  try {await (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());}
+  catch (error) {status(error.message);}
+});
+document.addEventListener('fullscreenchange', () => {
+  const label = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
+  $('fullscreen').setAttribute('aria-pressed', String(Boolean(document.fullscreenElement)));
+  $('fullscreen').setAttribute('aria-label', label); $('fullscreen').title = label;
+});
 for (const page of ['how', 'midi']) $(page + '-tab').addEventListener('click', () => {
   for (const tab of ['how', 'midi']) { $(tab + '-panel').hidden = tab !== page; $(tab + '-tab').setAttribute('aria-pressed', String(tab === page)); }
 });

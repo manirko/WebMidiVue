@@ -42,3 +42,24 @@ test('shell: required destinations, no extra pages/framework/service worker or f
   assert.throws(()=>verify(html.replace('https://shop.playtronica.com','https://example.invalid')));
   assert.throws(()=>verify(html.replace('</body>','beta</body>')));
 });
+test('V2: shared header order, stage visual and Help/MIDI own the former side-panel controls', async () => {
+  const html=await readFile(new URL('../dist/index.html',import.meta.url),'utf8');
+  const verify=source=>{
+    const header=source.match(/<header\b[\s\S]*?<\/header>/)[0];
+    let previous=-1;
+    for (const id of ['sound','volume','stop','settings-open','help-open','fullscreen']) {
+      const index=header.indexOf(`id="${id}"`); assert(index>previous,id); previous=index;
+    }
+    assert.match(source,/<main\b[^>]*>[\s\S]*?id="garden"[\s\S]*?class="orb"[\s\S]*?id="keyboard"[\s\S]*?<\/main>/);
+    assert.doesNotMatch(source,/<h1|sound-lab__intro|sound-lab__reveal-copy/);
+    assert.match(source,/<section id="midi-panel"[\s\S]*?id="limit-four"[\s\S]*?<\/section>/);
+    assert.match(source,/<dialog class="setup-hub" id="help"/);
+    assert.doesNotMatch(header, /id="stop"[^>]*hidden/);
+  };
+  verify(html);
+  for (const id of ['sound','volume','stop','settings-open','help-open','fullscreen','garden','keyboard','limit-four']) {
+    assert.throws(()=>verify(html.replace(`id="${id}"`,'id="missing"')),{name:'AssertionError'},id);
+  }
+  assert.throws(()=>verify(html.replace('class="setup-hub"','class="absent"')));
+  assert.throws(()=>verify(html.replace('</main>','<h1>Plant music</h1></main>')));
+});
