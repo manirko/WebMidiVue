@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Biotron · Plant music · Playtronica</title>
+  <meta name="description" content="Listen to a plant with Biotron, try its sounds, and change its settings.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23598776' d='M12 22V10C3 10 2 3 2 3s10-1 10 7C12 1 22 1 22 1s0 11-10 11'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css"><script type="module" src="./app.mjs"></script>
+</head>
+<body class="stage-first">
+<a class="skip" href="#instrument">Skip to instrument</a>
+<header class="play-top">
+  <a class="play-brand" href="https://shop.playtronica.com" target="_blank" rel="noopener" aria-label="Playtronica shop"><img src="./assets/playtronica-logo.png" alt="Playtronica" width="92" height="48"></a>
+  <a id="firmware-open" class="fw-pill" href="https://settings.playtronica.com/#/biotron" target="_blank" rel="noopener" hidden>Update Firmware</a>
+  <button id="settings-open" class="play-icon" aria-controls="settings" aria-expanded="false" aria-label="Biotron settings" title="Biotron settings"><svg aria-hidden="true" viewBox="0 0 32 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 5h18l5 7-5 7H7l-5-7z"/><circle cx="10" cy="12" r="2"/><circle cx="22" cy="12" r="2"/><path d="M13 10h6m-6 4h6M16 5V2"/></svg></button>
+  <button id="help-open" class="play-icon" aria-controls="help" aria-expanded="false" aria-label="Help & MIDI" title="Help & MIDI"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m10 3 4 0 .7 3 2 .9 2.7-1.1 2 3.4-2.1 2.1v2.4l2.1 2.1-2 3.4-2.7-1.1-2 .9-.7 3h-4l-.7-3-2-.9-2.7 1.1-2-3.4L4.7 14v-2.4L2.6 9.5l2-3.4 2.7 1.1 2-.9z"/><circle cx="12" cy="12" r="3"/></svg></button>
+</header>
+<main id="instrument" class="sound-lab sound-lab--biotron" data-active-voices="0" data-audio="idle">
+  <div class="sound-lab__intro"><h1>Plant music</h1><p>It turns tiny electrical changes through a plant into music.</p></div>
+  <section class="sound-lab__reveal">
+    <div class="sound-lab__instrument"><button id="garden" class="garden-visual" aria-label="Play a note"><span class="orb" aria-hidden="true"></span></button><small class="garden-credit">Visual adapted from <a href="https://dasprinzip.com/tinker/day41/" target="_blank" rel="noopener">Garden Anomaly · Frank Reitberger</a>.</small></div>
+    <div class="sound-lab__reveal-copy">
+      <h2 id="stage-title">Connect a plant</h2><p>Clip both contacts to separate points on the same plant and connect the device by USB.</p>
+      <div class="sound-lab__reveal-actions"><button id="connect">Start listening</button><button id="stop" hidden>Stop &amp; release</button></div>
+      <label class="sound-lab__volume" for="volume">Volume <input id="volume" type="range" min="0" max="100" value="70"><output id="volume-value" for="volume">70%</output></label>
+      <p id="status" class="sound-lab__status" role="status">Sound awaits your first touch</p>
+      <label class="sound-choice" for="sound">Sound <select id="sound" data-keyboard-playable="true" aria-label="Choose a sound…"><option value="" disabled>Choose a sound…</option></select></label>
+      <label class="sound-lab__quality"><input id="limit-four" type="checkbox" data-keyboard-playable="true">Limit to 4 notes at once</label>
+      <div class="computer-keys"><button id="keyboard" aria-pressed="false">Play with keyboard</button><p>A W S E D F T G Y H U J K</p></div>
+    </div>
+  </section>
+</main>
+<dialog id="settings" aria-labelledby="settings-title"><div class="play-card-head"><h2 id="settings-title">Biotron settings</h2><button data-close aria-label="Close Biotron settings">×</button></div><div id="settings-content"></div></dialog>
+<dialog id="help" aria-labelledby="help-title"><div class="play-card-head"><h2 id="help-title">Help</h2><button data-close aria-label="Close Help">×</button></div>
+  <nav class="help-tabs" aria-label="Help sections"><button id="how-tab" aria-controls="how-panel" aria-pressed="true">How to play</button><button id="midi-tab" aria-controls="midi-panel" aria-pressed="false">MIDI</button></nav>
+  <section id="how-panel"><h3>How to play</h3><p>Push both contact cables onto the device’s CONTACT PINS. Clip them to two separate points on the same plant. Connect USB with a data cable, then press Start listening.</p><p>Keep the plant, cables and device still during calibration.</p><p>Check Volume and your speaker output. Press the visual or use the keyboard to try a sound.</p></section>
+  <section id="midi-panel" hidden><h3>MIDI</h3><p>Use Chrome or Edge with a USB data cable. Allow MIDI and SysEx when the browser asks.</p><button id="midi-connect">Connect Biotron</button><label for="midi-input">MIDI input</label><select id="midi-input"><option value="">Choose an input</option></select><label for="midi-output">MIDI output</label><select id="midi-output"><option value="">Choose an output</option></select><p id="midi-status" role="status">Biotron not connected</p></section>
+</dialog>
+<button id="feedback-open" class="play-icon" aria-controls="feedback-card" aria-expanded="false" aria-label="Feedback" title="Feedback">?</button>
+<section id="feedback-card" class="play-card" aria-labelledby="feedback-title" hidden><div class="play-card-head"><h2 id="feedback-title">Help &amp; feedback</h2><button class="play-card-close" aria-label="Close feedback">×</button></div><h3>Feedback</h3><label for="feedback-comment">What happened, or what would you change?</label><textarea id="feedback-comment" rows="4"></textarea><label class="feedback-consent"><input type="checkbox" id="feedback-details">Allow technical details with my feedback</label><p class="small">Preview what you share. No recordings. Kept for 90 days.</p><div class="feedback-preview-tools"><button id="feedback-see" aria-expanded="false" aria-controls="feedback-preview">Preview report</button><button id="feedback-copy">Copy feedback</button></div><textarea id="feedback-preview" aria-label="Technical details preview" rows="7" readonly hidden></textarea><div class="play-card-actions"><button id="feedback-submit">Send feedback</button></div><details><summary>Other ways to send</summary><div class="play-card-actions"><button id="feedback-whatsapp" hidden>WhatsApp</button><button id="feedback-telegram" hidden>Telegram</button><button id="feedback-send">E-mail</button></div></details><p id="feedback-result" class="small" role="status"></p><textarea id="feedback-copy-text" aria-label="Feedback for manual copying" rows="6" readonly hidden></textarea></section>
+</body>
+</html>

@@ -1,0 +1,196 @@
+/* TouchMe tokens and skin, copied from db3d2a4 (selected rules). */
+:root {
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  color:#242a25;
+  background:#fafbf9;
+  --ink:#242a25;
+  --quiet:#626b62;
+  --line:#dce1d9;
+  --coral:#d99177;
+  --accent:#5357aa;
+  color-scheme:light;
+  font-synthesis:none
+}
+* {
+  box-sizing:border-box
+}
+body {
+  margin:0;
+  min-height:100svh;
+  display:flex;
+  flex-direction:column
+}
+button,input,select,textarea {
+  font:inherit;
+  color:inherit
+}
+button,select,summary,.file-button {
+  cursor:pointer;
+  min-height:44px
+}
+button {
+  background:transparent;
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:8px 12px;
+  font-size:14px
+}
+button:hover:not(:disabled),.file-button:hover {
+  background:#edf0eb
+}
+button:disabled,input:disabled {
+  opacity:.45;
+  cursor:default
+}
+button[aria-pressed=true] {
+  background:#e8ede3;
+  border-color:#879b7b
+}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible {
+  outline:2px solid var(--accent);
+  outline-offset:3px
+}
+input {
+  accent-color:#607357
+}
+input[type=checkbox] {
+  width:18px;
+  height:18px;
+  vertical-align:middle;
+  margin-right:6px
+}
+label,p,summary {
+  font-size:14px
+}
+p {
+  line-height:1.6
+}
+a {
+  color:inherit;
+  text-underline-offset:4px
+}
+select {
+  background:#fafbf9;
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:8px 12px;
+  font-size:14px;
+  max-width:100%
+}
+[hidden] {
+  display:none!important
+}
+.sr-only {
+  position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  margin:-1px;
+  overflow:hidden;
+  clip:rect(0,0,0,0);
+  white-space:nowrap;
+  border:0
+}
+.skip {
+  position:absolute;
+  top:-80px;
+  left:16px;
+  z-index:100;
+  padding:12px;
+  background:white
+}
+.skip:focus {
+  top:12px
+}
+.stage-first #feedback-open {display:grid;position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));z-index:6;font-size:22px;}
+.stage-first .play-top {position:fixed;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;gap:12px;padding:max(10px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) 10px max(12px,env(safe-area-inset-left));pointer-events:none;}
+.stage-first .play-top>* {pointer-events:auto;}
+.stage-first .play-brand {margin-right:auto;color:var(--ink);font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;white-space:nowrap;}
+.stage-first .play-top svg {display:block;flex:none;width:24px;height:24px;}
+.stage-first .play-icon {display:grid;place-items:center;width:44px;height:44px;min-height:44px;padding:0;border:0;border-radius:50%;background:#ffffff88;color:#333;}
+.stage-first .play-icon:hover:not(:disabled) {background:#fff;}
+.stage-first .play-icon:not(:disabled):is([aria-expanded=true],[aria-pressed=true]) {background:#333;color:#fff;}
+.stage-first .play-card:not([hidden]) {display:block;position:fixed;z-index:6;top:calc(var(--top-height,64px) + 4px);right:max(12px,env(safe-area-inset-right));width:min(320px,calc(100vw - 24px));max-height:calc(100dvh - var(--top-height,64px) - 24px);overflow:auto;overscroll-behavior:contain;padding:12px 16px 16px;background:#ffffffeb;border-radius:16px;box-shadow:0 6px 24px #0000000f;transition:opacity .2s,visibility .2s;}
+.stage-first .play-card-head {display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.stage-first .play-card-head h2 {margin:0;font-size:16px;font-weight:600;}
+.stage-first .play-card-close {min-width:44px;margin-right:0;padding:0;border:0;background:transparent;font-size:22px;line-height:1;color:var(--quiet);}
+.stage-first .play-card-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);}
+.stage-first .play-card-actions button {min-height:36px;padding:4px 12px;font-size:14px;}
+.fw-pill {display:none;}
+.stage-first .fw-pill:not([hidden]) {display:inline-flex;align-items:center;min-height:36px;padding:4px 14px;border:0;border-radius:18px;background:#333;color:#fff;font-size:14px;white-space:nowrap;}
+.stage-first .play-card > .firmware-open {display:block;width:100%;margin:4px 0 12px;}
+/* 06.11 iteration: one readable scale, reachable mobile controls and a playable Visual card. */
+body.stage-first {font-family:Arial,sans-serif;font-size:16px;}
+body.stage-first :is(button,input,select,textarea,output,label,p,span,a,strong,.small,.knob>label,.value-display,.value-editor,.bank-help,.cc-assign,#quick-device-state,#mapping-summary) {font-family:inherit;font-size:16px;letter-spacing:0;}
+body.stage-first :is(.play-card-head h2,#feedback-card>h3,#feedback-recovery h3,.bank-heading h2) {font-size:20px;}
+body.stage-first .play-brand {font-size:16px;letter-spacing:.03em;text-transform:none;}
+body.stage-first .play-icon {width:44px;height:44px;min-width:44px;min-height:44px;flex:0 0 44px;aspect-ratio:1;border-radius:50%;padding:10px;}
+body.stage-first .play-top {gap:6px;}
+body.stage-first .play-pickers {gap:6px;}
+body.stage-first .play-picker select {max-width:180px;text-transform:none;}
+body.stage-first .hands-picker select {max-width:190px;}
+body.stage-first .play-card {background:#fff;overscroll-behavior:contain;scrollbar-gutter:stable;}
+body.stage-first .play-card :is(input[type=text],textarea) {width:100%;max-width:100%;padding:10px;border:1px solid #bbb;border-radius:8px;}
+body.stage-first .play-card label:has(input[type=checkbox]) {display:flex;gap:10px;align-items:center;min-height:44px;}
+body.stage-first .play-card input[type=checkbox] {flex:0 0 20px;width:20px;height:20px;}
+body.stage-first #preset-tools {border-top:1px solid var(--line);padding-top:12px;margin-top:12px;}
+body.stage-first #feedback-card .play-card-actions {gap:8px;}
+body.stage-first #feedback-card details {margin-top:12px;}
+body.stage-first #feedback-card summary {min-height:44px;cursor:pointer;}
+body.stage-first #feedback-card #feedback-submit {background:#252525;color:#fff;}
+body.stage-first #feedback-card button:disabled {opacity:.45;cursor:default;}
+body.stage-first .play-card-head {position:sticky;top:-16px;padding-top:8px;padding-bottom:8px;background:#fff;z-index:3;}
+body.stage-first .play-brand {display:flex;align-items:center;}
+body.stage-first .play-brand img {width:92px;height:48px;object-fit:contain;}
+@media(max-width:600px){body.stage-first .play-brand img {width:76px;height:40px;}}
+
+/* Biotron — Plant music layout and Garden fallback from SoundLab d35e937. */
+body.stage-first {background:#fbfaf7;color:#17171a;}
+.sound-lab {width:min(1180px,100%);margin:0 auto;padding:100px 32px 64px;}
+.sound-lab__intro {margin:0 0 2rem;}
+.sound-lab__intro h1 {margin:.35rem 0;font-size:48px;line-height:1.1;letter-spacing:-.035em;}
+.sound-lab__intro p,.sound-lab__reveal-copy p {color:#625e58;line-height:1.5;}
+.sound-lab__reveal {display:grid;grid-template-columns:minmax(0,1.4fr) minmax(300px,1fr);gap:clamp(2rem,5vw,4rem);align-items:start;}
+.sound-lab__instrument {align-self:start;min-width:0;}
+.garden-visual {display:grid;place-items:center;position:relative;width:100%;max-width:560px;aspect-ratio:1;border:0;padding:0;background:transparent!important;touch-action:none;}
+.orb {display:block;width:65%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 30% 25%,#ffffffee,#aac2d8aa 25%,#688db988 55%,#fff9 70%,#55749999 85%);box-shadow:inset 0 0 32px #fff,0 24px 64px #687b8d33;border:1px solid #ffffffe0;}
+.garden-credit {display:block;margin:12px auto 0;color:#6b6761;font-size:11px;text-align:center;}
+.sound-lab__reveal-copy {min-width:0;padding-top:.5rem;}
+.sound-lab__reveal-copy h2 {margin:.25rem 0 .5rem;font-size:24px;}
+.sound-lab__reveal-actions {display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;}
+#connect {background:#252525;color:#fff;}
+.sound-lab__volume {display:grid;grid-template-columns:auto minmax(0,1fr) 3.25rem;gap:.65rem;align-items:center;min-height:44px;margin:1rem 0;color:#353239;font-weight:600;}
+.sound-lab__volume input {width:100%;min-width:0;accent-color:#6a5acd;}
+.sound-lab__volume output {text-align:right;color:#625e58;}
+.sound-lab__status {min-height:3rem;color:#625e58;}
+.sound-choice {display:grid;gap:8px;border-top:1px solid #ded9d1;padding-top:16px;}
+.sound-lab__quality {display:flex;min-height:44px;align-items:center;gap:.4rem;margin-top:12px;color:#625e58;}
+.computer-keys {margin:1rem 0;}
+.computer-keys p {font-size:14px;}
+dialog {border:0;border-radius:16px;padding:16px 20px;background:#fff;color:var(--ink);width:min(640px,calc(100% - 24px));max-height:calc(100dvh - 32px);overflow:auto;overscroll-behavior:contain;box-shadow:0 6px 24px #0000000f;}
+dialog::backdrop {background:#242a2533;}
+dialog .play-card-head {display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:-16px;background:#fff;z-index:1;}
+dialog .play-card-head h2 {font-size:20px;}
+dialog [data-close] {border:0;font-size:22px;min-width:44px;}
+.help-tabs,.preset-actions {display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}
+#midi-panel label {display:block;margin-top:16px;}
+#midi-panel select {width:100%;}
+.settings-group {border:0;border-top:1px solid var(--line);margin:20px 0;padding:12px 0;}
+.settings-group legend {font-size:20px;}
+.setting {display:grid;grid-template-columns:minmax(0,1fr) 112px;align-items:center;gap:12px;margin:12px 0;}
+.setting input,.setting select {width:100%;min-width:0;min-height:44px;padding:8px;border:1px solid var(--line);border-radius:6px;background:#fafbf9;}
+.preset-tools {display:grid;gap:8px;}
+#preset-name {width:100%;min-height:44px;padding:8px;}
+#settings-status {line-height:1.5;}
+.stage-first #feedback-card:not([hidden]) {width:min(420px,calc(100vw - 24px));}
+.feedback-preview-tools {display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;}
+@media(max-width:760px) {
+ .sound-lab {padding:80px 20px 64px;}
+ .sound-lab__intro h1 {font-size:40px;}
+ .sound-lab__reveal {grid-template-columns:1fr;gap:1rem;}
+ .garden-visual {width:min(100%,320px);margin:auto;}
+ .sound-lab__intro {margin-bottom:1rem;}
+ .stage-first .play-top {padding:8px;}
+ .stage-first .fw-pill:not([hidden]) {font-size:14px;padding:4px 10px;white-space:normal;max-width:130px;}
+ .setting {grid-template-columns:minmax(0,1fr) 100px;}
+}
