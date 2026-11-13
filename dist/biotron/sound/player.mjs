@@ -23,10 +23,12 @@ export class SoundPlayer {
     this.choices = [...SOUNDS.map((preset,i) => ({id: 'sound-' + i, label: preset.name, preset})),
       ...AUDITION_BANKS.flatMap(bank => bank.variants)];
     this.selected = this.choices[0].id; this.volume = 70; this.safe = false;
-    this.engine = null; this.epoch = 0; this.keyboard = false; this.held = new Map(); this.midiNotes = 0;
-    this.channels = {plant: 0, light: 1}; this.presetTask = Promise.resolve(); this.timers = new Set();
+    this.engine = null; this.epoch = 0; this.held = new Map(); this.midiNotes = 0;
+    this.channels = {plant: 0, light: 1}; this.presetTask = Promise.resolve(); this.timers = new Set(); this.nextTap = 0;
   }
-  emit() {this.onState({audio: this.engine?.state || 'idle', voices: this.engine?.activeVoiceCount || 0, keyboard: this.keyboard, started: Boolean(this.engine)});}
+  emit() {this.onState({audio: this.engine?.state || 'idle', voices: this.engine?.activeVoiceCount || 0,
+    notes: [...this.held.values()].filter(held => this.engine?.pool.ledger.entries.get(held.voice)?.state === 'active').map(held => held.note),
+    started: Boolean(this.engine)});}
   async start() {
     if (this.starting) return this.starting;
     const epoch = this.epoch;
@@ -81,9 +83,11 @@ export class SoundPlayer {
   async hold(id, note, current = () => true) {
     if (this.held.has(id)) return;
     const epoch = this.epoch, token = {note}; this.held.set(id, token);
-    const engine = await this.start();
+    let engine;
+    try {engine = await this.start();}
+    catch (error) {if (this.held.get(id) === token) this.held.delete(id); this.emit(); throw error;}
     if (!engine || epoch !== this.epoch || this.held.get(id) !== token || !current()) {if (this.held.get(id) === token) this.held.delete(id); return;}
-    engine.noteOn('keys:' + id, 0, note, 98); this.emit();
+    token.voice = engine.noteOn('keys:' + id, 0, note, 98); this.emit();
   }
   release(id) {
     const held = this.held.get(id); if (!held) return;
@@ -91,25 +95,19 @@ export class SoundPlayer {
   }
   releaseKeyboard() {for (const id of this.held.keys()) this.release(id);}
   async tap(note) {
-    const id = 'tap'; await this.hold(id, note);
+    const id = 'tap:' + this.nextTap++; await this.hold(id, note);
     if (!this.held.has(id)) return;
     const timer = setTimeout(() => {this.timers.delete(timer); this.release(id);}, 270); this.timers.add(timer);
   }
-  async toggleKeyboard() {
-    if (this.keyboard) {this.keyboard = false; this.releaseKeyboard(); this.emit(); return;}
-    this.keyboard = true;
-    try {await this.start();} catch (error) {this.keyboard = false; throw error;}
-    this.emit();
-  }
   async keyDown(event) {
-    if (!this.keyboard || blocksKeyboardNotes(event,true)) return;
+    if (blocksKeyboardNotes(event)) return;
     const note = noteForKeyboardCode(event.code); if (note === null) return;
     event.preventDefault(); await this.hold(event.code,note);
   }
   keyUp(event) {if (this.held.has(event.code)) {event.preventDefault(); this.release(event.code);}}
   panic() {this.releaseKeyboard(); this.engine?.panic(); this.emit();}
   async stop() {
-    this.epoch++; this.keyboard = false; this.releaseKeyboard();
+    this.epoch++; this.releaseKeyboard();
     for (const timer of this.timers) clearTimeout(timer); this.timers.clear();
     const engine = this.engine;
     if (!engine) {this.emit(); return;}

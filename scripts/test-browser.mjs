@@ -136,10 +136,43 @@ async function runUI(browser, origin, viewport) {
     await page.waitForFunction(()=>!document.querySelector('#settings-check').disabled,{},{timeout:5000});
     assert.equal(await page.locator('#firmware-open').isVisible(),false,'33681: timeout left Update active');
     await page.locator('#settings [data-close]').click();
-    await page.locator('#keyboard').click();await page.waitForFunction(()=>document.querySelector('#instrument').dataset.audio==='running');
-    assert.equal(await page.evaluate(()=>__audioContexts.every(r=>r.active)),true,'audio context created outside gesture');
-    await page.keyboard.down('a');await page.waitForFunction(()=>Number(document.querySelector('#instrument').dataset.activeVoices)>0);await page.keyboard.up('a');
+    await faultControl(async()=>assert.doesNotMatch(await page.locator('#keyboard').innerText(),/Play with keyboard|Stop keyboard/),
+      ()=>page.locator('#keyboard').evaluate(root=>{const button=document.createElement('button');button.id='negative-toggle';button.textContent='Play with keyboard';root.append(button);}),
+      ()=>page.locator('#negative-toggle').evaluate(button=>button.remove()));
+    assert.deepEqual(await page.locator('#keyboard kbd').allTextContents(),['A','W','S','E','D','F','T','G','Y','H','U','J','K']);
+    const cap=page.locator('#keyboard [data-key=KeyA]');
+    await faultControl(async()=>assert.equal(await cap.isVisible(),true),()=>cap.evaluate(button=>button.hidden=true),()=>cap.evaluate(button=>button.hidden=false));
+    await cap.click();await page.waitForFunction(()=>document.querySelector('#instrument').dataset.audio==='running');
+    await page.waitForFunction(()=>Number(document.querySelector('#instrument').dataset.activeVoices)>0);
     await page.waitForFunction(()=>document.querySelector('#instrument').dataset.activeVoices==='0');
+    assert.equal(await page.evaluate(()=>__audioContexts.every(r=>r.active)),true,'audio context created outside gesture');
+    await page.evaluate(async()=>{
+      const {SoundPlayer}=await import('/biotron/sound/player.mjs'), original=SoundPlayer.prototype.setVolume;
+      window.__volumeChanges=[];SoundPlayer.prototype.setVolume=function(value){__volumeChanges.push(value);return original.call(this,value);};
+    });
+    const volume=page.locator('#volume');await volume.focus();await page.keyboard.down('ArrowUp');
+    assert.deepEqual(await page.evaluate(()=>__volumeChanges),[],'Volume updated before commit');
+    await page.keyboard.up('ArrowUp');
+    await faultControl(async()=>assert.deepEqual(await page.evaluate(()=>__volumeChanges),[71]),
+      ()=>page.evaluate(()=>__volumeChanges.push(71)),()=>page.evaluate(()=>__volumeChanges.pop()));
+    await volume.dblclick();assert.deepEqual(await page.evaluate(()=>__volumeChanges),[71,70]);
+    assert.equal(await page.locator('[data-control=volume] .value-display').textContent(),'70%');
+    await cap.focus();
+    await page.keyboard.down('a');await page.waitForFunction(()=>Number(document.querySelector('#instrument').dataset.activeVoices)>0);
+    await faultControl(async()=>assert.equal(await cap.getAttribute('aria-pressed'),'true'),()=>cap.evaluate(button=>button.setAttribute('aria-pressed','false')),()=>cap.evaluate(button=>button.setAttribute('aria-pressed','true')));
+    await page.keyboard.up('a');assert.equal(await cap.getAttribute('aria-pressed'),'false');
+    await page.waitForFunction(()=>document.querySelector('#instrument').dataset.activeVoices==='0');
+    await page.locator('#sound').focus();await page.keyboard.down('a');assert.equal(await page.locator('#instrument').getAttribute('data-active-voices'),'0','select accepted a keyboard note');await page.keyboard.up('a');
+    await page.locator('#feedback-open').click();await page.locator('#feedback-comment').fill('Typing A W S');
+    await page.keyboard.down('a');assert.equal(await page.locator('#instrument').getAttribute('data-active-voices'),'0','text field accepted a keyboard note');await page.keyboard.up('a');
+    await page.locator('#feedback-card .play-card-close').click();
+    await cap.scrollIntoViewIfNeeded();const keyBox=await cap.boundingBox();
+    await page.mouse.move(keyBox.x+keyBox.width/2,keyBox.y+keyBox.height/2);await page.mouse.down();
+    await page.waitForFunction(()=>Number(document.querySelector('#instrument').dataset.activeVoices)>0);
+    assert.equal(await cap.getAttribute('aria-pressed'),'true');
+    await page.evaluate(()=>window.dispatchEvent(new Event('blur')));await page.mouse.up();
+    await page.waitForFunction(()=>document.querySelector('#instrument').dataset.activeVoices==='0');
+    assert.equal(await cap.getAttribute('aria-pressed'),'false','blur left a pressed cap');
     await page.evaluate(()=>__midi.other.receive([144,64,98]));assert.equal(await page.locator('#instrument').getAttribute('data-active-voices'),'0','unselected input played');
     for (const status of [144,145,146]) {
       await page.evaluate(status=>__midi.input.receive([status,64,68]),status);
@@ -161,8 +194,11 @@ async function runUI(browser, origin, viewport) {
     await faultControl(async()=>assert.doesNotMatch(await page.locator('body').innerText(),/beta/i),()=>page.evaluate(()=>{const p=document.createElement('p');p.id='negative-label';p.textContent='beta';document.body.append(p);}),()=>page.locator('#negative-label').evaluate(p=>p.remove()));
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'horizontal overflow');
     await page.screenshot({path:resolve(artifacts,`${viewport.width}x${viewport.height}.png`),fullPage:true});
+    await cap.focus();await page.keyboard.down('a');await page.waitForFunction(()=>Number(document.querySelector('#instrument').dataset.activeVoices)>0);
     await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));
     await page.waitForFunction(()=>__midi.input.connection==='closed'&&__midi.output.connection==='closed');
+    assert.equal(await page.locator('#instrument').getAttribute('data-active-voices'),'0','pagehide left a voice');
+    assert.equal(await page.locator('#keyboard [aria-pressed=true]').count(),0,'pagehide left a pressed cap');await page.keyboard.up('a');
     assert.equal(await page.evaluate(()=>__midi.second.closes+__midi.other.closes+__midi.secondaryOutput.closes+__midi.foreignOutput.closes),0,'pagehide closed unowned ports');
     assert.deepEqual(errors,[],'browser errors');assert.deepEqual(network,[],'unexpected external request');
     console.log(`UI ${viewport.width}×${viewport.height}: PASS, including fault controls`);
