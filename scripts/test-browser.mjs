@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright-core';
 import {testSoundPCM} from '../tests/sound-browser.mjs';
 import {testServiceWorkerMigration} from '../tests/migration-browser.mjs';
+import {testStageLayout, testConnectionStatus} from '../tests/v4-browser.mjs';
 const root = fileURLToPath(new URL('../dist/',import.meta.url));
 const artifacts = fileURLToPath(new URL('../.artifacts/browser/',import.meta.url));
 const mime = {'.html':'text/html','.mjs':'text/javascript','.css':'text/css','.png':'image/png','.txt':'text/plain'};
@@ -55,22 +56,37 @@ async function runUI(browser, origin, viewport) {
   try {
     await page.goto(origin);await page.locator('#keyboard').waitFor();
     await page.waitForFunction(()=>document.querySelector('#sound').options.length>1);
-    await faultControl(async()=>assert.equal(await page.locator('input[type=range]').count(),0),
-      ()=>page.evaluate(()=>{const input=document.createElement('input');input.id='negative-range';input.type='range';document.body.append(input);}),
-      ()=>page.locator('#negative-range').evaluate(input=>input.remove()));
+    await faultControl(async()=>assert.equal(await page.locator('.play-top input[type=range]#volume').count(),1),
+      ()=>page.locator('#volume').evaluate(input=>input.type='text'),
+      ()=>page.locator('#volume').evaluate(input=>input.type='range'));
     assert.equal(await page.evaluate(()=>__midi.requests.length),0,'load requested MIDI');
     assert.equal(await page.evaluate(()=>__midi.sent.length),0,'load sent MIDI');
     assert.equal(await page.evaluate(()=>__audioContexts.length),0,'load created audio');
     await faultControl(async()=>assert.deepEqual(await page.locator('.play-brand').evaluate(a=>[a.href,a.target,a.rel]),['https://shop.playtronica.com/','_blank','noopener']),
       ()=>page.locator('.play-brand').evaluate(a=>a.target='_self'),()=>page.locator('.play-brand').evaluate(a=>a.target='_blank'));
+    await testStageLayout(page,viewport,faultControl);
+    await testConnectionStatus(page,'Biotron not connected',faultControl);
+    await page.locator('.play-top #connect').click();
+    await page.waitForFunction(()=>__midi.input.connection==='open'&&__midi.output.connection==='open'&&document.querySelector('#instrument').dataset.audio==='running');
+    await testConnectionStatus(page,'Biotron connected',faultControl);
+    await page.locator('#stop').click();
+    await page.waitForFunction(()=>__midi.input.connection==='closed'&&__midi.output.connection==='closed'&&document.querySelector('#instrument').dataset.audio==='idle');
+    await testConnectionStatus(page,'Biotron not connected',faultControl);
     assert.equal(await page.locator('#help').isVisible(),false);
     await page.locator('#help-open').click();
     await faultControl(async()=>assert.equal(await page.locator('#help').isVisible(),true),()=>page.locator('#help').evaluate(d=>d.close()),()=>page.locator('#help-open').click());
     assert.equal(await page.locator('#how-tab').textContent(),'How to play');assert.equal(await page.locator('#midi-tab').textContent(),'MIDI');
     assert.equal(await page.locator('#midi-panel').isVisible(),false);await page.locator('#midi-tab').click();assert.equal(await page.locator('#midi-panel').isVisible(),true);assert.equal(await page.locator('#how-panel').isVisible(),false);
+    await faultControl(async()=>assert.equal(await page.locator('#midi-panel #limit-four').isVisible(),true),
+      ()=>page.locator('#limit-four').evaluate(el=>el.hidden=true),()=>page.locator('#limit-four').evaluate(el=>el.hidden=false));
     await page.locator('#help [data-close]').click();
     assert.equal(await page.locator('#feedback-card').isVisible(),false);await page.locator('#feedback-open').click();
     await faultControl(async()=>assert.equal(await page.locator('#feedback-card').isVisible(),true),()=>page.locator('#feedback-card').evaluate(d=>d.hidden=true),()=>page.locator('#feedback-card').evaluate(d=>d.hidden=false));
+    await faultControl(async()=>{
+      const header=await page.locator('.play-top').boundingBox(), card=await page.locator('#feedback-card').boundingBox();
+      assert(card.y>=header.y+header.height,'feedback covers the header');
+    },()=>page.locator('#feedback-card').evaluate(el=>el.style.transform='translateY(-200px)'),
+      ()=>page.locator('#feedback-card').evaluate(el=>el.style.removeProperty('transform')));
     assert.equal(await page.locator('#feedback-submit').isDisabled(),true);
     await page.locator('#feedback-comment').fill('Controlled browser test');await page.locator('#feedback-details').check();
     assert.equal(await page.locator('#feedback-submit').isEnabled(),true);
@@ -83,6 +99,12 @@ async function runUI(browser, origin, viewport) {
     await page.waitForFunction(()=>__midi.input.connection==='open'&&__midi.output.connection==='open');
     await faultControl(async()=>assert.equal(await page.locator('#settings').isVisible(),true),()=>page.locator('#settings').evaluate(d=>d.close()),()=>page.locator('#settings-open').click());
     assert.equal(await page.locator('[data-setting]').count(),26);
+    await faultControl(async()=>{
+      assert.equal(await page.locator('#settings .knob input[type=text][role=slider]').count(),15);
+      assert.equal(await page.locator('#settings input[type=range]').count(),0);
+    },()=>page.locator('#setting-noteDistance').evaluate(el=>el.type='range'),
+      ()=>page.locator('#setting-noteDistance').evaluate(el=>el.type='text'));
+    await testConnectionStatus(page,'Biotron connected',faultControl);
     assert.equal(await page.evaluate(()=>__midi.sent.length),0,'connect wrote bytes');
     assert.equal(await page.evaluate(()=>__midi.requests.every(r=>r.options.sysex===true&&r.active)),true,'permission was outside a gesture');
     assert.equal(await page.evaluate(()=>__midi.second.opens+__midi.secondaryOutput.opens+__midi.other.opens+__midi.foreignOutput.opens),0);
@@ -152,17 +174,26 @@ async function runUI(browser, origin, viewport) {
       window.__volumeChanges=[];SoundPlayer.prototype.setVolume=function(value){__volumeChanges.push(value);return original.call(this,value);};
     });
     const volume=page.locator('#volume');await volume.focus();await page.keyboard.down('ArrowUp');
-    assert.deepEqual(await page.evaluate(()=>__volumeChanges),[],'Volume updated before commit');
-    await page.keyboard.up('ArrowUp');
     await faultControl(async()=>assert.deepEqual(await page.evaluate(()=>__volumeChanges),[71]),
       ()=>page.evaluate(()=>__volumeChanges.push(71)),()=>page.evaluate(()=>__volumeChanges.pop()));
-    await volume.dblclick();assert.deepEqual(await page.evaluate(()=>__volumeChanges),[71,70]);
-    assert.equal(await page.locator('[data-control=volume] .value-display').textContent(),'70%');
-    await cap.focus();
-    await page.keyboard.down('a');await page.waitForFunction(()=>Number(document.querySelector('#instrument').dataset.activeVoices)>0);
-    await faultControl(async()=>assert.equal(await cap.getAttribute('aria-pressed'),'true'),()=>cap.evaluate(button=>button.setAttribute('aria-pressed','false')),()=>cap.evaluate(button=>button.setAttribute('aria-pressed','true')));
-    await page.keyboard.up('a');assert.equal(await cap.getAttribute('aria-pressed'),'false');
-    await page.waitForFunction(()=>document.querySelector('#instrument').dataset.activeVoices==='0');
+    await page.keyboard.up('ArrowUp');assert.deepEqual(await page.evaluate(()=>__volumeChanges),[71]);
+    await volume.press('Home');await volume.press('End');
+    assert.deepEqual(await page.evaluate(()=>__volumeChanges),[71,0,100]);
+    await volume.evaluate(input=>{input.value='70';input.dispatchEvent(new Event('input',{bubbles:true}));});
+    for (const key of ['a','w']) {
+      const pressed=page.locator('#keyboard [data-key=Key'+key.toUpperCase()+']');
+      await pressed.focus();const idleColor=await pressed.evaluate(el=>getComputedStyle(el).backgroundColor);
+      await page.keyboard.down(key);await page.waitForFunction(()=>Number(document.querySelector('#instrument').dataset.activeVoices)>0);
+      await page.waitForFunction(({key,color})=>getComputedStyle(document.querySelector('[data-key="Key'+key.toUpperCase()+'"]')).backgroundColor!==color,{key,color:idleColor});
+      await faultControl(async()=>{
+        assert.equal(await pressed.getAttribute('aria-pressed'),'true');
+        assert.notEqual(await pressed.evaluate(el=>getComputedStyle(el).backgroundColor),idleColor);
+        assert(Number(await page.locator('#instrument').getAttribute('data-active-voices'))>0);
+      },()=>pressed.evaluate(button=>button.setAttribute('aria-pressed','false')),
+        ()=>pressed.evaluate(button=>button.setAttribute('aria-pressed','true')));
+      await page.keyboard.up(key);assert.equal(await pressed.getAttribute('aria-pressed'),'false');
+      await page.waitForFunction(()=>document.querySelector('#instrument').dataset.activeVoices==='0');
+    }
     await page.locator('#sound').focus();await page.keyboard.down('a');assert.equal(await page.locator('#instrument').getAttribute('data-active-voices'),'0','select accepted a keyboard note');await page.keyboard.up('a');
     await page.locator('#feedback-open').click();await page.locator('#feedback-comment').fill('Typing A W S');
     await page.keyboard.down('a');assert.equal(await page.locator('#instrument').getAttribute('data-active-voices'),'0','text field accepted a keyboard note');await page.keyboard.up('a');
@@ -181,16 +212,24 @@ async function runUI(browser, origin, viewport) {
       await page.evaluate(status=>__midi.input.receive([status,64,0]),status);
       await page.waitForFunction(()=>document.querySelector('#instrument').dataset.activeVoices==='0');
     }
-    await page.keyboard.down('a');await page.waitForFunction(()=>Number(document.querySelector('#instrument').dataset.activeVoices)>0);
-    await page.locator('#limit-four').check();assert.equal(Number(await page.locator('#instrument').getAttribute('data-active-voices'))>0,true,'Limit 4 silenced held keyboard');await page.keyboard.up('a');
-    await page.locator('#limit-four').focus();await page.keyboard.down('s');await page.waitForFunction(()=>Number(document.querySelector('#instrument').dataset.activeVoices)>0);await page.keyboard.up('s');
-    await page.locator('#help-open').click();await page.keyboard.down('a');assert.equal(await page.locator('#instrument').getAttribute('data-active-voices'),'0','dialog accepted keyboard note');await page.keyboard.up('a');await page.locator('#help [data-close]').click();
+    await cap.focus();await page.keyboard.down('a');await page.waitForFunction(()=>Number(document.querySelector('#instrument').dataset.activeVoices)>0);
+    // The real checkbox's change handler must preserve held keyboard voices even though it now lives in MIDI.
+    await page.locator('#limit-four').evaluate(input=>{input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));});
+    assert.equal(Number(await page.locator('#instrument').getAttribute('data-active-voices'))>0,true,'Limit 4 silenced held keyboard');await page.keyboard.up('a');
+    await page.locator('#help-open').click();await page.locator('#midi-tab').click();
+    await page.evaluate(()=>__midi.input.receive([144,64,68]));await page.waitForFunction(()=>Number(document.querySelector('#instrument').dataset.activeVoices)>0);
+    await page.locator('#limit-four').uncheck();assert(Number(await page.locator('#instrument').getAttribute('data-active-voices'))>0,'Limit 4 silenced MIDI');
+    await page.evaluate(()=>__midi.input.receive([144,64,0]));await page.waitForFunction(()=>document.querySelector('#instrument').dataset.activeVoices==='0');
+    await page.locator('#limit-four').focus();await page.keyboard.down('s');assert.equal(await page.locator('#instrument').getAttribute('data-active-voices'),'0','dialog accepted keyboard note');await page.keyboard.up('s');
+    await page.locator('#help [data-close]').click();
     await page.locator('#garden').scrollIntoViewIfNeeded();const box=await page.locator('#garden').boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
     await page.waitForFunction(()=>Number(document.querySelector('#instrument').dataset.activeVoices)>0);await page.mouse.up();await page.waitForFunction(()=>document.querySelector('#instrument').dataset.activeVoices==='0');
     await page.evaluate(()=>{__midi.input.state=__midi.output.state='disconnected';__midi.change(__midi.input);});
     await page.waitForFunction(()=>document.querySelector('#midi-input').value==='');
+    await testConnectionStatus(page,'Biotron not connected',faultControl);
     await page.evaluate(()=>{__midi.input.state=__midi.output.state='connected';__midi.change(__midi.input);});
     await page.waitForFunction(()=>document.querySelector('#midi-input').value==='input');
+    await testConnectionStatus(page,'Biotron connected',faultControl);
     assert.equal(await page.locator('#firmware-open').isVisible(),false,'replug retained stale Update');
     await faultControl(async()=>assert.doesNotMatch(await page.locator('body').innerText(),/beta/i),()=>page.evaluate(()=>{const p=document.createElement('p');p.id='negative-label';p.textContent='beta';document.body.append(p);}),()=>page.locator('#negative-label').evaluate(p=>p.remove()));
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'horizontal overflow');

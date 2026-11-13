@@ -1,5 +1,5 @@
 {
-  "build": "2168e8eda105",
+  "build": "18e8fb6f3201",
   "files": [
     {
       "path": "dist/_headers",
@@ -7,7 +7,7 @@
     },
     {
       "path": "dist/app.mjs",
-      "sha256": "e265ec08dcc9033735ce42d15af9d1da3ac7bedd04bc8b866bd068771ef745ef"
+      "sha256": "c4565979c337afb4e28e6d8e2b2f8d452dd773c57ea756eff3966c5e1761a8d8"
     },
     {
       "path": "dist/assets/playtronica-logo.png",
@@ -27,7 +27,7 @@
     },
     {
       "path": "dist/biotron/keyboard-ui.mjs",
-      "sha256": "c9b837880dc11d630b8ece8a365e4446ba79d96ddf97e0b2462a5dd5670f028c"
+      "sha256": "10b41f89405f5dcbd6815e5471431b64061ea1ef654e69355fa44c9a11609445"
     },
     {
       "path": "dist/biotron/knob-ui.mjs",
@@ -90,6 +90,10 @@
       "sha256": "dfc39e85c9917d823ca2ba75af8a258a7e6c6b6abb3779e52c869ca1d08afa77"
     },
     {
+      "path": "dist/biotron/volume-ui.mjs",
+      "sha256": "04f8532233229c3243eec43f63b66c3ec716695f2889bcbf6d3f3a3fc373b1d7"
+    },
+    {
       "path": "dist/core/SOURCES.json",
       "sha256": "788ded2c67f1c0d203bb2c2f1efa82e5f4970ab23c8ee16707d39aa3b94b9671"
     },
@@ -107,7 +111,7 @@
     },
     {
       "path": "dist/index.html",
-      "sha256": "0127b4e46e36297d9d1ccf7fb2c420babb06a10183c5c54f67d8b0e4d1cdc8ec"
+      "sha256": "1596f488d2b9dadd16f70a76e50133d9557873154ccdb5f4efd8847ce5e915bd"
     },
     {
       "path": "dist/service-worker.js",
@@ -115,7 +119,7 @@
     },
     {
       "path": "dist/style.css",
-      "sha256": "13149ba231f0a0d96d8aeca85e33bedd6a838e1f00f5fffc75d9c0df96a6ad2e"
+      "sha256": "7f76e026cf930de143caecdcd2e39c1f43ea4f6e1e8e7516c10bd3c8eb8e9dcc"
     },
     {
       "path": "dist/vendor/LICENSE-elementary.txt",
