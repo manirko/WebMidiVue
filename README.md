@@ -40,7 +40,8 @@ npx serve dist          # or any static server; open /
 
 ## Beta and release
 - Beta: Cloudflare Worker `biotron-beta` on the same account as play-beta/love-beta, deployed only by `~/Projects/Claude/_ops/beta-deploy.sh biotron <worktree>`. That script checks the BUILD, deploys, verifies the live BUILD and HTML hash, and rolls back on failure. `workers.dev` only, noindex.
-- Production (`settings.playtronica.com`, 20–21.11) only after Sergey's PASS on a real Biotron + Windows + Opera GX and Andrey's explicit "yes". Not part of this branch.
+- Production: `https://biotron.playtronica.com` = Cloudflare Pages project `biotron-settings-beta`, branch alias `bloggers` (account manirko.com). Deploy only with Andrey's explicit "yes" through `~/ProjectData/Playtronica/biotron-web/prod/prod-deploy-biotron.sh <worktree>` (live checks; `--rollback` redeploys the sha-checked archive of the previous site `e02b11e`). `settings.playtronica.com` (GitHub Pages, settings for all devices) is not touched.
+- Migration: `dist/_headers` is byte-identical to the previous production headers (`midi=(self)`, noindex); `dist/service-worker.js` is a kill switch for visitors who still have the old app's service worker.
 
 ## Data
 - No user data is stored except the feedback the user sends (receiver: `playtron-reports` Worker) and presets in the user's browser (localStorage/IndexedDB).
