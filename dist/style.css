@@ -159,9 +159,18 @@ body.stage-first {background:#fbfaf7;color:#17171a;}
 .sound-lab__reveal-copy h2 {margin:.25rem 0 .5rem;font-size:24px;}
 .sound-lab__reveal-actions {display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;}
 #connect {background:#252525;color:#fff;}
-.sound-lab__volume {display:grid;grid-template-columns:auto minmax(0,1fr) 3.25rem;gap:.65rem;align-items:center;min-height:44px;margin:1rem 0;color:#353239;font-weight:600;}
-.sound-lab__volume input {width:100%;min-width:0;accent-color:#6a5acd;}
-.sound-lab__volume output {text-align:right;color:#625e58;}
+.sound-lab__volume {display:flex;margin:1rem 0 0;color:#353239;}
+.knob {display:grid;justify-items:center;align-content:start;gap:4px;min-width:0;text-align:center;}
+body.stage-first .knob>label {font-size:14px;line-height:1.3;min-height:36px;display:grid;align-items:center;}
+.dial-control {position:relative;display:block;width:64px;height:64px;}
+.dial-face,.dial-face svg {display:block;width:100%;height:100%;overflow:visible;}
+.dial-face circle {fill:#fafafa;stroke:#ccc;stroke-width:1.5;}
+.dial-face path {stroke:#367887;stroke-width:3;stroke-linecap:round;transform-origin:32px 32px;transform:rotate(var(--turn,-135deg));}
+.dial-control input {position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;padding:0;cursor:ns-resize;touch-action:none;}
+.dial-control:focus-within {outline:2px solid var(--accent);outline-offset:3px;border-radius:50%;}
+body.stage-first .knob .value-display {font-size:14px;color:#626b62;min-height:32px;padding:4px;border:0;}
+.knob .value-editor {width:100%;max-width:96px;min-height:32px;padding:4px;border:1px solid var(--line);border-radius:6px;}
+body.stage-first .knob-hint {font-size:12px;color:#626b62;margin:8px 0;}
 .sound-lab__status {min-height:3rem;color:#625e58;}
 .sound-choice {display:grid;gap:8px;border-top:1px solid #ded9d1;padding-top:16px;}
 .sound-lab__quality {display:flex;min-height:44px;align-items:center;gap:.4rem;margin-top:12px;color:#625e58;}
@@ -175,9 +184,10 @@ dialog [data-close] {border:0;font-size:22px;min-width:44px;}
 .help-tabs,.preset-actions {display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}
 #midi-panel label {display:block;margin-top:16px;}
 #midi-panel select {width:100%;}
-.settings-group {border:0;border-top:1px solid var(--line);margin:20px 0;padding:12px 0;}
+.settings-group {display:grid;gap:12px;min-width:0;border:0;border-top:1px solid var(--line);margin:20px 0;padding:12px 0;}
+.setting-knobs {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:start;gap:16px 12px;}
 .settings-group legend {font-size:20px;}
-.setting {display:grid;grid-template-columns:minmax(0,1fr) 112px;align-items:center;gap:12px;margin:12px 0;}
+.setting {grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) 112px;align-items:center;gap:12px;margin:0;}
 .setting input,.setting select {width:100%;min-width:0;min-height:44px;padding:8px;border:1px solid var(--line);border-radius:6px;background:#fafbf9;}
 .preset-tools {display:grid;gap:8px;}
 #preset-name {width:100%;min-height:44px;padding:8px;}
@@ -193,4 +203,7 @@ dialog [data-close] {border:0;font-size:22px;min-width:44px;}
  .stage-first .play-top {padding:8px;}
  .stage-first .fw-pill:not([hidden]) {font-size:14px;padding:4px 10px;white-space:normal;max-width:130px;}
  .setting {grid-template-columns:minmax(0,1fr) 100px;}
+}
+@media(max-width:420px) {
+ .setting-knobs {grid-template-columns:repeat(2,minmax(0,1fr));}
 }

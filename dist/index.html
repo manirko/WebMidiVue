@@ -23,7 +23,7 @@
     <div class="sound-lab__reveal-copy">
       <h2 id="stage-title">Connect a plant</h2><p>Clip both contacts to separate points on the same plant and connect the device by USB.</p>
       <div class="sound-lab__reveal-actions"><button id="connect">Start listening</button><button id="stop" hidden>Stop &amp; release</button></div>
-      <label class="sound-lab__volume" for="volume">Volume <input id="volume" type="range" min="0" max="100" value="70"><output id="volume-value" for="volume">70%</output></label>
+      <div id="volume-control" class="sound-lab__volume"></div><p id="volume-hint" class="knob-hint"></p>
       <p id="status" class="sound-lab__status" role="status">Sound awaits your first touch</p>
       <label class="sound-choice" for="sound">Sound <select id="sound" data-keyboard-playable="true" aria-label="Choose a sound…"><option value="" disabled>Choose a sound…</option></select></label>
       <label class="sound-lab__quality"><input id="limit-four" type="checkbox" data-keyboard-playable="true">Limit to 4 notes at once</label>

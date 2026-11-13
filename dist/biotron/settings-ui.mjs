@@ -1,5 +1,6 @@
 import {COMMANDS} from './protocol.mjs';
 import {Presets} from './presets.mjs';
+import {mountKnob, KNOB_HINT} from './knob-ui.mjs';
 const ROOTS = ['C4','C#4','D4','D#4','E4','F4','F#4','G4','G#4','A4','A#4','B4','C5'];
 const HOLDS = {64:'1/64',48:'1/48',32:'1/32',24:'1/24',16:'1/16',12:'1/12',8:'1/8',6:'1/6',4:'1/4',2:'1/2',1:'1'};
 const SCALES = ['Major','Minor','Chrom','Dorian','Mixolydian','Lydian','Wholetone','Minblues','Majblues','Minpen','Majpen','Diminished','Hirajōshi'];
@@ -22,7 +23,7 @@ const GROUPS = {
   ]
 };
 export function mountSettings(root, session, storage) {
-  root.innerHTML = '<div class="preset-tools"><label for="preset">Preset</label><select id="preset"></select><input id="preset-name" type="text" maxlength="80" aria-label="Preset name" placeholder="Preset name"><div class="preset-actions"><button id="preset-load">Load preset</button><button id="preset-save">Save preset</button><button id="settings-check">Check saved settings</button><button id="settings-send">Send to device</button></div></div><p id="settings-status" role="status"></p><div id="settings-fields"></div>';
+  root.innerHTML = '<div class="preset-tools"><label for="preset">Preset</label><select id="preset"></select><input id="preset-name" type="text" maxlength="80" aria-label="Preset name" placeholder="Preset name"><div class="preset-actions"><button id="preset-load">Load preset</button><button id="preset-save">Save preset</button><button id="settings-check">Check saved settings</button><button id="settings-send">Send to device</button></div></div><p id="settings-status" role="status"></p><p class="knob-hint">' + KNOB_HINT + '</p><div id="settings-fields"></div>';
   const $ = id => root.querySelector('#' + id), controls = new Map();
   let presets, list = [];
   function refreshPresets() {
@@ -33,16 +34,22 @@ export function mountSettings(root, session, storage) {
   for (const [label, fields] of Object.entries(GROUPS)) {
     const fieldset = document.createElement('fieldset'); fieldset.className = 'settings-group';
     const legend = document.createElement('legend'); legend.textContent = label; fieldset.append(legend);
+    const knobs = document.createElement('div'); knobs.className = 'setting-knobs';
     for (const [name, text, type] of fields) {
+      if (!type) {
+        const control = mountKnob({id: name, name: text, ...COMMANDS[name], step: 1}, session.values[name], value => {void run(() => session.edit(name, value));});
+        control.input.id = 'setting-' + name; control.input.dataset.setting = name;
+        control.element.querySelector('label').htmlFor = control.input.id;
+        controls.set(name, control); knobs.append(control.element); continue;
+      }
       const label = document.createElement('label'); label.className = 'setting'; label.htmlFor = 'setting-' + name;
       const caption = document.createElement('span'); caption.textContent = text; label.append(caption);
-      const input = document.createElement(type ? 'select' : 'input');
+      const input = document.createElement('select');
       input.id = 'setting-' + name; input.dataset.setting = name;
       if (type === 'switch') input.append(new Option('Off',0), new Option('On',1));
       else if (type === 'scale') input.append(...SCALES.map((s,i) => new Option(s,i)));
       else if (type === 'root') input.append(...ROOTS.map((s,i) => new Option(s,i+60)));
       else if (type === 'hold') input.append(...Object.entries(HOLDS).sort((a,b)=>Number(b[0])-Number(a[0])).map(([value,label]) => new Option(label,value)));
-      else {input.type = 'number'; input.min = COMMANDS[name].min; input.max = COMMANDS[name].max; input.step = 1;}
       input.addEventListener('change', () => {
         const raw = input.value;
         if (raw.trim() === '' || !Number.isFinite(Number(raw))) {render(); return;}
@@ -52,7 +59,7 @@ export function mountSettings(root, session, storage) {
       });
       controls.set(name, input); label.append(input); fieldset.append(label);
     }
-    $('settings-fields').append(fieldset);
+    fieldset.append(knobs); $('settings-fields').append(fieldset);
   }
   async function run(action) {try {await action();} catch (error) {session.changed(error.message);} render();}
   $('preset-load').addEventListener('click', () => {void run(() => {
@@ -70,6 +77,7 @@ export function mountSettings(root, session, storage) {
   function render() {
     for (const [name, input] of controls) {
       const value = String(session.values[name]);
+      if (input.set) {input.set(Number(value)); input.disable(session.sending); continue;}
       if (input.tagName === 'SELECT' && ![...input.options].some(option => option.value === value)) input.add(new Option(value,value));
       input.value = value; input.disabled = session.sending;
     }

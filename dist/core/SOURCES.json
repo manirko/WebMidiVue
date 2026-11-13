@@ -5,5 +5,19 @@
     "path": "dist/core.mjs",
     "destination": "dist/core/core.mjs",
     "sha256": "e6e2d6d48efad35fcfacbb6bed8bae32baef7b6f95671dc9a55c770e93a1df0f"
+  },
+  {
+    "origin": "/Users/andreymanirko/Projects/touchme-next",
+    "commit": "db3d2a45b7252789d684f2896cfc64cbfefbd2d0",
+    "path": "dist/knobs.mjs",
+    "destination": "dist/core/knobs.mjs",
+    "sha256": "d6ee2e5532a1efaf4ad9ee3b3e7fd11f6631e2cb91ea2e0318575ae1400911b7"
+  },
+  {
+    "origin": "/Users/andreymanirko/Projects/touchme-next",
+    "commit": "db3d2a45b7252789d684f2896cfc64cbfefbd2d0",
+    "path": "dist/presets.mjs",
+    "destination": "dist/core/presets.mjs",
+    "sha256": "b56611cad1bfd4433fb5bbf524427452d5a5ca5a687c6135cd563ec94f4862db"
   }
 ]

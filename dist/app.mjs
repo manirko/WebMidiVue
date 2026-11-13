@@ -2,6 +2,7 @@ import {BUILD} from './version.mjs';
 import {MidiSession} from './biotron/midi.mjs';
 import {SettingsSession} from './biotron/settings.mjs';
 import {mountSettings} from './biotron/settings-ui.mjs';
+import {mountKnob, KNOB_HINT} from './biotron/knob-ui.mjs';
 import {SoundPlayer} from './biotron/sound/player.mjs';
 import {setupFeedback} from './biotron/feedback.mjs';
 const $ = id => document.getElementById(id);
@@ -65,7 +66,9 @@ $('stop').addEventListener('click', () => { void attempt(async () => { await Pro
 for (const entry of sound.choices) $('sound').add(new Option(entry.label, entry.id));
 $('sound').value = '';
 $('sound').addEventListener('change', event => { void sound.choose(event.target.value).catch(error => status(error.message)); });
-$('volume').addEventListener('input', event => {sound.setVolume(Number(event.target.value)); $('volume-value').value = event.target.value + '%';});
+const volume = mountKnob({id: 'volume', name: 'Volume', min: 0, max: 100, step: 1, format: value => value + '%'}, sound.volume, value => sound.setVolume(value));
+volume.input.id = 'volume'; volume.element.querySelector('label').htmlFor = 'volume';
+$('volume-control').append(volume.element); $('volume-hint').textContent = KNOB_HINT;
 $('limit-four').addEventListener('change', event => { void sound.setLimit(event.target.checked).catch(error => status(error.message)); });
 $('keyboard').addEventListener('click', () => { void sound.toggleKeyboard().catch(error => status(error.message)); });
 const pointers = new Set();

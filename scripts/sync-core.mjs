@@ -21,7 +21,8 @@ if (check) {
   const commit = execFileSync('/usr/bin/git', ['rev-parse', 'HEAD'], {cwd: origin, encoding: 'utf8'}).trim();
   const manifest = [];
   // MIDI permission and feedback payloads are product-specific; their Biotron versions live outside core.
-  for (const path of ['dist/core.mjs']) {
+  // knobs.mjs imports clamp from presets.mjs; keep that dependency unchanged too.
+  for (const path of ['dist/core.mjs', 'dist/knobs.mjs', 'dist/presets.mjs']) {
     const data = await readFile(resolve(origin, path));
     const committed = execFileSync('/usr/bin/git', ['show', `${commit}:${path}`], {cwd: origin});
     if (!data.equals(committed)) throw Error(`Uncommitted source: ${path}`);

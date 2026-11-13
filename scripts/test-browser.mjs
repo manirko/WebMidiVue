@@ -54,6 +54,9 @@ async function runUI(browser, origin, viewport) {
   try {
     await page.goto(origin);await page.locator('#keyboard').waitFor();
     await page.waitForFunction(()=>document.querySelector('#sound').options.length>1);
+    await faultControl(async()=>assert.equal(await page.locator('input[type=range]').count(),0),
+      ()=>page.evaluate(()=>{const input=document.createElement('input');input.id='negative-range';input.type='range';document.body.append(input);}),
+      ()=>page.locator('#negative-range').evaluate(input=>input.remove()));
     assert.equal(await page.evaluate(()=>__midi.requests.length),0,'load requested MIDI');
     assert.equal(await page.evaluate(()=>__midi.sent.length),0,'load sent MIDI');
     assert.equal(await page.evaluate(()=>__audioContexts.length),0,'load created audio');
@@ -91,10 +94,35 @@ async function runUI(browser, origin, viewport) {
     await page.evaluate(()=>{__midi.sent=[];__midi.input.receive([240,20,13,123,1,1,1,1,1,7,0,0,0,0,7,0,0,0,0,...__midi.values,247]);});
     assert.equal(await page.evaluate(()=>__midi.sent.length),0,'readback reply wrote bytes');
     assert.equal(await page.locator('#firmware-open').isVisible(),false,'1.8.2 offered Update');
-    await page.locator('#setting-noteDistance').fill('51');await page.locator('#setting-noteDistance').press('Tab');
+    const knob=page.locator('#setting-noteDistance');
+    await knob.focus();await page.keyboard.down('ArrowUp');
+    assert.deepEqual(await page.evaluate(()=>__midi.sent),[],'arrow wrote before commit');
+    await page.keyboard.up('ArrowUp');await page.waitForFunction(()=>__midi.sent.length===1);
+    const oneFrame=async value=>assert.deepEqual(await page.evaluate(()=>__midi.sent.map(s=>s.bytes)),[[240,20,13,1,value,247]]);
+    await faultControl(()=>oneFrame(51),()=>page.evaluate(()=>__midi.sent.push(__midi.sent[0])),()=>page.evaluate(()=>__midi.sent.pop()));
+    await page.evaluate(()=>__midi.sent=[]);
+    await knob.scrollIntoViewIfNeeded();const dial=await knob.boundingBox();
+    await page.mouse.move(dial.x+dial.width/2,dial.y+dial.height/2);await page.mouse.down();
+    await page.mouse.move(dial.x+dial.width/2,dial.y+dial.height/2-16,{steps:4});
+    assert.deepEqual(await page.evaluate(()=>__midi.sent),[],'drag wrote before commit');
+    assert.equal(await knob.getAttribute('aria-valuenow'),'61');
+    await page.mouse.up();await page.waitForFunction(()=>__midi.sent.length===1);await oneFrame(61);
+    await page.evaluate(()=>__midi.sent=[]);await knob.dblclick();
+    await page.waitForFunction(()=>__midi.sent.length===1);await oneFrame(50);
+    await page.evaluate(()=>__midi.sent=[]);await knob.dblclick();
+    assert.deepEqual(await page.evaluate(()=>__midi.sent),[],'default reset sent a redundant frame');
+    const columns=viewport.width===390?2:4;
+    await faultControl(async()=>assert.equal(await page.locator('.setting-knobs').last().evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),columns),
+      ()=>page.locator('.setting-knobs').last().evaluate(el=>el.style.gridTemplateColumns='1fr'),
+      ()=>page.locator('.setting-knobs').last().evaluate(el=>el.style.removeProperty('grid-template-columns')));
+    await page.screenshot({path:resolve(artifacts,`settings-${viewport.width}x${viewport.height}.png`)});
+    const numberEditor=page.locator('[data-control="noteDistance"] .value-editor');
+    await page.locator('[data-control="noteDistance"] .value-display').click();
+    await numberEditor.fill('51');await numberEditor.press('Tab');
     await page.waitForFunction(()=>__midi.sent.length===1);
     assert.deepEqual(await page.evaluate(()=>__midi.sent.map(s=>s.bytes)),[[240,20,13,1,51,247]]);
-    await page.locator('#setting-noteDistance').fill('');await page.locator('#setting-noteDistance').press('Tab');assert.equal(await page.evaluate(()=>__midi.sent.length),1,'blank input wrote zero');
+    await page.locator('[data-control="noteDistance"] .value-display').click();
+    await numberEditor.fill('');await numberEditor.press('Tab');assert.equal(await page.evaluate(()=>__midi.sent.length),1,'blank input wrote zero');
     await page.locator('#preset-name').fill('Browser fixture');await page.locator('#preset-save').click();
     await page.locator('#preset-load').click();assert.equal(await page.evaluate(()=>__midi.sent.length),1,'save/load wrote MIDI');
     await page.evaluate(()=>{__midi.sent=[];__midi.version=[1,8,1];});

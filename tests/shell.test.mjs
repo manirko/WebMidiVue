@@ -10,11 +10,14 @@ test('shared core provenance: --check passes unchanged and rejects a drifted cop
   try {
     await mkdir(join(temp,'scripts'),{recursive:true});await mkdir(join(temp,'dist/core'),{recursive:true});
     await cp(new URL('../scripts/sync-core.mjs',import.meta.url),join(temp,'scripts/sync-core.mjs'));
-    for (const path of ['SOURCES.json','core.mjs']) await cp(new URL('../dist/core/'+path,import.meta.url),join(temp,'dist/core',path));
+    for (const path of ['SOURCES.json','core.mjs','knobs.mjs','presets.mjs']) await cp(new URL('../dist/core/'+path,import.meta.url),join(temp,'dist/core',path));
     const check=()=>execFileSync(process.execPath,[join(temp,'scripts/sync-core.mjs'),'--check'],{stdio:'pipe'});
     assert.doesNotThrow(check);
-    await writeFile(join(temp,'dist/core/core.mjs'),'// Drift negative control\n',{flag:'a'});
-    assert.throws(check,/Core drift/);
+    for (const path of ['core.mjs','knobs.mjs','presets.mjs']) {
+      await writeFile(join(temp,'dist/core',path),'// Drift negative control\n',{flag:'a'});
+      assert.throws(check,/Core drift/);
+      await cp(new URL('../dist/core/'+path,import.meta.url),join(temp,'dist/core',path));
+    }
   } finally {await rm(temp,{recursive:true,force:true});}
 });
 test('feedback: same receiver, Biotron product, consent and empty-comment negative controls', () => {
