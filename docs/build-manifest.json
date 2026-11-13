@@ -1,6 +1,10 @@
 {
-  "build": "4e61ac03798d",
+  "build": "2168e8eda105",
   "files": [
+    {
+      "path": "dist/_headers",
+      "sha256": "091d24e2ac241d35d53631d4c33eacdc1484e97eacb04b36439e03d6b81993a6"
+    },
     {
       "path": "dist/app.mjs",
       "sha256": "e265ec08dcc9033735ce42d15af9d1da3ac7bedd04bc8b866bd068771ef745ef"
@@ -104,6 +108,10 @@
     {
       "path": "dist/index.html",
       "sha256": "0127b4e46e36297d9d1ccf7fb2c420babb06a10183c5c54f67d8b0e4d1cdc8ec"
+    },
+    {
+      "path": "dist/service-worker.js",
+      "sha256": "a67a06ee761f6a1da9d911071e375653f76ca331fef0952db9a372d9fb4b207c"
     },
     {
       "path": "dist/style.css",

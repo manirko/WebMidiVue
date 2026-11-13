@@ -6,6 +6,7 @@ import {resolve, extname, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright-core';
 import {testSoundPCM} from '../tests/sound-browser.mjs';
+import {testServiceWorkerMigration} from '../tests/migration-browser.mjs';
 const root = fileURLToPath(new URL('../dist/',import.meta.url));
 const artifacts = fileURLToPath(new URL('../.artifacts/browser/',import.meta.url));
 const mime = {'.html':'text/html','.mjs':'text/javascript','.css':'text/css','.png':'image/png','.txt':'text/plain'};
@@ -212,6 +213,7 @@ try {
   assert(executablePath,'Local Chrome was not found. Set CHROME_PATH.');
   await mkdir(artifacts,{recursive:true});
   browser=await chromium.launch({executablePath,headless:true});
+  await testServiceWorkerMigration(browser);
   const origin=`http://127.0.0.1:${server.address().port}`;
   for (const viewport of [{width:1440,height:900},{width:390,height:844}]) await runUI(browser,origin,viewport);
   const page=await browser.newPage();await page.goto(origin);const metrics=await testSoundPCM(page);await writeFile(resolve(artifacts,'sound-metrics.json'),JSON.stringify(metrics,null,2)+'\n');await page.close();
