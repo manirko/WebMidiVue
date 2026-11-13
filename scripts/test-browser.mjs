@@ -180,7 +180,8 @@ async function runUI(browser, origin, viewport) {
     await volume.press('Home');await volume.press('End');
     assert.deepEqual(await page.evaluate(()=>__volumeChanges),[71,0,100]);
     await volume.evaluate(input=>{input.value='70';input.dispatchEvent(new Event('input',{bubbles:true}));});
-    for (const key of ['a','w']) {
+    // Physical computer keys are a desktop input (as on Play); phones are covered by the tapped cap above.
+    for (const key of (viewport.width >= 900 ? ['a','w'] : [])) {
       const pressed=page.locator('#keyboard [data-key=Key'+key.toUpperCase()+']');
       await pressed.focus();const idleColor=await pressed.evaluate(el=>getComputedStyle(el).backgroundColor);
       await page.keyboard.down(key);await page.waitForFunction(()=>Number(document.querySelector('#instrument').dataset.activeVoices)>0);

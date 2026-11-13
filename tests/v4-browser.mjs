@@ -60,12 +60,12 @@ export async function testStageLayout(page, viewport, faultControl) {
     ()=>page.locator('[data-key=KeyW]').evaluate(el=>el.style.removeProperty('grid-row')));
   await page.screenshot({path:new URL(`../.artifacts/browser/header-${viewport.width}x${viewport.height}.png`,import.meta.url).pathname});
   await page.locator('#fullscreen').click();
-  await page.waitForFunction(()=>Boolean(document.fullscreenElement));
+  await page.waitForFunction(()=>Boolean(document.fullscreenElement)&&document.querySelector('#fullscreen').getAttribute('aria-pressed')==='true'); // fullscreenchange fires after fullscreenElement is set
   await faultControl(async()=>assert.equal(await page.locator('#fullscreen').getAttribute('aria-pressed'),'true'),
     ()=>page.locator('#fullscreen').evaluate(el=>el.setAttribute('aria-pressed','false')),
     ()=>page.locator('#fullscreen').evaluate(el=>el.setAttribute('aria-pressed','true')));
   await page.locator('#fullscreen').click();
-  await page.waitForFunction(()=>!document.fullscreenElement);
+  await page.waitForFunction(()=>!document.fullscreenElement&&document.querySelector('#fullscreen').getAttribute('aria-pressed')==='false');
   await faultControl(async()=>assert.equal(await page.locator('#fullscreen').getAttribute('aria-pressed'),'false'),
     ()=>page.locator('#fullscreen').evaluate(el=>el.setAttribute('aria-pressed','true')),
     ()=>page.locator('#fullscreen').evaluate(el=>el.setAttribute('aria-pressed','false')));
