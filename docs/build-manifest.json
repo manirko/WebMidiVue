@@ -1,0 +1,105 @@
+{
+  "build": "4be04f93de15",
+  "files": [
+    {
+      "path": "dist/app.mjs",
+      "sha256": "c8a7cc2324c9560dba03df89d9a0059b9a7ea7de8187b7445d4808de98365d33"
+    },
+    {
+      "path": "dist/assets/playtronica-logo.png",
+      "sha256": "2760dd87678ee6504a0e05b89bf6a830e0fc3231e2a5c86b887016bb2d260791"
+    },
+    {
+      "path": "dist/biotron/factory-presets.mjs",
+      "sha256": "c49dcb01f6666f5592c552db0224c52eefe4179368b1fddaf71f84d256d63a49"
+    },
+    {
+      "path": "dist/biotron/feedback.mjs",
+      "sha256": "8f551202869703dc0113a1154319030b9b560f010d1bc078d8f5a6ccd1cde327"
+    },
+    {
+      "path": "dist/biotron/firmware.mjs",
+      "sha256": "07cabd4ea601556b06556b8b575df956ee1c53ec1274564ab6d0ded3b30ca50b"
+    },
+    {
+      "path": "dist/biotron/midi.mjs",
+      "sha256": "2f7642c981545ffdb0819757c477bdb1e5e98a977661f87113e8661872f31522"
+    },
+    {
+      "path": "dist/biotron/presets.mjs",
+      "sha256": "d6581edf6d6a6120b6ce2ed38c7e6ac7020763c3b6ce50a3631eb539d9f15456"
+    },
+    {
+      "path": "dist/biotron/protocol.mjs",
+      "sha256": "88a5c333db9af828cf761c0ab2da6f179f308544e525f260b9e9d6438cadb0af"
+    },
+    {
+      "path": "dist/biotron/readback.mjs",
+      "sha256": "a58ec2868dca352acca6976f96a2fd47242d06b4bbe872ee82b270c8b33e12c0"
+    },
+    {
+      "path": "dist/biotron/settings-ui.mjs",
+      "sha256": "d9617fb9f4ad4047347ceda9a11e12ea4d61885493f32885c82e7e203edc22f6"
+    },
+    {
+      "path": "dist/biotron/settings.mjs",
+      "sha256": "b1496c2b16e20255beea17e70c6e4352dd6f046e11f5c94c09a3da1c11652d18"
+    },
+    {
+      "path": "dist/biotron/sound/auditionBanks.mjs",
+      "sha256": "f84cbdd356b32654a79429b18a7f41869a146293bf152e7319876c826d4d7f40"
+    },
+    {
+      "path": "dist/biotron/sound/biotronCalibration.mjs",
+      "sha256": "4475704c93cac5061247f0e6d08666d7e71c8211a5233b53976147e2ff258a40"
+    },
+    {
+      "path": "dist/biotron/sound/core.mjs",
+      "sha256": "49dae458f1843f4b9539a79a9c34e55136c36f2f973e5d2ae3b2a8e239b11bbe"
+    },
+    {
+      "path": "dist/biotron/sound/elementary/engine.mjs",
+      "sha256": "4f16abe029084d8e415f42ed9d64aa1060e2813f9fe4074d988ce6df98911553"
+    },
+    {
+      "path": "dist/biotron/sound/elementary/fx/LICENSE-chromatone.txt",
+      "sha256": "d7a47b1b93aaf3222e65033d61a245aae1d678da6dff9794755eb7d925ae58a9"
+    },
+    {
+      "path": "dist/biotron/sound/elementary/fx/srvb.mjs",
+      "sha256": "4dd06fcc419d3102c8609a1cd4a7f58434756c20ccea32d5593c4f6fb2dcde6e"
+    },
+    {
+      "path": "dist/biotron/sound/elementary/timbres.mjs",
+      "sha256": "ce69c744b297bdee447c9d20bb75322544728a6bf1f3b76fbd26a104154843c6"
+    },
+    {
+      "path": "dist/biotron/sound/player.mjs",
+      "sha256": "dda0afde76b74d1fc49cd16692e8cf735d778cd01baddee509110add1c838d1e"
+    },
+    {
+      "path": "dist/core/SOURCES.json",
+      "sha256": "d6033ff1669c0de52ca14cba4839f58c96e6b079c50f3a433da4f3ad5a4ea8ac"
+    },
+    {
+      "path": "dist/core/core.mjs",
+      "sha256": "e6e2d6d48efad35fcfacbb6bed8bae32baef7b6f95671dc9a55c770e93a1df0f"
+    },
+    {
+      "path": "dist/index.html",
+      "sha256": "27eeb975ac823952463f94e28ef84ed310f738d10fe684f76e132414fb9a1fa0"
+    },
+    {
+      "path": "dist/style.css",
+      "sha256": "8ab0ff6a7a866a418e0d42b0a682b390107e34b1c8738452a4cbaa96e3153524"
+    },
+    {
+      "path": "dist/vendor/LICENSE-elementary.txt",
+      "sha256": "a893f20c1a811740dcddb2bb4110ce34cbc9df5a2efa5457f2d2e7089363d3dd"
+    },
+    {
+      "path": "dist/vendor/elementary.mjs",
+      "sha256": "d26cd93a9ffc0add691ab0526b5c7cc7c51bd8502a6c56cbab2bba5c9a3528a7"
+    }
+  ]
+}
