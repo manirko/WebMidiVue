@@ -7,6 +7,7 @@ import {mountKeyboard} from './biotron/keyboard-ui.mjs';
 import {SoundPlayer} from './biotron/sound/player.mjs';
 import {setupFeedback} from './biotron/feedback.mjs';
 const $ = id => document.getElementById(id);
+new ResizeObserver(entries => document.documentElement.style.setProperty('--top-height', entries[0].borderBoxSize[0].blockSize + 'px')).observe(document.querySelector('.play-top'));
 const status = text => { $('status').textContent = text; };
 let keyboardUI;
 const sound = new SoundPlayer({onState: state => {
