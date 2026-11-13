@@ -47,7 +47,7 @@ test('V2: shared header order, stage visual and Help/MIDI own the former side-pa
   const verify=source=>{
     const header=source.match(/<header\b[\s\S]*?<\/header>/)[0];
     let previous=-1;
-    for (const id of ['sound','volume','stop','settings-open','help-open','fullscreen']) {
+    for (const id of ['sound','volume','stop','connect','settings-open','help-open','fullscreen']) {
       const index=header.indexOf(`id="${id}"`); assert(index>previous,id); previous=index;
     }
     assert.match(source,/<main\b[^>]*>[\s\S]*?id="garden"[\s\S]*?class="orb"[\s\S]*?id="keyboard"[\s\S]*?<\/main>/);
@@ -57,9 +57,21 @@ test('V2: shared header order, stage visual and Help/MIDI own the former side-pa
     assert.doesNotMatch(header, /id="stop"[^>]*hidden/);
   };
   verify(html);
-  for (const id of ['sound','volume','stop','settings-open','help-open','fullscreen','garden','keyboard','limit-four']) {
+  for (const id of ['sound','volume','stop','connect','settings-open','help-open','fullscreen','garden','keyboard','limit-four']) {
     assert.throws(()=>verify(html.replace(`id="${id}"`,'id="missing"')),{name:'AssertionError'},id);
   }
   assert.throws(()=>verify(html.replace('class="setup-hub"','class="absent"')));
   assert.throws(()=>verify(html.replace('</main>','<h1>Plant music</h1></main>')));
+});
+test('V4: the header connection has its existing action and an accessible, visible status', async () => {
+  const html=await readFile(new URL('../dist/index.html',import.meta.url),'utf8');
+  const verify=source=>{
+    const header=source.match(/<header\b[\s\S]*?<\/header>/)[0];
+    assert.match(header,/<button id="connect"[^>]*aria-label="Start listening"[^>]*aria-describedby="connection-status"><span id="connection-status" role="status">Biotron not connected<\/span><\/button>/);
+    assert.doesNotMatch(header,/id="(?:connect|connection-status)"[^>]*hidden/);
+  };
+  verify(html);
+  for (const [from,to] of [['id="connect"','id="missing"'],['role="status">Biotron not connected','hidden>Biotron not connected'],['aria-describedby="connection-status"','aria-describedby="missing"']]) {
+    assert.throws(()=>verify(html.replace(from,to)),{name:'AssertionError'});
+  }
 });

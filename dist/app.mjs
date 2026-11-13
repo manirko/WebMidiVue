@@ -28,6 +28,7 @@ const midi = new MidiSession({onMessage: data => {settings.receive(data); sound.
       select.value = selected?.id || '';
     }
     $('midi-status').textContent = state.message;
+    $('connection-status').textContent = state.message; $('connect').title = state.message;
     if (state.input || state.status !== 'idle') status(state.message);
     settingsUI?.render();
   }});

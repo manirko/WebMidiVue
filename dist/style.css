@@ -165,22 +165,30 @@ body.stage-first {background:#fbfaf7;color:#17171a;}
 .stage-first :is(.play-pickers,.play-picker) {display:flex;align-items:center;min-width:0;gap:6px;}
 .stage-first .play-picker select {max-width:180px;min-height:44px;padding:8px 18px 8px 6px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:#000;}
 .stage-first .play-picker select:focus-visible {outline:2px solid #333;outline-offset:2px;}
-/* P17: Play's two phone rows, with Volume and Stop beside the brand. */
+/* Connection keeps Play's Device picker skin and the existing connect action/status. */
+.stage-first .play-connection {max-width:260px;}
+.stage-first #connect {min-width:0;max-width:100%;padding:8px 6px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;}
+#connection-status {display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* P17: Play's two phone rows; connection remains visible beside Volume and Stop. */
 @media(max-width:900px) {
  body.stage-first .play-top {display:flex;flex-wrap:wrap;gap:2px;padding:8px max(8px,env(safe-area-inset-right)) 8px max(8px,env(safe-area-inset-left));}
- body.stage-first .play-top>.play-brand {order:1;flex:none;width:calc(100% - 136px);min-height:44px;margin:0;}
+ body.stage-first .play-top>.play-brand {order:1;flex:1;min-width:65px;min-height:44px;margin:0;}
  body.stage-first .play-brand img {width:65px;height:auto;}
  body.stage-first .play-top>.play-performance {order:2;width:134px;min-width:0;gap:2px;}
  body.stage-first .play-volume {gap:2px;}
  body.stage-first .play-volume svg {width:20px;height:20px;}
  body.stage-first #volume {width:44px;min-width:44px;}
- body.stage-first .play-top>.play-pickers {order:3;flex:none;width:calc(100% - 138px);}
+ body.stage-first .play-top>.play-connection {order:3;flex:none;width:146px;}
+ body.stage-first .play-connection svg {display:none;}
+ body.stage-first #connect {width:100%;padding:6px 0;font-size:14px;}
+ body.stage-first #connection-status {font-size:inherit;}
+ body.stage-first .play-top>.play-pickers {order:4;flex:none;width:calc(100% - 138px);}
  body.stage-first .play-picker {width:100%;}
  body.stage-first .play-picker svg {display:none;}
  body.stage-first .play-picker select {width:100%;min-width:0;max-width:none;font-size:14px;padding:6px 12px 6px 0;}
- body.stage-first #settings-open {order:4;}
- body.stage-first #help-open {order:5;}
- body.stage-first #fullscreen {order:6;}
+ body.stage-first #settings-open {order:5;}
+ body.stage-first #help-open {order:6;}
+ body.stage-first #fullscreen {order:7;}
 }
 .knob {display:grid;justify-items:center;align-content:start;gap:4px;min-width:0;text-align:center;}
 body.stage-first .knob>label {font-size:14px;line-height:1.3;min-height:36px;display:grid;align-items:center;}
