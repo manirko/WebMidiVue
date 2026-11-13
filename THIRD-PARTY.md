@@ -1,0 +1,6 @@
+# Third-party code in Biotron web
+
+- Elementary Audio: `@elemaudio/core` 4.0.1 and `@elemaudio/web-renderer` 4.0.3, MIT, Copyright (c) 2023 Nick Thompson. Bundled by esbuild into `dist/vendor/elementary.mjs`; full notice in its banner and `dist/vendor/LICENSE-elementary.txt`.
+- Chromatone / Denis Starov: timbres and reverb adapted from [chromatone/elements](https://github.com/chromatone/elements), MIT, Copyright (c) 2024 Chromatone. Ported through the old Biotron app at `d35e937` (2026-11-11). Files: `dist/biotron/sound/elementary/timbres.mjs`, `elementary/fx/srvb.mjs`; full notice: `elementary/fx/LICENSE-chromatone.txt`. DSP math and voice calibration are preserved; imports use the local vendor bundle.
+- TouchMe / Playtronica: shared utilities, design tokens, header/card skin, logo and feedback form from `touchme-next` at `db3d2a4`, checked 2026-11-13. Shared file provenance is in `dist/core/SOURCES.json`. Feedback is adapted for Biotron; no TouchMe settings or firmware code is included.
+- Garden Anomaly / Frank Reitberger: the existing static fallback gradient and layout from Biotron's `GardenVisual.vue` and `public/garden/scene.html`, `d35e937`. Attribution stays beside the visual. No 3D renderer, textures or Three.js code is included.
