@@ -1,9 +1,16 @@
 import {KEYBOARD_CODE_TO_NOTE} from './sound/core.mjs';
 
+// Play's input-view KEY_POSITIONS and GROUP_COLORS, for Biotron's existing 13 notes.
+const KEY_POSITIONS = [[1,2],[2,1],[3,2],[4,1],[5,2],[7,2],[8,1],[9,2],[10,1],[11,2],[12,1],[13,2],[15,2]];
+const GROUP_COLORS = ['#b4543a','#367887','#7661a4','#747333'];
+
 export function mountKeyboard(root, sound, onError) {
   const pointers = new Map(), caps = new Map();
-  for (const [code, note] of Object.entries(KEYBOARD_CODE_TO_NOTE)) {
+  for (const [index, [code, note]] of Object.entries(KEYBOARD_CODE_TO_NOTE).entries()) {
     const cap = document.createElement('button'); cap.type = 'button'; cap.dataset.key = code;
+    cap.style.setProperty('--key-column', KEY_POSITIONS[index][0]);
+    cap.style.setProperty('--key-row', KEY_POSITIONS[index][1]);
+    cap.style.setProperty('--group-color', GROUP_COLORS[Math.floor(index / 4)]);
     cap.setAttribute('aria-label', 'Play ' + code.slice(3)); cap.setAttribute('aria-pressed', 'false');
     const letter = document.createElement('kbd'); letter.textContent = code.slice(3); cap.append(letter);
     cap.addEventListener('pointerdown', event => {

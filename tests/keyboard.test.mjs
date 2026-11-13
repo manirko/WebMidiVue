@@ -25,6 +25,24 @@ function keyboard(t, ready) {
   t.after(()=>{sound.onState=()=>{};restore();});
   return {sound,engines,root,ui,errors};
 }
+test('V3: Play drawing has W E T Y U above A S D F G H J K in their physical columns', t => {
+  const {root}=keyboard(t);
+  const verify=()=>{
+    const row=number=>root.children.filter(cap=>Number(cap.style['--key-row'])===number)
+      .sort((a,b)=>a.style['--key-column']-b.style['--key-column'])
+      .map(cap=>[cap.children[0].textContent,Number(cap.style['--key-column'])]);
+    assert.deepEqual(row(1),[['W',2],['E',4],['T',8],['Y',10],['U',12]]);
+    assert.deepEqual(row(2),[['A',1],['S',3],['D',5],['F',7],['G',9],['H',11],['J',13],['K',15]]);
+  };
+  verify();
+  for (const cap of root.children) {
+    for (const property of ['--key-column','--key-row']) {
+      const original=cap.style[property]; cap.style[property]=0;
+      assert.throws(verify,{name:'AssertionError'}); cap.style[property]=original;
+    }
+  }
+  verify();
+});
 test('K2: every physical key plays its existing note from cold start, without a toggle', async t => {
   const states=[], {sound,engines}=player(t,state=>states.push(state));
   assert.equal(engines.length,0);
