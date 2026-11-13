@@ -12,6 +12,7 @@
 <a class="skip" href="#instrument">Skip to instrument</a>
 <header class="play-top">
   <a class="play-brand" href="https://shop.playtronica.com" target="_blank" rel="noopener" aria-label="Playtronica shop"><img src="./assets/playtronica-logo.png" alt="Playtronica" width="92" height="48"></a>
+  <div class="play-performance"><label class="play-volume" title="Volume"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9h4l5-4v14l-5-4H3zm12 0c2 2 2 4 0 6m3-9c4 4 4 8 0 12"/></svg><input id="volume" aria-label="Volume" type="range" min="0" max="100" step="1" value="70"></label></div>
   <a id="firmware-open" class="fw-pill" href="https://settings.playtronica.com/#/biotron" target="_blank" rel="noopener" hidden>Update Firmware</a>
   <button id="settings-open" class="play-icon" aria-controls="settings" aria-expanded="false" aria-label="Biotron settings" title="Biotron settings"><svg aria-hidden="true" viewBox="0 0 32 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 5h18l5 7-5 7H7l-5-7z"/><circle cx="10" cy="12" r="2"/><circle cx="22" cy="12" r="2"/><path d="M13 10h6m-6 4h6M16 5V2"/></svg></button>
   <button id="help-open" class="play-icon" aria-controls="help" aria-expanded="false" aria-label="Help & MIDI" title="Help & MIDI"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m10 3 4 0 .7 3 2 .9 2.7-1.1 2 3.4-2.1 2.1v2.4l2.1 2.1-2 3.4-2.7-1.1-2 .9-.7 3h-4l-.7-3-2-.9-2.7 1.1-2-3.4L4.7 14v-2.4L2.6 9.5l2-3.4 2.7 1.1 2-.9z"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -23,7 +24,6 @@
     <div class="sound-lab__reveal-copy">
       <h2 id="stage-title">Connect a plant</h2><p>Clip both contacts to separate points on the same plant and connect the device by USB.</p>
       <div class="sound-lab__reveal-actions"><button id="connect">Start listening</button><button id="stop" hidden>Stop &amp; release</button></div>
-      <div id="volume-control" class="sound-lab__volume"></div><p id="volume-hint" class="knob-hint"></p>
       <p id="status" class="sound-lab__status" role="status">Sound awaits your first touch</p>
       <label class="sound-choice" for="sound">Sound <select id="sound" data-keyboard-playable="true" aria-label="Choose a sound…"><option value="" disabled>Choose a sound…</option></select></label>
       <label class="sound-lab__quality"><input id="limit-four" type="checkbox" data-keyboard-playable="true">Limit to 4 notes at once</label>

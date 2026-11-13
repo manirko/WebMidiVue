@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {toNormalized, fromNormalized, quantize, keyboardStep} from '../dist/core/knobs.mjs';
-import {mountKnob} from '../dist/biotron/knob-ui.mjs';
 import {mountSettings} from '../dist/biotron/settings-ui.mjs';
 import {SettingsSession} from '../dist/biotron/settings.mjs';
 import {Port, memory, turn} from './fixtures.mjs';
@@ -41,9 +40,9 @@ test('K1: every v1 numeric range, integer step, default and normalized mapping s
   const {root, session} = fixture(t);
   assert.equal(root.querySelectorAll('[data-setting]').length,26);
   assert.equal(root.querySelectorAll('.knob').length,SETTINGS.length);
-  for (const [name,min,max,step,initial] of [...SETTINGS, ['volume',0,100,1,70]]) {
+  for (const [name,min,max,step,initial] of SETTINGS) {
     const spec = {id:name,name,min,max,step};
-    const control = name === 'volume' ? mountKnob(spec,initial,()=>{}).input : dialFor(root,name);
+    const control = dialFor(root,name);
     const verify = input => {
       assert.equal(input.type,'text'); assert.equal(input.getAttribute('role'),'slider');
       assert.equal(input.getAttribute('aria-valuemin'),String(min)); assert.equal(input.getAttribute('aria-valuemax'),String(max));
@@ -59,7 +58,7 @@ test('K1: every v1 numeric range, integer step, default and normalized mapping s
     assert.equal(quantize(min-1,spec),min); assert.equal(quantize(max+1,spec),max);
     assert.equal(keyboardStep(min,1,false,spec),min+step); assert.equal(keyboardStep(max,1,false,spec),max);
     assert.notEqual(quantize(min+step,spec),min,'negative control: one step must change the value');
-    if (name !== 'volume') assert.equal(Number(session.values[name]),initial);
+    assert.equal(Number(session.values[name]),initial);
   }
 });
 test('K1: each settings drag commits exactly one original frame; arrows and reset commit once', async t => {
@@ -102,15 +101,4 @@ test('K1: readback/render and preset load never send; unknown snapshots and fail
   output.sent=[]; fire(input,'dblclick'); await turn(); expectFrames(output.sent,[[240,20,13,1,50,247]]);
   session.sending=true; ui.render(); assert(root.querySelectorAll('.knob input,.knob button').every(control=>control.disabled));
   session.sending=false; ui.render(); assert(root.querySelectorAll('.knob input,.knob button').every(control=>!control.disabled));
-});
-test('K1: Volume preserves 0…100 percent, default 70, with one update at gesture completion', t => {
-  t.after(installDOM()); const changes=[];
-  const view=mountKnob({id:'volume',name:'Volume',min:0,max:100,step:1,format:value=>value+'%'},70,value=>changes.push(value));
-  fire(view.input,'pointerdown',{button:0,pointerId:1,clientY:200});
-  fire(view.input,'pointermove',{pointerId:1,clientY:120}); assert.deepEqual(changes,[]);
-  fire(view.input,'pointerup'); assert.deepEqual(changes,[100]);
-  fire(view.input,'dblclick'); assert.deepEqual(changes,[100,70]);
-  fire(view.input,'dblclick'); assert.deepEqual(changes,[100,70]);
-  assert.equal(view.element.querySelector('.value-display').textContent,'70%');
-  assert.throws(()=>assert.deepEqual(changes,[100,70,70]));
 });
